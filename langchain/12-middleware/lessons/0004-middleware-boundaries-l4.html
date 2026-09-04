@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>L4: Middleware Boundaries — Pitfalls, Limits &amp; the Built-in Catalogue</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+  <style>
+    :root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-hover:#ec6149;--accent-blue:#3194d0;--accent-blue-hover:#187cb7;--accent-light:#fef0f0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--green-bg:#e8f5e9;--orange:#f5a623;--orange-bg:#fff8e1;--red:#e74c3c;--red-bg:#fdf2f2;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace;--content-width:1020px;--toc-width:220px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-0.5px}.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}.layout{display:flex;justify-content:center;margin-top:56px;padding:0 16px;min-height:100vh}.toc-sidebar{position:fixed;left:calc(50% - var(--content-width)/2 - var(--toc-width) - 40px);top:96px;width:var(--toc-width);max-height:calc(100vh - 140px);overflow-y:auto;z-index:100;font-family:var(--font-sans);font-size:13px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);padding:16px 0;box-shadow:0 1px 3px rgba(0,0,0,0.04)}.toc-sidebar::-webkit-scrollbar{width:3px}.toc-sidebar::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}.toc-title{padding:0 16px 12px;font-size:13px;font-weight:700;color:var(--text);border-bottom:1px solid var(--border);margin-bottom:8px;letter-spacing:0.5px}.toc-sidebar a{display:block;padding:5px 16px;color:var(--text-muted);text-decoration:none;border-left:2px solid transparent;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.toc-sidebar a:hover{color:var(--accent);background:#fafafa;border-left-color:var(--border-light)}.toc-sidebar a.active{color:var(--accent);font-weight:600;border-left-color:var(--accent);background:var(--accent-light)}.toc-sidebar a.toc-h2{padding-left:16px}.toc-sidebar a.toc-h3{padding-left:28px;font-size:12px}@media(max-width:1200px){.toc-sidebar{display:none}}.content{width:100%;max-width:var(--content-width);padding:32px 0 80px;margin-left:0}.article-header{background:var(--card-bg);border-radius:4px;padding:36px 40px 28px;margin-bottom:16px;border-bottom:1px solid var(--border)}.article-header h1{font-size:30px;font-weight:700;line-height:1.4;color:var(--text);font-family:var(--font-sans);margin-bottom:16px}.article-meta{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:20px;flex-wrap:wrap}.article-body{background:var(--card-bg);border-radius:4px;padding:32px 40px 48px}.article-body h2{font-size:22px;font-weight:700;margin:40px 0 16px;font-family:var(--font-sans);padding-bottom:8px;border-bottom:1px solid var(--border);color:var(--text)}.article-body h2:first-child{margin-top:0}.article-body h3{font-size:18px;font-weight:600;margin:28px 0 12px;font-family:var(--font-sans);color:#333}.article-body p{margin:14px 0;text-align:justify}.article-body a{color:var(--accent);text-decoration:none}.article-body a:hover{text-decoration:underline}.article-body strong{font-weight:700;color:#222}code{font-family:var(--font-mono);font-size:0.88em;background:var(--code-bg);padding:2px 6px;border-radius:3px;color:#c7254e}pre{font-family:var(--font-mono);font-size:13px;background:#282c34;color:#abb2bf;padding:18px 22px;border-radius:6px;overflow-x:auto;margin:18px 0;line-height:1.6}pre code{background:transparent;color:inherit;padding:0;font-size:inherit}blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid var(--accent);background:#fafafa;color:#555;font-size:0.95em}table{border-collapse:collapse;width:100%;margin:18px 0;font-size:14px;font-family:var(--font-sans)}th,td{border:1px solid var(--border);padding:10px 14px;text-align:left}th{background:#fafafa;font-weight:600;color:#333;font-size:13px}tr:hover{background:#fafafa}.note,.warning,.tip,.info{border-left:4px solid;margin:1rem 0;padding:12px 16px;border-radius:0 6px 6px 0;font-size:0.95em}.note{border-color:var(--accent-blue);background:#f0f7fd}.warning{border-color:var(--orange);background:var(--orange-bg)}.tip{border-color:var(--green);background:var(--green-bg)}.note-title,.warning-title,.tip-title{font-weight:700;margin-bottom:0.3rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.note-title{color:var(--accent-blue)}.warning-title{color:var(--orange)}.tip-title{color:var(--green)}.java-comparison{background:linear-gradient(135deg,#fef9f0,#fff);border:1px solid #e8d5b0;border-radius:6px;padding:1rem 1.2rem;margin:1rem 0;font-size:0.95em}.java-comparison .header{font-weight:700;color:#b87333;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.production-note{background:#fef6f0;border:1px solid #f0c8a0;border-radius:6px;padding:1rem 1.2rem;margin:1rem 0;font-size:0.95em}.production-note .header{font-weight:700;color:#d8763a;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.deep-grill-readiness{background:#f5f5f5;border:1px solid var(--border);border-radius:6px;padding:1rem 1.5rem;margin:2rem 0 1rem;font-size:0.95em}.deep-grill-readiness h4{margin-top:0;color:var(--text);font-family:var(--font-sans)}.deep-grill-readiness ul{list-style:none;margin-left:0}.deep-grill-readiness li{padding:0.25rem 0;color:var(--text-muted)}.deep-grill-readiness li.done{color:var(--text)}.deep-grill-readiness li.done::before{content:"☑ ";color:#5cb85c}.deep-grill-readiness li::before{content:"☐ ";color:var(--text-muted)}.mermaid{display:flex;justify-content:center;background:#fafafa;border:1px solid var(--border);border-radius:8px;padding:24px;margin:20px 0;overflow-x:auto}.video-player{background:linear-gradient(135deg,#fef6f2,#fff);border:1px solid #f5d5c8;border-radius:12px;padding:18px 22px;margin:0 0 28px;font-family:var(--font-sans);box-shadow:0 2px 10px rgba(234,111,90,0.06)}.video-player .vp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.video-player video{width:100%;border-radius:8px;background:#000;display:block}.podcast-player{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,#fef6f2,#fff);border:1px solid #f5d5c8;border-radius:12px;padding:18px 22px;margin:0 0 28px;font-family:var(--font-sans);box-shadow:0 2px 10px rgba(234,111,90,0.06)}.pp-btn{flex:none;width:52px;height:52px;border-radius:50%;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;box-shadow:0 3px 10px rgba(234,111,90,0.35);position:relative}.pp-btn:hover{background:var(--accent-hover);transform:scale(1.05)}.pp-btn.playing::after{content:"";position:absolute;width:52px;height:52px;border-radius:50%;border:2px solid var(--accent);animation:pp-pulse 1.6s ease-out infinite}@keyframes pp-pulse{0%{transform:scale(1);opacity:0.7}100%{transform:scale(1.45);opacity:0}}.pp-main{flex:1;min-width:0}.pp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pp-badge{font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-light);border:1px solid #f5d5c8;padding:1px 8px;border-radius:10px}.pp-bar-wrap{display:flex;align-items:center;gap:10px}.pp-time{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;flex:none;min-width:38px}.pp-bar{flex:1;height:6px;background:#f0ddd3;border-radius:3px;cursor:pointer;position:relative}.pp-bar-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--accent);border-radius:3px;transition:width 0.1s linear}.pp-bar-fill::after{content:"";position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,0.2);opacity:0;transition:opacity 0.15s}.pp-bar:hover .pp-bar-fill::after{opacity:1}.pp-error{font-size:12px;color:var(--red);margin-top:6px;display:none}@media(max-width:600px){.podcast-player{padding:14px 16px;gap:12px}.pp-btn{width:44px;height:44px}.pp-btn.playing::after{width:44px;height:44px}}
+.page-nav{display:flex;justify-content:space-between;margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border);font-size:0.95em}.page-nav a{color:var(--accent)}.back-to-top{position:fixed;bottom:40px;right:40px;width:44px;height:44px;background:#fff;border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--text-muted);box-shadow:0 2px 8px rgba(0,0,0,0.08);transition:all 0.2s;z-index:999;opacity:0;transform:translateY(10px);pointer-events:none}.back-to-top.visible{opacity:1;transform:translateY(0);pointer-events:auto}.back-to-top:hover{color:var(--accent);border-color:var(--accent)}@media(max-width:600px){.article-header{padding:24px 20px 20px}.article-header h1{font-size:22px}.article-body{padding:20px 20px 32px}.article-body h2{font-size:19px}.article-body h3{font-size:16px}body{font-size:16px}}
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep&#8203;Mastery <span>/ L4: Boundaries &amp; Pitfalls</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">Table of Contents</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>L4: Middleware Boundaries — Pitfalls, Limits &amp; the Built-in Catalogue</h1>
+      <div class="article-meta"><span>Layer: L4 Boundary</span><span>Reading time: 35 min</span><span>Source: langchain 1.3.14</span></div>
+    </div>
+    <div class="article-body">
+
+<div class="video-player">
+  <div class="vp-title">授课动画 · 同步讲解 <span class="pp-badge">1080p</span></div>
+  <video controls preload="metadata" src="./0004-middleware-boundaries-l4-manim-video.mp4"></video>
+</div>
+
+<div class="podcast-player">
+  <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+    <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+    <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+  </button>
+  <div class="pp-main">
+    <div class="pp-title">本期播客 · 双人对谈:生产边界、五大坑与内置中间件地图 <span class="pp-badge">女声 × 男声</span></div>
+    <div class="pp-bar-wrap">
+      <span class="pp-time" id="ppCur">00:00</span>
+      <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+      <span class="pp-time" id="ppDur">--:--</span>
+    </div>
+    <div class="pp-error" id="ppError">音频加载失败,请确认 0004-middleware-boundaries-l4-podcast.mp3 与本页面在同一目录。</div>
+  </div>
+  <audio id="ppAudio" preload="metadata" src="./0004-middleware-boundaries-l4-podcast.mp3"></audio>
+</div>
+
+<h2 id="production-dimensions">Production Dimensions: The Four Mandatory Checks</h2>
+
+<p>This lesson systematically examines each production dimension that deep-grill probes. These are the areas where demo-level understanding breaks down in real systems.</p>
+
+<h3 id="concurrency">1. Concurrency Semantics</h3>
+
+<table>
+  <tr><th>Scenario</th><th>Serial or Parallel?</th><th>Deciding factor</th></tr>
+  <tr>
+    <td>Multiple tool_calls in one model response</td>
+    <td><strong>Parallel</strong></td>
+    <td>The LLM returns N tool_calls in a single response; LangGraph executes them concurrently in one superstep</td>
+  </tr>
+  <tr>
+    <td>Multiple model responses (agent loop iterations)</td>
+    <td><strong>Serial</strong></td>
+    <td>Each model call is sequential; the loop waits for tool results before the next model call</td>
+  </tr>
+  <tr>
+    <td>Multiple <code>wrap_tool_call</code> hooks on parallel tools</td>
+    <td><strong>Per-call</strong></td>
+    <td>Each tool call gets its own wrapped execution; middleware instances are shared but stateless per call</td>
+  </tr>
+  <tr>
+    <td>Fallback chain in <code>ModelFallbackMiddleware</code></td>
+    <td><strong>Serial</strong></td>
+    <td>Models tried one after another, only advancing on failure</td>
+  </tr>
+</table>
+
+<div class="note">
+  <div class="note-title">Critical insight</div>
+  <p>The agent loop is <strong>not</strong> "one tool per iteration." It's "one <em>model response</em> per iteration." If the model returns 3 tool_calls, all 3 run in parallel in the same superstep. The loop only iterates again after those results come back and trigger a new model call. This is the #1 concurrency misconception.</p>
+</div>
+
+<h3 id="exception-tolerance">2. Exception Tolerance</h3>
+
+<table>
+  <tr><th>Failure point</th><th>Default behavior</th><th>Tolerance mechanism</th></tr>
+  <tr>
+    <td>Tool execution raises exception</td>
+    <td>Exception halts the agent</td>
+    <td><code>ToolErrorMiddleware</code> converts to <code>ToolMessage(status="error")</code></td>
+  </tr>
+  <tr>
+    <td>Tool call fails transiently</td>
+    <td>Same as above</td>
+    <td><code>ToolRetryMiddleware</code> retries with backoff</td>
+  </tr>
+  <tr>
+    <td>Model call fails transiently</td>
+    <td>Exception halts the agent</td>
+    <td><code>ModelRetryMiddleware</code> retries with backoff</td>
+  </tr>
+  <tr>
+    <td>Model unavailable entirely</td>
+    <td>Exception halts the agent</td>
+    <td><code>ModelFallbackMiddleware</code> tries alternative models</td>
+  </tr>
+  <tr>
+    <td>Argument-binding error (tool input validation)</td>
+    <td><code>ToolNode</code> converts to error <code>ToolMessage</code> <em>before</em> tool runs</td>
+    <td>Handled upstream — does NOT reach <code>ToolErrorMiddleware</code></td>
+  </tr>
+</table>
+
+<div class="warning">
+  <div class="warning-title">Exception detail: <code>GraphBubbleUp</code></div>
+  <p><code>GraphBubbleUp</code> (LangGraph control-flow signals like interrupts and parent <code>Command</code>s) must ALWAYS propagate. If your <code>wrap_tool_call</code> or <code>wrap_model_call</code> catches <code>Exception</code> broadly, you must explicitly re-raise <code>GraphBubbleUp</code> — otherwise you'll silently swallow interrupts and break human-in-the-loop.</p>
+</div>
+
+<h3 id="boundary-judgment">3. Boundary Judgment</h3>
+
+<p><strong>How does the agent know when a model "turn" ends?</strong></p>
+
+<ul>
+  <li>A model response ends when the LLM returns — the boundary is the single <code>AIMessage</code> (or <code>AIMessageChunk</code> in streaming) in the response.</li>
+  <li>The <strong>loop termination</strong> is decided by: does the last <code>AIMessage</code> have non-empty <code>tool_calls</code>? If yes → continue; if no → end.</li>
+  <li><strong>Streaming detection</strong>: when streaming, you cannot rely on <code>metadata</code> token counts to detect the end. You detect it via the <code>finish_reason</code> on the final chunk, or via the model node completing.</li>
+  <li><strong><code>jump_to</code> boundary</strong>: <code>jump_to</code> is <code>EphemeralValue</code> — it resets after each superstep. A jump only affects the <em>next</em> routing decision, not future ones.</li>
+</ul>
+
+<h3 id="performance">4. Performance Overhead</h3>
+
+<table>
+  <tr><th>Pattern</th><th>Overhead</th><th>Mitigation</th></tr>
+  <tr>
+    <td>Many <code>wrap_model_call</code> layers nested</td>
+    <td>Each layer adds a Python function call frame; deep nesting slows each model call</td>
+    <td>Consolidate into fewer, well-designed middleware</td>
+  </tr>
+  <tr>
+    <td><code>SummarizationMiddleware</code> on every turn</td>
+    <td>Extra LLM call to generate summary + token counting on every turn</td>
+    <td>Tune <code>trigger</code> threshold; use cheap model for summaries</td>
+  </tr>
+  <tr>
+    <td>Stream transformers on every event</td>
+    <td>Every stream event passes through transformer factories</td>
+    <td>Register transformers only when needed; keep them lightweight</td>
+  </tr>
+  <tr>
+    <td><code>ModelRequest.override()</code> in a hot loop</td>
+    <td>Shallow copy per override — cheap, but repeated copies of large message lists add up</td>
+    <td>Override only what changed; avoid copying entire message history</td>
+  </tr>
+</table>
+
+<h2 id="pitfalls">Pitfalls &amp; Edge Cases</h2>
+
+<h3>Pitfall 1: <code>jump_to</code> silently ignored</h3>
+
+<p>If you return <code>{"jump_to": "end"}</code> but forget <code>can_jump_to=["end"]</code>, the jump is silently ignored — no error, no warning. The agent just continues normally.</p>
+
+<pre><code class="language-python"># ❌ WRONG: jump_to will be silently ignored
+@before_model
+def broken_guard(state, runtime):
+    if should_stop(state):
+        return {"jump_to": "end"}  # never declared can_jump_to!
+    return None
+
+# ✅ CORRECT: declare can_jump_to
+@before_model(can_jump_to=["end"])
+def fixed_guard(state, runtime):
+    if should_stop(state):
+        return {"jump_to": "end"}
+    return None</code></pre>
+
+<h3>Pitfall 2: Sync/async mismatch</h3>
+
+<p>The base <code>AgentMiddleware</code> methods raise <code>NotImplementedError</code> with a helpful message if you only define one variant. If you define only <code>awrap_model_call</code> (async) but invoke with <code>stream()</code> (sync), you get a runtime error.</p>
+
+<pre><code class="language-python">class MyMiddleware(AgentMiddleware):
+    async def awrap_model_call(self, request, handler):  # only async defined
+        return await handler(request)
+
+# ❌ This fails: sync invoke() can't use the async-only middleware
+agent.invoke({"messages": [...]})  # NotImplementedError
+
+# ✅ This works: async invoke
+await agent.ainvoke({"messages": [...]})</code></pre>
+
+<h3>Pitfall 3: Forgetting <code>tool_call_id</code> in error ToolMessages</h3>
+
+<p>When converting an exception to a <code>ToolMessage</code>, you must set <code>tool_call_id=request.tool_call["id"]</code>. Without it, the model can't associate the error with the correct tool call, and it can't correct its mistake.</p>
+
+<h3>Pitfall 4: Mutating <code>ModelRequest</code> directly</h3>
+
+<p>Direct attribute assignment on <code>ModelRequest</code> is deprecated. Always use <code>.override()</code>. Mutating in place breaks the immutability guarantee and can leak state across middleware.</p>
+
+<pre><code class="language-python"># ❌ WRONG: deprecated, emits DeprecationWarning
+request.system_prompt = "new prompt"
+
+# ✅ CORRECT: immutable override
+request = request.override(system_message=SystemMessage(content="new prompt"))</code></pre>
+
+<h3>Pitfall 5: Broad exception catching swallows control flow</h3>
+
+<pre><code class="language-python"># ❌ WRONG: swallows GraphBubbleUp, breaks HITL
+@wrap_tool_call
+def bad_handler(request, handler):
+    try:
+        return handler(request)
+    except Exception as e:
+        return ToolMessage(content=f"error: {e}", tool_call_id=request.tool_call["id"])
+
+# ✅ CORRECT: explicitly propagate control-flow
+from langgraph.errors import GraphBubbleUp
+
+@wrap_tool_call
+def good_handler(request, handler):
+    try:
+        return handler(request)
+    except GraphBubbleUp:
+        raise
+    except Exception as e:
+        return ToolMessage(content=f"error: {e}", tool_call_id=request.tool_call["id"])</code></pre>
+
+<h2 id="builtin-catalogue">The Built-in Middleware Catalogue</h2>
+
+<p>The built-in middleware falls into logical clusters. This is the full map — you don't need to memorize every knob, but you should know what exists and its purpose.</p>
+
+<h3>Reliability Cluster</h3>
+
+<table>
+  <tr><th>Middleware</th><th>Purpose</th><th>Key config</th></tr>
+  <tr><td><code>ToolErrorMiddleware</code></td><td>Convert tool exceptions to error messages</td><td><code>on_error</code>, <code>tools</code></td></tr>
+  <tr><td><code>ToolRetryMiddleware</code></td><td>Retry failed tool calls</td><td><code>max_retries</code>, <code>backoff_factor</code>, <code>on_failure</code></td></tr>
+  <tr><td><code>ModelRetryMiddleware</code></td><td>Retry failed model calls</td><td><code>max_retries</code>, <code>retry_on</code>, <code>on_failure</code></td></tr>
+  <tr><td><code>ModelFallbackMiddleware</code></td><td>Fallback to alternative models</td><td><code>first_model</code>, <code>*additional_models</code></td></tr>
+</table>
+
+<h3>Context Management Cluster</h3>
+
+<table>
+  <tr><th>Middleware</th><th>Purpose</th><th>Key config</th></tr>
+  <tr><td><code>SummarizationMiddleware</code></td><td>Summarize history near token limits</td><td><code>model</code>, <code>trigger</code>, <code>keep</code></td></tr>
+  <tr><td><code>ContextEditingMiddleware</code></td><td>Trim/clear old tool outputs</td><td><code>edits</code> (e.g., <code>ClearToolUsesEdit</code>)</td></tr>
+</table>
+
+<h3>Safety &amp; Guardrails Cluster</h3>
+
+<table>
+  <tr><th>Middleware</th><th>Purpose</th><th>Key config</th></tr>
+  <tr><td><code>PIIMiddleware</code></td><td>Detect/handle PII</td><td><code>pii_type</code>, <code>strategy</code> (block/redact/mask/hash)</td></tr>
+  <tr><td><code>HumanInTheLoopMiddleware</code></td><td>Pause for human approval</td><td><code>interrupt_on</code>, requires checkpointer</td></tr>
+  <tr><td><code>RubricMiddleware</code> (Beta, deepagents)</td><td>LLM-as-judge self-evaluation</td><td><code>model</code>, <code>max_iterations</code></td></tr>
+</table>
+
+<h3>Cost &amp; Limits Cluster</h3>
+
+<table>
+  <tr><th>Middleware</th><th>Purpose</th><th>Key config</th></tr>
+  <tr><td><code>ModelCallLimitMiddleware</code></td><td>Limit model calls</td><td><code>thread_limit</code>, <code>run_limit</code>, <code>exit_behavior</code></td></tr>
+  <tr><td><code>ToolCallLimitMiddleware</code></td><td>Limit tool calls</td><td><code>tool_name</code>, <code>thread_limit</code>, <code>run_limit</code></td></tr>
+</table>
+
+<h3>Planning &amp; Selection Cluster</h3>
+
+<table>
+  <tr><th>Middleware</th><th>Purpose</th><th>Key config</th></tr>
+  <tr><td><code>TodoListMiddleware</code></td><td>Task planning/tracking (adds <code>write_todos</code> tool)</td><td><code>system_prompt</code>, <code>tool_description</code></td></tr>
+  <tr><td><code>LLMToolSelectorMiddleware</code></td><td>LLM selects relevant tools</td><td><code>model</code>, <code>max_tools</code>, <code>always_include</code></td></tr>
+  <tr><td><code>ProviderToolSearchMiddleware</code></td><td>Defer tools to provider server-side search</td><td><code>searchable_tools</code></td></tr>
+</table>
+
+<h3>Environment &amp; Testing Cluster</h3>
+
+<table>
+  <tr><th>Middleware</th><th>Purpose</th><th>Key config</th></tr>
+  <tr><td><code>ShellToolMiddleware</code></td><td>Persistent shell session</td><td><code>workspace_root</code>, <code>execution_policy</code></td></tr>
+  <tr><td><code>FilesystemFileSearchMiddleware</code></td><td>Glob/Grep file search</td><td><code>root_path</code>, <code>use_ripgrep</code></td></tr>
+  <tr><td><code>FilesystemMiddleware</code> (deepagents)</td><td>ls/read/write/edit files</td><td><code>backend</code>, <code>tools</code></td></tr>
+  <tr><td><code>SubAgentMiddleware</code> (deepagents)</td><td>Spawn subagents for context isolation</td><td><code>subagents</code>, <code>default_model</code></td></tr>
+  <tr><td><code>LLMToolEmulator</code></td><td>Emulate tool execution for testing</td><td><code>tools</code>, <code>model</code></td></tr>
+</table>
+
+<div class="note">
+  <div class="note-title">Core vs Deep Agents</div>
+  <p>Most middleware lives in <code>langchain.agents.middleware</code>. But <code>FilesystemMiddleware</code>, <code>SubAgentMiddleware</code>, and <code>RubricMiddleware</code> live in the separate <code>deepagents</code> package. They are <strong>not</strong> in this project's venv (documented from official docs only).</p>
+</div>
+
+<h2 id="custom-vs-builtin">Custom vs Built-in: When to Use Which</h2>
+
+<table>
+  <tr><th>Scenario</th><th>Recommendation</th><th>Why</th></tr>
+  <tr><td>Standard retry/fallback/error handling</td><td>Built-in</td><td>Production-tested, configurable, well-documented</td></tr>
+  <tr><td>PII redaction, summarization, limits</td><td>Built-in</td><td>Complex logic you don't want to reimplement</td></tr>
+  <tr><td>Custom business logic (e.g., "block this user")</td><td>Custom</td><td>No built-in covers your specific rule</td></tr>
+  <tr><td>Dynamic prompt/model/tool selection</td><td>Custom (<code>@wrap_model_call</code>)</td><td>Depends on your app state; built-ins are too generic</td></tr>
+  <tr><td>Monitoring/logging specific to your app</td><td>Custom (node-style)</td><td>You need your own observability format</td></tr>
+</table>
+
+<h2 id="tradeoffs">Design Trade-offs Recap</h2>
+
+<div class="mermaid">
+graph LR
+    A[Middleware] --> B[Power: full control]
+    A --> C[Complexity: ordering, nesting]
+    B --> D[Pros: resilience, safety, cost control]
+    C --> E[Cons: silent jump_to, sync/async traps]
+    A --> F[Immutability]
+    F --> G[Pros: safe composition]
+    F --> H[Cons: alloc overhead]
+    style D fill:#e8f5e9,stroke:#42c02e
+    style E fill:#fdf2f2,stroke:#e74c3c
+    style G fill:#e8f5e9,stroke:#42c02e
+    style H fill:#fdf2f2,stroke:#e74c3c
+</div>
+
+<div class="deep-grill-readiness">
+  <h4>Deep-Grill Readiness</h4>
+  <ul>
+    <li class="done">Can explain the parallel/serial concurrency model (model response = iteration)</li>
+    <li class="done">Can list the default vs tolerant behavior for each failure point</li>
+    <li class="done">Can explain why <code>GraphBubbleUp</code> must propagate and how to handle it</li>
+    <li class="done">Can explain how the agent loop termination boundary is detected</li>
+    <li class="done">Can identify at least 3 pitfalls (jump_to, sync/async, tool_call_id, mutation)</li>
+    <li class="done">Can categorize the built-in middleware into clusters and know their purpose</li>
+    <li class="done">Can decide when to use built-in vs custom middleware</li>
+    <li>Can explain the performance overhead of each middleware pattern</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <span><a href="./0003-middleware-source-l3.html">← L3: Source Walkthrough</a></span>
+  <span><a href="../interview/0001-middleware-interview-l5.html">Next: L5 Interview Bank →</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var au=document.getElementById('ppAudio'),btn=document.getElementById('ppBtn'),ip=document.getElementById('ppIconPlay'),pa=document.getElementById('ppIconPause'),cur=document.getElementById('ppCur'),dur=document.getElementById('ppDur'),bar=document.getElementById('ppBar'),fill=document.getElementById('ppFill'),err=document.getElementById('ppError');if(!au)return;function fmt(s){if(!isFinite(s))return'--:--';s=Math.floor(s);var m=Math.floor(s/60),x=s%60;return(m<10?'0':'')+m+':'+(x<10?'0':'')+x}function sync(){ip.style.display=au.paused?'':'none';pa.style.display=au.paused?'none':'';btn.classList.toggle('playing',!au.paused);btn.setAttribute('aria-label',au.paused?'播放播客':'暂停播客')}btn.addEventListener('click',function(){if(au.paused){au.play()}else{au.pause()}});au.addEventListener('loadedmetadata',function(){dur.textContent=fmt(au.duration)});au.addEventListener('timeupdate',function(){if(isFinite(au.duration)&&au.duration>0){fill.style.width=(au.currentTime/au.duration*100)+'%'}cur.textContent=fmt(au.currentTime)});au.addEventListener('play',sync);au.addEventListener('pause',sync);au.addEventListener('ended',function(){sync();au.currentTime=0;fill.style.width='0%'});au.addEventListener('error',function(){err.style.display='block'});bar.addEventListener('click',function(e){var r=bar.getBoundingClientRect(),p=(e.clientX-r.left)/r.width;if(isFinite(au.duration)){au.currentTime=p*au.duration}})})();
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+</body>
+</html>

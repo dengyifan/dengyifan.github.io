@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>L5: Middleware Interview Question Bank</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+  <style>
+    :root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-hover:#ec6149;--accent-blue:#3194d0;--accent-blue-hover:#187cb7;--accent-light:#fef0f0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--green-bg:#e8f5e9;--orange:#f5a623;--orange-bg:#fff8e1;--red:#e74c3c;--red-bg:#fdf2f2;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace;--content-width:1020px;--toc-width:220px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-0.5px}.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}.layout{display:flex;justify-content:center;margin-top:56px;padding:0 16px;min-height:100vh}.toc-sidebar{position:fixed;left:calc(50% - var(--content-width)/2 - var(--toc-width) - 40px);top:96px;width:var(--toc-width);max-height:calc(100vh - 140px);overflow-y:auto;z-index:100;font-family:var(--font-sans);font-size:13px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);padding:16px 0;box-shadow:0 1px 3px rgba(0,0,0,0.04)}.toc-sidebar::-webkit-scrollbar{width:3px}.toc-sidebar::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}.toc-title{padding:0 16px 12px;font-size:13px;font-weight:700;color:var(--text);border-bottom:1px solid var(--border);margin-bottom:8px;letter-spacing:0.5px}.toc-sidebar a{display:block;padding:5px 16px;color:var(--text-muted);text-decoration:none;border-left:2px solid transparent;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.toc-sidebar a:hover{color:var(--accent);background:#fafafa;border-left-color:var(--border-light)}.toc-sidebar a.active{color:var(--accent);font-weight:600;border-left-color:var(--accent);background:var(--accent-light)}.toc-sidebar a.toc-h2{padding-left:16px}.toc-sidebar a.toc-h3{padding-left:28px;font-size:12px}@media(max-width:1200px){.toc-sidebar{display:none}}.content{width:100%;max-width:var(--content-width);padding:32px 0 80px;margin-left:0}.article-header{background:var(--card-bg);border-radius:4px;padding:36px 40px 28px;margin-bottom:16px;border-bottom:1px solid var(--border)}.article-header h1{font-size:30px;font-weight:700;line-height:1.4;color:var(--text);font-family:var(--font-sans);margin-bottom:16px}.article-meta{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:20px;flex-wrap:wrap}.article-body{background:var(--card-bg);border-radius:4px;padding:32px 40px 48px}.article-body h2{font-size:22px;font-weight:700;margin:40px 0 16px;font-family:var(--font-sans);padding-bottom:8px;border-bottom:1px solid var(--border);color:var(--text)}.article-body h2:first-child{margin-top:0}.article-body h3{font-size:18px;font-weight:600;margin:28px 0 12px;font-family:var(--font-sans);color:#333}.article-body p{margin:14px 0;text-align:justify}.article-body a{color:var(--accent);text-decoration:none}.article-body a:hover{text-decoration:underline}.article-body strong{font-weight:700;color:#222}code{font-family:var(--font-mono);font-size:0.88em;background:var(--code-bg);padding:2px 6px;border-radius:3px;color:#c7254e}pre{font-family:var(--font-mono);font-size:13px;background:#282c34;color:#abb2bf;padding:18px 22px;border-radius:6px;overflow-x:auto;margin:18px 0;line-height:1.6}pre code{background:transparent;color:inherit;padding:0;font-size:inherit}blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid var(--accent);background:#fafafa;color:#555;font-size:0.95em}table{border-collapse:collapse;width:100%;margin:18px 0;font-size:14px;font-family:var(--font-sans)}th,td{border:1px solid var(--border);padding:10px 14px;text-align:left}th{background:#fafafa;font-weight:600;color:#333;font-size:13px}tr:hover{background:#fafafa}.note,.warning,.tip,.info{border-left:4px solid;margin:1rem 0;padding:12px 16px;border-radius:0 6px 6px 0;font-size:0.95em}.note{border-color:var(--accent-blue);background:#f0f7fd}.warning{border-color:var(--orange);background:var(--orange-bg)}.tip{border-color:var(--green);background:var(--green-bg)}.note-title,.warning-title,.tip-title{font-weight:700;margin-bottom:0.3rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.note-title{color:var(--accent-blue)}.warning-title{color:var(--orange)}.tip-title{color:var(--green)}.qa-block{background:#fafafa;border:1px solid var(--border);border-radius:6px;padding:1.2rem 1.5rem;margin:1.2rem 0}.qa-block .question{font-weight:600;color:var(--accent);margin-bottom:0.6rem;font-size:1.05em}.qa-block .answer{color:var(--text)}.qa-block .key-point{margin-top:0.5rem;padding:0.4rem 0.8rem;background:#fef9f0;border-left:3px solid var(--accent);border-radius:0 4px 4px 0;font-size:0.9em;color:var(--text-muted)}.deep-grill-readiness{background:#f5f5f5;border:1px solid var(--border);border-radius:6px;padding:1rem 1.5rem;margin:2rem 0 1rem;font-size:0.95em}.deep-grill-readiness h4{margin-top:0;color:var(--text);font-family:var(--font-sans)}.deep-grill-readiness ul{list-style:none;margin-left:0}.deep-grill-readiness li{padding:0.25rem 0;color:var(--text-muted)}.deep-grill-readiness li.done{color:var(--text)}.deep-grill-readiness li.done::before{content:"☑ ";color:#5cb85c}.deep-grill-readiness li::before{content:"☐ ";color:var(--text-muted)}.mermaid{display:flex;justify-content:center;background:#fafafa;border:1px solid var(--border);border-radius:8px;padding:24px;margin:20px 0;overflow-x:auto}.podcast-player{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,#fef6f2,#fff);border:1px solid #f5d5c8;border-radius:12px;padding:18px 22px;margin:0 0 28px;font-family:var(--font-sans);box-shadow:0 2px 10px rgba(234,111,90,0.06)}.pp-btn{flex:none;width:52px;height:52px;border-radius:50%;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;box-shadow:0 3px 10px rgba(234,111,90,0.35);position:relative}.pp-btn:hover{background:var(--accent-hover);transform:scale(1.05)}.pp-btn.playing::after{content:"";position:absolute;width:52px;height:52px;border-radius:50%;border:2px solid var(--accent);animation:pp-pulse 1.6s ease-out infinite}@keyframes pp-pulse{0%{transform:scale(1);opacity:0.7}100%{transform:scale(1.45);opacity:0}}.pp-main{flex:1;min-width:0}.pp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pp-badge{font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-light);border:1px solid #f5d5c8;padding:1px 8px;border-radius:10px}.pp-bar-wrap{display:flex;align-items:center;gap:10px}.pp-time{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;flex:none;min-width:38px}.pp-bar{flex:1;height:6px;background:#f0ddd3;border-radius:3px;cursor:pointer;position:relative}.pp-bar-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--accent);border-radius:3px;transition:width 0.1s linear}.pp-bar-fill::after{content:"";position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,0.2);opacity:0;transition:opacity 0.15s}.pp-bar:hover .pp-bar-fill::after{opacity:1}.pp-error{font-size:12px;color:var(--red);margin-top:6px;display:none}@media(max-width:600px){.podcast-player{padding:14px 16px;gap:12px}.pp-btn{width:44px;height:44px}.pp-btn.playing::after{width:44px;height:44px}}
+.page-nav{display:flex;justify-content:space-between;margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border);font-size:0.95em}.page-nav a{color:var(--accent)}.back-to-top{position:fixed;bottom:40px;right:40px;width:44px;height:44px;background:#fff;border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--text-muted);box-shadow:0 2px 8px rgba(0,0,0,0.08);transition:all 0.2s;z-index:999;opacity:0;transform:translateY(10px);pointer-events:none}.back-to-top.visible{opacity:1;transform:translateY(0);pointer-events:auto}.back-to-top:hover{color:var(--accent);border-color:var(--accent)}@media(max-width:600px){.article-header{padding:24px 20px 20px}.article-header h1{font-size:22px}.article-body{padding:20px 20px 32px}.article-body h2{font-size:19px}.article-body h3{font-size:16px}body{font-size:16px}}
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <div class="logo">Deep&#8203;Mastery <span>/ L5: Interview Bank</span></div>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">Table of Contents</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>L5: Middleware Interview Question Bank</h1>
+      <div class="article-meta"><span>Layer: L5 Interview</span><span>Aligned with deep-grill 5 angles</span><span>Source: langchain 1.3.14</span></div>
+    </div>
+    <div class="article-body">
+
+<div class="podcast-player">
+  <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+    <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+    <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+  </button>
+  <div class="pp-main">
+    <div class="pp-title">本期播客 · 模拟面试:五视角十四题连环问 <span class="pp-badge">女声 × 男声</span></div>
+    <div class="pp-bar-wrap">
+      <span class="pp-time" id="ppCur">00:00</span>
+      <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+      <span class="pp-time" id="ppDur">--:--</span>
+    </div>
+    <div class="pp-error" id="ppError">音频加载失败,请确认 0001-middleware-interview-l5-podcast.mp3 与本页面在同一目录。</div>
+  </div>
+  <audio id="ppAudio" preload="metadata" src="./0001-middleware-interview-l5-podcast.mp3"></audio>
+</div>
+
+<h2 id="interviewer">Interviewer Angle (Concept + Principle + Deep Dive)</h2>
+
+<h3>Q1: What is middleware in LangChain, and why does it exist?</h3>
+
+<div class="qa-block">
+  <div class="question">Q1: What is middleware in LangChain, and why does it exist?</div>
+  <div class="answer">
+    <p>Middleware is a configurable interception layer that hooks into the agent execution loop at specific points (before/after model calls, around tool calls, at agent start/end). It exists to solve four problems that are inherent to production agent systems:</p>
+    <ol>
+      <li><strong>Reliability</strong>: retries, fallbacks, error recovery — you can't have an agent in production that crashes on the first transient API error.</li>
+      <li><strong>Safety</strong>: PII detection, human approval, guardrails — agents need guardrails that run <em>inside</em> the execution loop, not just at the edges.</li>
+      <li><strong>Cost control</strong>: model call limits, tool call limits, summarization — agents can loop forever, and you need a way to bound them.</li>
+      <li><strong>Observability</strong>: logging, tracing, custom events — you need to see what the agent is doing at each step.</li>
+    </ol>
+    <p>Without middleware, you'd have to bake all of this logic into the agent's core loop directly, which couples it to your specific business logic and makes it unmaintainable.</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: Middleware is not a separate runtime — it compiles directly into the agent's LangGraph graph as nodes and edges. This means every middleware hook runs with full access to <code>AgentState</code> and <code>Runtime</code>.</div>
+</div>
+
+<h3>Q2: What's the difference between node-style hooks and wrap-style hooks?</h3>
+
+<div class="qa-block">
+  <div class="question">Q2: What's the difference between node-style hooks and wrap-style hooks? When would you use each?</div>
+  <div class="answer">
+    <p><strong>Node-style hooks</strong> (<code>before_agent</code>, <code>before_model</code>, <code>after_model</code>, <code>after_agent</code>) run sequentially at fixed points in the graph. They receive <code>(state, runtime)</code> and return a <code>dict</code> of state updates (or <code>None</code>). They are <strong>observers</strong> — they see the state but don't control whether the core operation happens.</p>
+    <p><strong>Wrap-style hooks</strong> (<code>wrap_model_call</code>, <code>wrap_tool_call</code>) receive a <strong>handler callback</strong> and decide <em>whether</em> to call it and <em>how many times</em>. They are <strong>interceptors</strong> — they control the execution flow.</p>
+    <p>Use node-style for: logging, validation, state inspection, emitting events. Use wrap-style for: retries, fallbacks, short-circuiting, caching, request/response transformation.</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: If you need to call the handler 0, 1, or N times, you MUST use wrap-style. Node-style hooks cannot control execution flow — they can only observe and optionally redirect via <code>jump_to</code>.</div>
+</div>
+
+<h3>Q3: Explain the execution order when you have three middleware in the list.</h3>
+
+<div class="qa-block">
+  <div class="question">Q3: With <code>middleware=[m1, m2, m3]</code>, describe the execution order of all hooks.</div>
+  <div class="answer">
+    <p><strong>before_* hooks</strong>: m1 → m2 → m3 (list order).</p>
+    <p><strong>wrap_* hooks</strong>: m1 wraps m2 wraps m3 wraps handler. So m1 is the outermost layer — it sees the final result after all inner middleware have processed.</p>
+    <p><strong>after_* hooks</strong>: m3 → m2 → m1 (reverse order).</p>
+    <p>This follows the standard middleware pattern (Express.js, Django, etc.): before runs forward, after runs backward like a stack unwinding. The outermost middleware (first in the list) has the most power — it can short-circuit the entire chain.</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: The "outer wins" rule for state updates: when multiple middleware return <code>ExtendedModelResponse</code> with the same key, the outermost (first in the list) value wins. Messages are an exception — they're additive via the <code>add_messages</code> reducer.</div>
+</div>
+
+<h3>Q4: What is <code>jump_to</code> and why does it need <code>can_jump_to</code>?</h3>
+
+<div class="qa-block">
+  <div class="question">Q4: What is <code>jump_to</code> and why does it need <code>can_jump_to</code>?</div>
+  <div class="answer">
+    <p><code>jump_to</code> is a state key in <code>AgentState</code> that redirects the agent to a different graph node: <code>'tools'</code>, <code>'model'</code>, or <code>'end'</code>. It's how middleware terminates the agent early (model call limits), blocks content (guardrails), or forces a tool call.</p>
+    <p><code>can_jump_to</code> must be declared on the hook because the compiled LangGraph needs <strong>conditional edges</strong> built at compile time. Without <code>can_jump_to=["end"]</code>, the graph has no edge from the hook's node to the end node, so the <code>jump_to</code> value is silently ignored — no error, no warning.</p>
+    <p><code>jump_to</code> is also <code>EphemeralValue</code> — it resets after each superstep. You must set it each time you want a jump; it doesn't persist.</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: The compile-time declaration + runtime trigger split is unique to LangGraph's design. It's a trade-off: the graph topology is fixed at compile time for safety, but the routing decision is dynamic at runtime.</div>
+</div>
+
+<h3>Q5: Write the pseudocode for the agent loop routing function.</h3>
+
+<div class="qa-block">
+  <div class="question">Q5: Write the pseudocode for the agent loop routing function. What does it check?</div>
+  <div class="answer">
+    <pre><code class="language-python">def should_continue(state: AgentState) -> str:
+    # 1. Check if middleware requested a jump
+    if state.get("jump_to") == "end":
+        return "end"
+    if state.get("jump_to") == "tools":
+        return "tools"
+    if state.get("jump_to") == "model":
+        return "model"
+
+    # 2. Default: check if the last message has tool calls
+    last_message = state["messages"][-1]
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        return "tools"
+    else:
+        return "end"</code></pre>
+    <p>The routing function checks exactly two things: (1) <code>jump_to</code> (middleware override), (2) <code>messages[-1].tool_calls</code> (normal loop logic). There is no <code>next_node</code> field and no explicit state machine — the routing is purely data-driven from the last message.</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: The loop iteration is per <strong>model response</strong>, not per tool call. If the model returns 3 tool_calls in one response, all 3 run in parallel, then a new model call happens.</div>
+</div>
+
+<h2 id="architect">Architect Angle (System Design + Trade-offs)</h2>
+
+<h3>Q6: Why is ModelRequest immutable? What's the trade-off?</h3>
+
+<div class="qa-block">
+  <div class="question">Q6: Why is <code>ModelRequest</code> immutable? What's the alternative design and its trade-off?</div>
+  <div class="answer">
+    <p><code>ModelRequest</code> is immutable because middleware compose by nesting. If middleware A modifies the request object in place, middleware B (which runs after A) sees A's modifications. This creates a hidden coupling: B's behavior depends on A's side effects, and the order of middleware becomes critical in ways that are hard to debug.</p>
+    <p>With immutability (via <code>request.override()</code>), each middleware creates a new request with its changes. The original request is unchanged. When B runs, it sees the request as A left it, but if A's override had a bug, it doesn't corrupt the original request for other purposes.</p>
+    <p><strong>Trade-off</strong>: Immutability means every modification allocates a new object. For large message histories, this is a shallow copy via <code>dataclasses.replace()</code> — the message list itself is not deep-copied, so the overhead is O(1) per field change, not O(n) for the message list. The real cost is mental: developers must switch from "mutate in place" to "create and pass forward" thinking.</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: Direct attribute assignment on <code>ModelRequest</code> emits a <code>DeprecationWarning</code> — the framework is actively pushing everyone toward immutability.</div>
+</div>
+
+<h3>Q7: Compare the two middleware creation approaches: decorator-based vs class-based.</h3>
+
+<div class="qa-block">
+  <div class="question">Q7: You can create middleware with <code>@before_model</code> decorators or by subclassing <code>AgentMiddleware</code>. When do you choose which?</div>
+  <div class="answer">
+    <p><strong>Decorator-based</strong>: Quick, single-hook. The decorator uses Python's <code>type()</code> to dynamically create an <code>AgentMiddleware</code> subclass at runtime. The function name becomes the class name. Ideal for quick prototyping, simple logging, or one-off hooks.</p>
+    <p><strong>Class-based</strong>: Powerful, multi-hook, configurable. You subclass <code>AgentMiddleware</code> directly and implement multiple hook methods. You can add <code>__init__</code> parameters, share state between hooks, and declare <code>state_schema</code>, <code>tools</code>, and <code>transformers</code> as class attributes.</p>
+    <p>Choose decorator for: single hook, no configuration, throwaway middleware. Choose class for: multiple hooks, shared state, complex configuration, reuse across projects, both sync and async implementations.</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: Decorators don't give you less power — they just build a class for you. The <code>type()</code> call creates a real <code>AgentMiddleware</code> subclass. But for anything beyond a single hook, the class approach is more readable and maintainable.</div>
+</div>
+
+<h3>Q8: How would you design a middleware that needs to share state across multiple hooks?</h3>
+
+<div class="qa-block">
+  <div class="question">Q8: Design a middleware that tracks the number of model calls and terminates the agent after 10 calls. How does it share state between <code>before_model</code> and <code>after_model</code>?</div>
+  <div class="answer">
+    <p>Use a <strong>custom state schema</strong> with a class-based middleware:</p>
+    <pre><code class="language-python">from langchain.agents.middleware import AgentState, AgentMiddleware
+from typing_extensions import NotRequired
+
+class CounterState(AgentState):
+    model_call_count: NotRequired[int]
+
+class CallLimitMiddleware(AgentMiddleware[CounterState]):
+    state_schema = CounterState
+
+    def before_model(self, state, runtime):
+        if state.get("model_call_count", 0) >= 10:
+            return {"jump_to": "end"}  # terminate early
+        return None
+
+    def after_model(self, state, runtime):
+        return {"model_call_count": state.get("model_call_count", 0) + 1}
+
+agent = create_agent(
+    model="gpt-5.5",
+    middleware=[CallLimitMiddleware()],
+    tools=[],
+)</code></pre>
+    <p>The <code>before_model</code> hook reads the count and decides to terminate. The <code>after_model</code> hook increments it. The state is persisted in <code>AgentState</code> and flows through the graph's reducers — so <code>before_model</code> always sees the latest count from <code>after_model</code> of the previous iteration.</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: This is exactly how <code>ModelCallLimitMiddleware</code> works internally. The state schema replaces instance variables — middleware instances are stateless; all persistent data lives in the graph state.</div>
+</div>
+
+<h2 id="code-reviewer">Code Reviewer Angle (Bug Detection + Best Practices)</h2>
+
+<h3>Q9: Find the bug in this middleware code.</h3>
+
+<div class="qa-block">
+  <div class="question">Q9: The following middleware is supposed to prevent the agent from responding to blocked content. What's wrong?</div>
+  <div class="answer">
+    <pre><code class="language-python">@after_model
+def block_content(state, runtime):
+    last_msg = state["messages"][-1]
+    if "BLOCKED" in last_msg.content:
+        return {
+            "messages": [AIMessage("I cannot respond.")],
+            "jump_to": "end"
+        }
+    return None</code></pre>
+    <p><strong>Bug</strong>: <code>can_jump_to</code> is not declared. The <code>jump_to</code> value will be silently ignored — the agent will continue executing as if nothing happened. The fix:</p>
+    <pre><code class="language-python">@after_model(can_jump_to=["end"])  # ← add this
+def block_content(state, runtime):
+    last_msg = state["messages"][-1]
+    if "BLOCKED" in last_msg.content:
+        return {
+            "messages": [AIMessage("I cannot respond.")],
+            "jump_to": "end"
+        }
+    return None</code></pre>
+    <p><strong>Additional bug</strong>: The code appends an <code>AIMessage</code> via <code>jump_to</code> with <code>can_jump_to=["end"]</code>. But the <code>messages</code> key uses <code>add_messages</code> reducer, so the new <code>AIMessage</code> will be appended to the existing messages, not replace them. The original blocked message is still in the history. This might be intentional (for audit trail) or a bug (the blocked content leaks).</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: Silent failure of <code>jump_to</code> is the #1 custom middleware bug. There's no compiler warning, no lint, no runtime error — it just doesn't work. Always declare <code>can_jump_to</code> when you use <code>jump_to</code>.</div>
+</div>
+
+<h3>Q10: Find the bug — exception handling.</h3>
+
+<div class="qa-block">
+  <div class="question">Q10: This middleware catches all exceptions from tool calls. What's the subtle bug?</div>
+  <div class="answer">
+    <pre><code class="language-python">@wrap_tool_call
+def safe_tool_handler(request, handler):
+    try:
+        return handler(request)
+    except Exception as e:
+        return ToolMessage(
+            content=f"Tool failed: {e}",
+            tool_call_id=request.tool_call["id"],
+            status="error",
+        )</code></pre>
+    <p><strong>Bug</strong>: This catches <code>GraphBubbleUp</code> — LangGraph's control-flow signal for interrupts and parent <code>Command</code>s. If you're using <code>HumanInTheLoopMiddleware</code>, the interrupt signal will be swallowed by this handler, and the agent will not pause for human approval. The fix:</p>
+    <pre><code class="language-python">from langgraph.errors import GraphBubbleUp
+
+@wrap_tool_call
+def safe_tool_handler(request, handler):
+    try:
+        return handler(request)
+    except GraphBubbleUp:       # ← always propagate control-flow
+        raise
+    except Exception as e:
+        return ToolMessage(
+            content=f"Tool failed: {type(e).__name__}",
+            tool_call_id=request.tool_call["id"],
+            status="error",
+        )</code></pre>
+    <p><strong>Additional improvement</strong>: Use <code>type(e).__name__</code> instead of <code>{e}</code> in the error message. The raw exception message may contain sensitive internal details (API keys, file paths, stack traces).</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: Any <code>except Exception</code> in a wrap-style hook must explicitly re-raise <code>GraphBubbleUp</code>. This is a hard requirement documented in <code>ToolErrorMiddleware</code>'s source code.</div>
+</div>
+
+<h2 id="incident-responder">Incident Responder Angle (Troubleshooting + Debugging)</h2>
+
+<h3>Q11: Your agent is silently ignoring <code>jump_to</code>. What's your troubleshooting path?</h3>
+
+<div class="qa-block">
+  <div class="question">Q11: You've written custom middleware that returns <code>{"jump_to": "end"}</code>, but the agent continues executing. Walk through your troubleshooting steps.</div>
+  <div class="answer">
+    <ol>
+      <li><strong>Check <code>can_jump_to</code></strong>: Is the hook decorated with <code>can_jump_to=["end"]</code> (or <code>@hook_config(can_jump_to=["end"])</code>)? Without it, the graph has no edge to "end" from this hook's node.</li>
+      <li><strong>Check the return value</strong>: Is the <code>jump_to</code> value spelled correctly? It must be <code>'end'</code>, <code>'tools'</code>, or <code>'model'</code> — case-sensitive, no typos.</li>
+      <li><strong>Check if the hook is actually running</strong>: Add a <code>print()</code> or logging statement to verify the hook is being called. If the hook isn't running, the middleware isn't being passed to <code>create_agent</code> correctly.</li>
+      <li><strong>Check <code>EphemeralValue</code> semantics</strong>: <code>jump_to</code> resets after each superstep. If your hook returns <code>jump_to</code> but the routing logic runs before the hook's state update is applied, the jump might be consumed by the previous superstep's routing.</li>
+      <li><strong>Check middleware order</strong>: If another middleware after yours returns <code>None</code> (no state update), does it overwrite your <code>jump_to</code>? Node-style hooks return dicts — the <em>last</em> hook's return value wins for non-reducer fields.</li>
+    </ol>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: Step 1 catches 90% of cases. The <code>can_jump_to</code> requirement is the most common root cause of silent jump failures.</div>
+</div>
+
+<h3>Q12: Your agent works fine with <code>ainvoke()</code> but crashes with <code>invoke()</code>.</h3>
+
+<div class="qa-block">
+  <div class="question">Q12: Your custom middleware uses <code>async def awrap_model_call</code> and works with <code>agent.ainvoke()</code>. When you call <code>agent.invoke()</code>, it raises <code>NotImplementedError</code>. Why?</div>
+  <div class="answer">
+    <p>The base <code>AgentMiddleware.wrap_model_call</code> method raises <code>NotImplementedError</code> by default. When you only define <code>awrap_model_call</code> (async), the sync path has no implementation — it falls through to the base class's <code>NotImplementedError</code>.</p>
+    <p><strong>Fix</strong>: Either (1) define both <code>wrap_model_call</code> (sync) and <code>awrap_model_call</code> (async), or (2) always use the async invocation path (<code>ainvoke</code>, <code>astream</code>).</p>
+    <p>The reverse is also true: if you only define <code>wrap_model_call</code> (sync) and call <code>ainvoke</code>, the async base method raises <code>NotImplementedError</code>.</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: The error message from the base class is actually helpful — it tells you exactly what's wrong: "You defined only the async version and invoked synchronously."</div>
+</div>
+
+<h2 id="instructor">Instructor Angle (Feynman Explanation + Teaching)</h2>
+
+<h3>Q13: Explain middleware to a junior developer using an analogy.</h3>
+
+<div class="qa-block">
+  <div class="question">Q13: Explain LangChain middleware to a junior developer who's never heard of the concept. Use an analogy, not technical terms.</div>
+  <div class="answer">
+    <p><strong>Airport security analogy</strong>:</p>
+    <p>Imagine an agent is a passenger trying to fly from A to B. The agent loop is the flight path: board → fly → land. Middleware is like the security checkpoints along the way:</p>
+    <ul>
+      <li><strong>Check-in (before_agent)</strong>: Verify the passenger has a ticket. If not, turn them away.</li>
+      <li><strong>Security screening (before_model)</strong>: Check the passenger's bags. If something dangerous is found, block the flight.</li>
+      <li><strong>Gate agent (after_model)</strong>: After the passenger passes through, log that they boarded.</li>
+      <li><strong>Re-routing (wrap_model_call)</strong>: If the flight is cancelled, the gate agent can rebook the passenger on a different flight (fallback) or try the same flight again (retry).</li>
+      <li><strong>Customs (after_agent)</strong>: After arrival, check the passenger's final state.</li>
+    </ul>
+    <p>The key insight: the passenger (agent) doesn't know about the checkpoints. They just move through the process. The checkpoints (middleware) observe and control the flow without the passenger needing to be aware of them.</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: A good analogy emphasizes that middleware is <strong>transparent to the agent</strong> — the agent doesn't know it's being intercepted, and the middleware doesn't change the agent's core behavior, only the environment around it.</div>
+</div>
+
+<h3>Q14: What's the single most important thing to understand about middleware?</h3>
+
+<div class="qa-block">
+  <div class="question">Q14: If you could only teach one thing about LangChain middleware, what would it be?</div>
+  <div class="answer">
+    <p><strong>Middleware hooks are compiled into LangGraph nodes and edges — they are not a separate runtime.</strong></p>
+    <p>Every other concept flows from this: execution order mirrors the graph topology, <code>jump_to</code> needs <code>can_jump_to</code> because the graph needs edges built at compile time, state updates use graph reducers, and the entire agent (middleware included) can be dropped into a larger graph as a subgraph.</p>
+    <p>If you understand that middleware is <strong>graph-native</strong>, you understand why it's not just a "plugin system" — it's a structural part of the agent's execution graph.</p>
+  </div>
+  <div class="key-point"><strong>Key point</strong>: Many people think of middleware as "interceptors that run before/after the agent." The reality is more fundamental: middleware <em>is</em> the agent's graph structure. The hooks are the nodes; the hooks' edges are the graph's edges.</div>
+</div>
+
+<div class="deep-grill-readiness">
+  <h4>Deep-Grill Readiness — Final Checklist</h4>
+  <ul>
+    <li class="done">Can explain what middleware is and why it exists (Interviewer Q1)</li>
+    <li class="done">Can distinguish node-style vs wrap-style hooks and their use cases (Interviewer Q2)</li>
+    <li class="done">Can draw the execution order for 3 middleware (Interviewer Q3)</li>
+    <li class="done">Can explain <code>jump_to</code> / <code>can_jump_to</code> and the silent failure pitfall (Interviewer Q4)</li>
+    <li class="done">Can write the <code>should_continue</code> routing pseudocode (Interviewer Q5)</li>
+    <li class="done">Can explain <code>ModelRequest</code> immutability design (Architect Q6)</li>
+    <li class="done">Can compare decorator vs class middleware creation (Architect Q7)</li>
+    <li class="done">Can design a multi-hook middleware with shared state (Architect Q8)</li>
+    <li class="done">Can spot the <code>can_jump_to</code> bug (Code Reviewer Q9)</li>
+    <li class="done">Can spot the <code>GraphBubbleUp</code> swallowing bug (Code Reviewer Q10)</li>
+    <li class="done">Can troubleshoot silent jump failures (Incident Responder Q11)</li>
+    <li class="done">Can diagnose sync/async mismatch errors (Incident Responder Q12)</li>
+    <li class="done">Can explain middleware to a junior developer (Instructor Q13)</li>
+    <li class="done">Can articulate the single most important insight (Instructor Q14)</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <span><a href="../lessons/0004-middleware-boundaries-l4.html">← L4: Boundaries</a></span>
+  <span></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var au=document.getElementById('ppAudio'),btn=document.getElementById('ppBtn'),ip=document.getElementById('ppIconPlay'),pa=document.getElementById('ppIconPause'),cur=document.getElementById('ppCur'),dur=document.getElementById('ppDur'),bar=document.getElementById('ppBar'),fill=document.getElementById('ppFill'),err=document.getElementById('ppError');if(!au)return;function fmt(s){if(!isFinite(s))return'--:--';s=Math.floor(s);var m=Math.floor(s/60),x=s%60;return(m<10?'0':'')+m+':'+(x<10?'0':'')+x}function sync(){ip.style.display=au.paused?'':'none';pa.style.display=au.paused?'none':'';btn.classList.toggle('playing',!au.paused);btn.setAttribute('aria-label',au.paused?'播放播客':'暂停播客')}btn.addEventListener('click',function(){if(au.paused){au.play()}else{au.pause()}});au.addEventListener('loadedmetadata',function(){dur.textContent=fmt(au.duration)});au.addEventListener('timeupdate',function(){if(isFinite(au.duration)&&au.duration>0){fill.style.width=(au.currentTime/au.duration*100)+'%'}cur.textContent=fmt(au.currentTime)});au.addEventListener('play',sync);au.addEventListener('pause',sync);au.addEventListener('ended',function(){sync();au.currentTime=0;fill.style.width='0%'});au.addEventListener('error',function(){err.style.display='block'});bar.addEventListener('click',function(e){var r=bar.getBoundingClientRect(),p=(e.clientX-r.left)/r.width;if(isFinite(au.duration)){au.currentTime=p*au.duration}})})();
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+</body>
+</html>

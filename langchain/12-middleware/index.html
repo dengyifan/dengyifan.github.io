@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LangChain Middleware — Deep Mastery Course</title>
+  <style>
+    :root {
+      --bg: #f9f9f9; --card-bg: #fff; --text: #2f2f2f; --text-secondary: #666;
+      --text-muted: #999; --accent: #ea6f5a; --accent-hover: #ec6149;
+      --accent-blue: #3194d0; --accent-blue-hover: #187cb7; --accent-light: #fef0f0;
+      --border: #f0f0f0; --border-light: #e8e8e8; --code-bg: #f7f7f7;
+      --green: #42c02e; --green-bg: #e8f5e9; --orange: #f5a623; --orange-bg: #fff8e1;
+      --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+      --font-serif: "Noto Serif SC", "Source Han Serif SC", "STSong", "Songti SC", "SimSun", serif;
+      --font-mono: "SF Mono", "Fira Code", "Consolas", "Menlo", monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-serif);
+      font-size: 17px;
+      line-height: 1.8;
+      color: var(--text);
+      background: var(--bg);
+    }
+    .top-nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      height: 56px; background: #fff;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px;
+    }
+    .top-nav .logo {
+      font-size: 22px; font-weight: 700; color: var(--accent);
+      font-family: var(--font-sans); letter-spacing: -0.5px;
+    }
+    .top-nav .logo span { color: var(--text); font-weight: 400; font-size: 14px; margin-left: 8px; }
+
+    .container {
+      max-width: 1020px; margin: 80px auto 80px; padding: 0 16px;
+    }
+
+    /* Hero */
+    .hero {
+      background: var(--card-bg);
+      border-radius: 4px;
+      padding: 48px 40px 36px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero h1 {
+      font-size: 34px; font-weight: 700; line-height: 1.3;
+      font-family: var(--font-sans); color: var(--text);
+      margin-bottom: 12px;
+    }
+    .hero .subtitle {
+      font-size: 17px; color: var(--text-secondary);
+      font-family: var(--font-sans); line-height: 1.6;
+    }
+    .hero .meta {
+      margin-top: 20px; font-size: 13px; color: var(--text-muted);
+      font-family: var(--font-sans);
+      display: flex; gap: 24px; flex-wrap: wrap;
+    }
+
+    /* Stats bar */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border-radius: 4px;
+      padding: 20px 24px;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+    .stat-card .number {
+      font-size: 32px; font-weight: 700; font-family: var(--font-sans);
+      color: var(--accent);
+    }
+    .stat-card .label {
+      font-size: 13px; color: var(--text-muted);
+      font-family: var(--font-sans); margin-top: 4px;
+    }
+
+    /* Section */
+    .section {
+      background: var(--card-bg);
+      border-radius: 4px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .section-header {
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-sans);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .section-header h2 {
+      font-size: 18px; font-weight: 700; color: var(--text);
+      flex: 1;
+    }
+    .section-header .badge {
+      font-size: 12px; padding: 3px 10px; border-radius: 12px;
+      font-weight: 600; letter-spacing: 0.3px;
+    }
+    .badge.core { background: #fdf2f2; color: #e74c3c; }
+    .badge.support { background: #f0f7fd; color: var(--accent-blue); }
+    .badge.optional { background: #f5f5f5; color: var(--text-muted); }
+
+    /* Item list */
+    .item-list { padding: 4px 0; }
+    .item {
+      display: flex; align-items: center; gap: 16px;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+      text-decoration: none; color: inherit;
+    }
+    .item:last-child { border-bottom: none; }
+    .item:hover { background: #fafafa; }
+    .item .icon {
+      width: 44px; height: 44px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-family: var(--font-sans); font-weight: 700;
+      flex-shrink: 0;
+    }
+    .icon.l1 { background: #e8f5e9; color: #42c02e; }
+    .icon.l2 { background: #f0f7fd; color: var(--accent-blue); }
+    .icon.l3 { background: #fef0f0; color: var(--accent); }
+    .icon.l4 { background: #fff8e1; color: var(--orange); }
+    .icon.l5 { background: #f3e5f5; color: #9c27b0; }
+    .icon.doc { background: #f5f5f5; color: var(--text-muted); }
+
+    .item .info { flex: 1; min-width: 0; }
+    .item .info .title {
+      font-size: 16px; font-weight: 600; font-family: var(--font-sans);
+      color: var(--text); margin-bottom: 2px;
+    }
+    .item .info .desc {
+      font-size: 13px; color: var(--text-muted);
+      font-family: var(--font-sans); line-height: 1.5;
+    }
+    .item .info .tags { margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .item .info .tag {
+      font-size: 11px; padding: 1px 8px; border-radius: 10px;
+      font-family: var(--font-sans); background: #f5f5f5; color: var(--text-muted);
+    }
+    .item .arrow {
+      color: var(--text-muted); font-size: 18px;
+      font-family: var(--font-sans); flex-shrink: 0;
+    }
+
+    /* Roadmap */
+    .roadmap {
+      background: var(--card-bg);
+      border-radius: 4px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      padding: 28px;
+    }
+    .roadmap h2 {
+      font-size: 18px; font-weight: 700; font-family: var(--font-sans);
+      margin-bottom: 20px; color: var(--text);
+    }
+    .steps {
+      display: flex; gap: 16px; flex-wrap: wrap;
+    }
+    .step {
+      flex: 1; min-width: 140px;
+      background: #fafafa; border-radius: 8px;
+      padding: 20px 16px; text-align: center;
+      border: 1px solid var(--border);
+      font-family: var(--font-sans);
+      position: relative;
+    }
+    .step .step-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 10px;
+      font-size: 13px; font-weight: 700;
+    }
+    .step .step-title {
+      font-size: 14px; font-weight: 600; color: var(--text);
+      margin-bottom: 4px;
+    }
+    .step .step-desc {
+      font-size: 12px; color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .step::after {
+      content: "→";
+      position: absolute; right: -14px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--border-light); font-size: 20px;
+    }
+    .step:last-child::after { display: none; }
+
+    .footer {
+      text-align: center; padding: 32px 0 0;
+      font-size: 13px; color: var(--text-muted);
+      font-family: var(--font-sans);
+      border-top: 1px solid var(--border);
+      margin-top: 32px;
+    }
+
+    .podcast-player { display: flex; align-items: center; gap: 16px; background: linear-gradient(135deg,#fef6f2,#fff); border: 1px solid #f5d5c8; border-radius: 12px; padding: 18px 22px; margin: 0 0 24px; font-family: var(--font-sans); box-shadow: 0 2px 10px rgba(234,111,90,0.06); }
+    .pp-btn { flex: none; width: 52px; height: 52px; border-radius: 50%; border: none; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s, transform 0.15s; box-shadow: 0 3px 10px rgba(234,111,90,0.35); position: relative; }
+    .pp-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
+    .pp-btn.playing::after { content: ""; position: absolute; width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--accent); animation: pp-pulse 1.6s ease-out infinite; }
+    @keyframes pp-pulse { 0% { transform: scale(1); opacity: 0.7 } 100% { transform: scale(1.45); opacity: 0 } }
+    .pp-main { flex: 1; min-width: 0; }
+    .pp-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pp-badge { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-light); border: 1px solid #f5d5c8; padding: 1px 8px; border-radius: 10px; }
+    .pp-bar-wrap { display: flex; align-items: center; gap: 10px; }
+    .pp-time { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; flex: none; min-width: 38px; }
+    .pp-bar { flex: 1; height: 6px; background: #f0ddd3; border-radius: 3px; cursor: pointer; position: relative; }
+    .pp-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: var(--accent); border-radius: 3px; transition: width 0.1s linear; }
+    .pp-bar-fill::after { content: ""; position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.15s; }
+    .pp-bar:hover .pp-bar-fill::after { opacity: 1; }
+    .pp-error { font-size: 12px; color: #e74c3c; margin-top: 6px; display: none; }
+    @media (max-width: 700px) {
+      .hero { padding: 32px 20px 24px; }
+      .hero h1 { font-size: 24px; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .steps { flex-direction: column; }
+      .step::after { display: none; }
+      .item { padding: 14px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <div class="logo">Deep&#8203;Mastery <span>/ LangChain Middleware</span></div>
+</nav>
+
+<div class="container">
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>LangChain Middleware — Deep Mastery Course</h1>
+    <p class="subtitle">
+      From concept to source code: master the interception layer that turns a naive
+      agent loop into a production-grade system. Built from the official docs and
+      <code>langchain==1.3.14</code> source.
+    </p>
+    <div class="meta">
+      <span>📚 5-layer deep-mastery model</span>
+      <span>🔬 Source-verified (langchain 1.3.14)</span>
+      <span>🌐 All content in English</span>
+      <span>🧪 Aligned with deep-grill interview angles</span>
+    </div>
+  </div>
+
+  <!-- Podcast -->
+  <div class="podcast-player">
+    <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+      <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+      <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+    </button>
+    <div class="pp-main">
+      <div class="pp-title">课程导览播客 · 双人对谈:这套课怎么学 <span class="pp-badge">女声 × 男声</span></div>
+      <div class="pp-bar-wrap">
+        <span class="pp-time" id="ppCur">00:00</span>
+        <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+        <span class="pp-time" id="ppDur">--:--</span>
+      </div>
+      <div class="pp-error" id="ppError">音频加载失败,请确认 index-podcast.mp3 与本页面在同一目录。</div>
+    </div>
+    <audio id="ppAudio" preload="metadata" src="./index-podcast.mp3"></audio>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="number">4</div>
+      <div class="label">Lessons (L1–L4)</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">14</div>
+      <div class="label">Interview Questions</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">5</div>
+      <div class="label">Source Files Walked</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">7</div>
+      <div class="label">Supporting Docs</div>
+    </div>
+  </div>
+
+  <!-- Learning Roadmap -->
+  <div class="roadmap">
+    <h2>📖 Recommended Learning Path</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-title">L1: Concepts</div>
+        <div class="step-desc">What middleware is, the agent loop, hook system</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-title">L2: Principles</div>
+        <div class="step-desc">Execution order, composition, state, jumps</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-title">L3: Source</div>
+        <div class="step-desc">Real code walkthrough of core types &amp; built-ins</div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-title">L4: Boundaries</div>
+        <div class="step-desc">Pitfalls, production dimensions, built-in catalogue</div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-title">L5: Interview</div>
+        <div class="step-desc">14 questions across 5 deep-grill angles</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Core Lessons -->
+  <div class="section">
+    <div class="section-header">
+      <h2>🎓 Core Lessons</h2>
+      <span class="badge core">REQUIRED</span>
+    </div>
+    <div class="item-list">
+      <a class="item" href="./lessons/0001-middleware-overview-l1.html">
+        <div class="icon l1">L1</div>
+        <div class="info">
+          <div class="title">Middleware Concepts — The Agent Loop &amp; Hook System</div>
+          <div class="desc">What middleware is, where hooks run in the agent loop, node-style vs wrap-style hooks, middleware in LangGraph workflows, and the role of the checkpointer.</div>
+          <div class="tags"><span class="tag">agent loop</span><span class="tag">before_model</span><span class="tag">wrap_model_call</span><span class="tag">can_jump_to</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0002-middleware-principles-l2.html">
+        <div class="icon l2">L2</div>
+        <div class="info">
+          <div class="title">Middleware Principles — Execution Order, Composition, State &amp; Jumps</div>
+          <div class="desc">Why before/after/wrap hooks execute in the order they do, the nesting model, <code>jump_to</code> / <code>can_jump_to</code> mechanism, custom state schemas, and the routing pseudocode.</div>
+          <div class="tags"><span class="tag">execution order</span><span class="tag">composition</span><span class="tag">state schema</span><span class="tag">should_continue</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0003-middleware-source-l3.html">
+        <div class="icon l3">L3</div>
+        <div class="info">
+          <div class="title">Middleware Source Walkthrough — Core Types &amp; Built-in Implementations</div>
+          <div class="desc">Line-by-line analysis of <code>AgentState</code>, <code>ModelRequest.override()</code>, <code>ModelRetryMiddleware</code>, <code>calculate_delay</code>, <code>ToolErrorMiddleware</code>, <code>ModelFallbackMiddleware</code>, and the decorator <code>type()</code> internals.</div>
+          <div class="tags"><span class="tag">types.py</span><span class="tag">model_retry.py</span><span class="tag">tool_error.py</span><span class="tag">_retry.py</span><span class="tag">model_fallback.py</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0004-middleware-boundaries-l4.html">
+        <div class="icon l4">L4</div>
+        <div class="info">
+          <div class="title">Middleware Boundaries — Pitfalls, Limits &amp; the Built-in Catalogue</div>
+          <div class="desc">Four production dimensions (concurrency, exceptions, boundaries, performance), five common pitfalls, the full built-in middleware catalogue, and custom vs built-in decision guide.</div>
+          <div class="tags"><span class="tag">GraphBubbleUp</span><span class="tag">sync/async</span><span class="tag">tool_call_id</span><span class="tag">jitter</span><span class="tag">catalogue</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Interview Bank -->
+  <div class="section">
+    <div class="section-header">
+      <h2>🧪 Interview Question Bank</h2>
+      <span class="badge core">REQUIRED</span>
+    </div>
+    <div class="item-list">
+      <a class="item" href="./interview/0001-middleware-interview-l5.html">
+        <div class="icon l5">L5</div>
+        <div class="info">
+          <div class="title">Middleware Interview Question Bank — 14 Questions Across 5 Angles</div>
+          <div class="desc">Aligned with deep-grill's five examination angles: Interviewer (5), Architect (3), Code Reviewer (2), Incident Responder (2), Instructor (2). Each with complete answer and key scoring points.</div>
+          <div class="tags"><span class="tag">interviewer</span><span class="tag">architect</span><span class="tag">code-reviewer</span><span class="tag">incident-responder</span><span class="tag">instructor</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Supporting Documents -->
+  <div class="section">
+    <div class="section-header">
+      <h2>📋 Supporting Documents</h2>
+      <span class="badge support">REFERENCE</span>
+    </div>
+    <div class="item-list">
+      <a class="item" href="./topic-map.html">
+        <div class="icon doc">🗺</div>
+        <div class="info">
+          <div class="title">TOPIC-MAP</div>
+          <div class="desc">Complete concept map with mermaid mindmap, branch priorities (🔴 must deep-dive / 🟡 recommended / 🟢 awareness), cross-links, and suggested learning path.</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./resources.html">
+        <div class="icon doc">📚</div>
+        <div class="info">
+          <div class="title">RESOURCES</div>
+          <div class="desc">All authoritative sources: official docs URLs, local source code paths (verified in venv), example code file listing, and upstream repository links.</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./glossary.html">
+        <div class="icon doc">📖</div>
+        <div class="info">
+          <div class="title">GLOSSARY</div>
+          <div class="desc">25+ key terms defined: AgentMiddleware, ModelRequest, jump_to, EphemeralValue, add_messages reducer, GraphBubbleUp, and more.</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./mission.html">
+        <div class="icon doc">🎯</div>
+        <div class="info">
+          <div class="title">MISSION</div>
+          <div class="desc">Why study this, success criteria (6 goals), non-goals, and source-level grounding statement.</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./notes.html">
+        <div class="icon doc">📝</div>
+        <div class="info">
+          <div class="title">NOTES</div>
+          <div class="desc">Learner profile, content language (English), production-dimension check status, source version info, and notes on source availability.</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./spaced-repetition.html">
+        <div class="icon doc">🔄</div>
+        <div class="info">
+          <div class="title">Spaced Repetition</div>
+          <div class="desc">Review queue based on 1/3/7/21-day intervals. Today's review items, full queue, and review records.</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./common-misconceptions.html">
+        <div class="icon doc">⚠️</div>
+        <div class="info">
+          <div class="title">Common Misconceptions</div>
+          <div class="desc">Accumulated misunderstandings from deep-grill sessions. (Populated after first deep-grill run.)</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./reference/middleware-api-reference.html">
+        <div class="icon doc">📚</div>
+        <div class="info">
+          <div class="title">Middleware API Reference</div>
+          <div class="desc">Complete API reference: 14 middleware classes, 8 decorators, all types, parameters, and signatures. Sourced from reference.langchain.com and cross-verified against langchain 1.3.14.</div>
+          <div class="tags"><span class="tag">API</span><span class="tag">reference</span><span class="tag">SummarizationMiddleware</span><span class="tag">HumanInTheLoop</span><span class="tag">PII</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Learning Records -->
+  <div class="section">
+    <div class="section-header">
+      <h2>📓 Learning Records</h2>
+      <span class="badge optional">JOURNAL</span>
+    </div>
+    <div class="item-list">
+      <a class="item" href="./learning-records/0001-middleware-overview.html">
+        <div class="icon doc">📌</div>
+        <div class="info">
+          <div class="title">0001 — Middleware Overview</div>
+          <div class="desc">Non-obvious insights captured: graph-native compilation, per-model-response iteration, EphemeralValue semantics, ModelRequest immutability, GraphBubbleUp propagation.</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>Generated by Deep Mastery Skill · <code>langchain==1.3.14</code> · All content in English</p>
+    <p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
+  </div>
+
+</div>
+
+<script>
+(function(){var au=document.getElementById('ppAudio'),btn=document.getElementById('ppBtn'),ip=document.getElementById('ppIconPlay'),pa=document.getElementById('ppIconPause'),cur=document.getElementById('ppCur'),dur=document.getElementById('ppDur'),bar=document.getElementById('ppBar'),fill=document.getElementById('ppFill'),err=document.getElementById('ppError');if(!au)return;function fmt(s){if(!isFinite(s))return'--:--';s=Math.floor(s);var m=Math.floor(s/60),x=s%60;return(m<10?'0':'')+m+':'+(x<10?'0':'')+x}function sync(){ip.style.display=au.paused?'':'none';pa.style.display=au.paused?'none':'';btn.classList.toggle('playing',!au.paused);btn.setAttribute('aria-label',au.paused?'播放播客':'暂停播客')}btn.addEventListener('click',function(){if(au.paused){au.play()}else{au.pause()}});au.addEventListener('loadedmetadata',function(){dur.textContent=fmt(au.duration)});au.addEventListener('timeupdate',function(){if(isFinite(au.duration)&&au.duration>0){fill.style.width=(au.currentTime/au.duration*100)+'%'}cur.textContent=fmt(au.currentTime)});au.addEventListener('play',sync);au.addEventListener('pause',sync);au.addEventListener('ended',function(){sync();au.currentTime=0;fill.style.width='0%'});au.addEventListener('error',function(){err.style.display='block'});bar.addEventListener('click',function(e){var r=bar.getBoundingClientRect(),p=(e.clientX-r.left)/r.width;if(isFinite(au.duration)){au.currentTime=p*au.duration}})})();
+</script>
+
+</body>
+</html>

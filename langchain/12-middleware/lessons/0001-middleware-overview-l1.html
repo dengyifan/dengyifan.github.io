@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>L1: Middleware Concepts — The Agent Loop &amp; Hook System</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <style>
+    :root {
+      --bg: #f9f9f9; --card-bg: #fff; --text: #2f2f2f; --text-secondary: #666;
+      --text-muted: #999; --accent: #ea6f5a; --accent-hover: #ec6149;
+      --accent-blue: #3194d0; --accent-blue-hover: #187cb7; --accent-light: #fef0f0;
+      --border: #f0f0f0; --border-light: #e8e8e8; --code-bg: #f7f7f7;
+      --green: #42c02e; --green-bg: #e8f5e9; --orange: #f5a623; --orange-bg: #fff8e1;
+      --red: #e74c3c; --red-bg: #fdf2f2;
+      --font-serif: "Noto Serif SC", "Source Han Serif SC", "STSong", "Songti SC", "SimSun", serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+      --font-mono: "SF Mono", "Fira Code", "Consolas", "Menlo", monospace;
+      --content-width: 1020px; --toc-width: 220px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: var(--font-serif); font-size: 17px; line-height: 1.8; color: var(--text); background: var(--bg); }
+    .top-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; height: 56px; background: #fff; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; }
+    .top-nav .logo { font-size: 22px; font-weight: 700; color: var(--accent); font-family: var(--font-sans); letter-spacing: -0.5px; }
+    .top-nav .logo span { color: var(--text); font-weight: 400; font-size: 14px; margin-left: 8px; }
+    .layout { display: flex; justify-content: center; margin-top: 56px; padding: 0 16px; min-height: 100vh; }
+    .toc-sidebar { position: fixed; left: calc(50% - var(--content-width) / 2 - var(--toc-width) - 40px); top: 96px; width: var(--toc-width); max-height: calc(100vh - 140px); overflow-y: auto; z-index: 100; font-family: var(--font-sans); font-size: 13px; background: var(--card-bg); border-radius: 8px; border: 1px solid var(--border); padding: 16px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    .toc-sidebar::-webkit-scrollbar { width: 3px; }
+    .toc-sidebar::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+    .toc-title { padding: 0 16px 12px; font-size: 13px; font-weight: 700; color: var(--text); border-bottom: 1px solid var(--border); margin-bottom: 8px; letter-spacing: 0.5px; }
+    .toc-sidebar a { display: block; padding: 5px 16px; color: var(--text-muted); text-decoration: none; border-left: 2px solid transparent; transition: all 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .toc-sidebar a:hover { color: var(--accent); background: #fafafa; border-left-color: var(--border-light); }
+    .toc-sidebar a.active { color: var(--accent); font-weight: 600; border-left-color: var(--accent); background: var(--accent-light); }
+    .toc-sidebar a.toc-h2 { padding-left: 16px; }
+    .toc-sidebar a.toc-h3 { padding-left: 28px; font-size: 12px; }
+    @media (max-width: 1200px) { .toc-sidebar { display: none; } }
+    .content { width: 100%; max-width: var(--content-width); padding: 32px 0 80px; margin-left: 0; }
+    .article-header { background: var(--card-bg); border-radius: 4px; padding: 36px 40px 28px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .article-header h1 { font-size: 30px; font-weight: 700; line-height: 1.4; color: var(--text); font-family: var(--font-sans); margin-bottom: 16px; }
+    .article-meta { font-size: 13px; color: var(--text-muted); font-family: var(--font-sans); display: flex; gap: 20px; flex-wrap: wrap; }
+    .article-body { background: var(--card-bg); border-radius: 4px; padding: 32px 40px 48px; }
+    .article-body h2 { font-size: 22px; font-weight: 700; margin: 40px 0 16px; font-family: var(--font-sans); padding-bottom: 8px; border-bottom: 1px solid var(--border); color: var(--text); }
+    .article-body h2:first-child { margin-top: 0; }
+    .article-body h3 { font-size: 18px; font-weight: 600; margin: 28px 0 12px; font-family: var(--font-sans); color: #333; }
+    .article-body p { margin: 14px 0; text-align: justify; }
+    .article-body a { color: var(--accent); text-decoration: none; }
+    .article-body a:hover { text-decoration: underline; }
+    .article-body strong { font-weight: 700; color: #222; }
+    code { font-family: var(--font-mono); font-size: 0.88em; background: var(--code-bg); padding: 2px 6px; border-radius: 3px; color: #c7254e; }
+    pre { font-family: var(--font-mono); font-size: 13px; background: #282c34; color: #abb2bf; padding: 18px 22px; border-radius: 6px; overflow-x: auto; margin: 18px 0; line-height: 1.6; }
+    pre code { background: transparent; color: inherit; padding: 0; font-size: inherit; }
+    blockquote { margin: 18px 0; padding: 12px 18px; border-left: 4px solid var(--accent); background: #fafafa; color: #555; font-size: 0.95em; }
+    table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14px; font-family: var(--font-sans); }
+    th, td { border: 1px solid var(--border); padding: 10px 14px; text-align: left; }
+    th { background: #fafafa; font-weight: 600; color: #333; font-size: 13px; }
+    tr:hover { background: #fafafa; }
+    .note, .warning, .tip, .info { border-left: 4px solid; margin: 1rem 0; padding: 12px 16px; border-radius: 0 6px 6px 0; font-size: 0.95em; }
+    .note { border-color: var(--accent-blue); background: #f0f7fd; }
+    .warning { border-color: var(--orange); background: var(--orange-bg); }
+    .tip { border-color: var(--green); background: var(--green-bg); }
+    .note-title, .warning-title, .tip-title { font-weight: 700; margin-bottom: 0.3rem; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); }
+    .note-title { color: var(--accent-blue); }
+    .warning-title { color: var(--orange); }
+    .tip-title { color: var(--green); }
+    .java-comparison { background: linear-gradient(135deg, #fef9f0, #fff); border: 1px solid #e8d5b0; border-radius: 6px; padding: 1rem 1.2rem; margin: 1rem 0; font-size: 0.95em; }
+    .java-comparison .header { font-weight: 700; color: #b87333; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); }
+    .production-note { background: #fef6f0; border: 1px solid #f0c8a0; border-radius: 6px; padding: 1rem 1.2rem; margin: 1rem 0; font-size: 0.95em; }
+    .production-note .header { font-weight: 700; color: #d8763a; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-family: var(--font-sans); }
+    .deep-grill-readiness { background: #f5f5f5; border: 1px solid var(--border); border-radius: 6px; padding: 1rem 1.5rem; margin: 2rem 0 1rem; font-size: 0.95em; }
+    .deep-grill-readiness h4 { margin-top: 0; color: var(--text); font-family: var(--font-sans); }
+    .deep-grill-readiness ul { list-style: none; margin-left: 0; }
+    .deep-grill-readiness li { padding: 0.25rem 0; color: var(--text-muted); }
+    .deep-grill-readiness li.done { color: var(--text); }
+    .deep-grill-readiness li.done::before { content: "☑ "; color: #5cb85c; }
+    .deep-grill-readiness li::before { content: "☐ "; color: var(--text-muted); }
+    .mermaid { display: flex; justify-content: center; background: #fafafa; border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin: 20px 0; overflow-x: auto; }
+    .podcast-player { display: flex; align-items: center; gap: 16px; background: linear-gradient(135deg,#fef6f2,#fff); border: 1px solid #f5d5c8; border-radius: 12px; padding: 18px 22px; margin: 0 0 28px; font-family: var(--font-sans); box-shadow: 0 2px 10px rgba(234,111,90,0.06); }
+    .pp-btn { flex: none; width: 52px; height: 52px; border-radius: 50%; border: none; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s, transform 0.15s; box-shadow: 0 3px 10px rgba(234,111,90,0.35); position: relative; }
+    .pp-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
+    .pp-btn.playing::after { content: ""; position: absolute; width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--accent); animation: pp-pulse 1.6s ease-out infinite; }
+    @keyframes pp-pulse { 0% { transform: scale(1); opacity: 0.7 } 100% { transform: scale(1.45); opacity: 0 } }
+    .pp-main { flex: 1; min-width: 0; }
+    .pp-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pp-badge { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-light); border: 1px solid #f5d5c8; padding: 1px 8px; border-radius: 10px; }
+    .pp-bar-wrap { display: flex; align-items: center; gap: 10px; }
+    .pp-time { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; flex: none; min-width: 38px; }
+    .pp-bar { flex: 1; height: 6px; background: #f0ddd3; border-radius: 3px; cursor: pointer; position: relative; }
+    .pp-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: var(--accent); border-radius: 3px; transition: width 0.1s linear; }
+    .pp-bar-fill::after { content: ""; position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.15s; }
+    .pp-bar:hover .pp-bar-fill::after { opacity: 1; }
+    .pp-error { font-size: 12px; color: var(--red); margin-top: 6px; display: none; }
+    .video-player { background: linear-gradient(135deg,#fef6f2,#fff); border: 1px solid #f5d5c8; border-radius: 12px; padding: 18px 22px; margin: 0 0 28px; font-family: var(--font-sans); box-shadow: 0 2px 10px rgba(234,111,90,0.06); }
+    .video-player .vp-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .video-player video { width: 100%; border-radius: 8px; background: #000; display: block; }
+    @media (max-width: 600px) { .podcast-player { padding: 14px 16px; gap: 12px } .pp-btn { width: 44px; height: 44px } .pp-btn.playing::after { width: 44px; height: 44px } }
+    .page-nav { display: flex; justify-content: space-between; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: 0.95em; }
+    .page-nav a { color: var(--accent); }
+    .back-to-top { position: fixed; bottom: 40px; right: 40px; width: 44px; height: 44px; background: #fff; border: 1px solid var(--border); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 20px; color: var(--text-muted); box-shadow: 0 2px 8px rgba(0,0,0,0.08); transition: all 0.2s; z-index: 999; opacity: 0; transform: translateY(10px); pointer-events: none; }
+    .back-to-top.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .back-to-top:hover { color: var(--accent); border-color: var(--accent); }
+    @media (max-width: 600px) { .article-header { padding: 24px 20px 20px; } .article-header h1 { font-size: 22px; } .article-body { padding: 20px 20px 32px; } .article-body h2 { font-size: 19px; } .article-body h3 { font-size: 16px; } body { font-size: 16px; } }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep&#8203;Mastery <span>/ L1: Middleware Concepts</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">Table of Contents</div>
+  </nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>L1: Middleware Concepts — The Agent Loop &amp; Hook System</h1>
+      <div class="article-meta">
+        <span>Layer: L1 Concept</span>
+        <span>Estimated reading time: 25 min</span>
+        <span>Source: langchain 1.3.14</span>
+      </div>
+    </div>
+    <div class="article-body">
+
+<div class="video-player">
+  <div class="vp-title">授课动画 · 同步讲解 <span class="pp-badge">1080p</span></div>
+  <video controls preload="metadata" src="./0001-middleware-overview-l1-video.mp4"></video>
+</div>
+
+<div class="podcast-player">
+  <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+    <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+    <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+  </button>
+  <div class="pp-main">
+    <div class="pp-title">本期播客 · 双人对谈:中间件概念与钩子系统 <span class="pp-badge">女声 × 男声</span></div>
+    <div class="pp-bar-wrap">
+      <span class="pp-time" id="ppCur">00:00</span>
+      <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+      <span class="pp-time" id="ppDur">--:--</span>
+    </div>
+    <div class="pp-error" id="ppError">音频加载失败,请确认 0001-middleware-overview-l1-podcast.mp3 与本页面在同一目录。</div>
+  </div>
+  <audio id="ppAudio" preload="metadata" src="./0001-middleware-overview-l1-podcast.mp3"></audio>
+</div>
+
+<h2 id="what-is-middleware">What Is Middleware?</h2>
+
+<p>Middleware is a <strong>configurable interception layer</strong> that lets you control and customize agent execution at every step. Think of it as an "aspect-oriented" layer for the agent loop — you can inject logic before/after model calls, around tool calls, or at the start/end of the entire agent run.</p>
+
+<p>The official docs list four broad use cases:</p>
+
+<ol>
+  <li><strong>Tracking</strong> — logging, analytics, debugging</li>
+  <li><strong>Transforming</strong> — prompts, tool selection, output formatting</li>
+  <li><strong>Resilience</strong> — retries, fallbacks, early termination</li>
+  <li><strong>Safety</strong> — rate limits, guardrails, PII detection</li>
+</ol>
+
+<p>You add middleware when calling <code>create_agent</code>:</p>
+
+<pre><code class="language-python">from langchain.agents import create_agent
+from langchain.agents.middleware import SummarizationMiddleware, HumanInTheLoopMiddleware
+
+agent = create_agent(
+    model="gpt-5.5",
+    tools=[...],
+    middleware=[
+        SummarizationMiddleware(...),
+        HumanInTheLoopMiddleware(...)
+    ],
+)</code></pre>
+
+<div class="java-comparison">
+  <div class="header">From a Java perspective</div>
+  <p>Middleware is conceptually similar to <strong>Servlet Filters</strong> or <strong>Spring Interceptors</strong> — they sit in front of the core processing and can modify the request, the response, or short-circuit entirely. The key difference is that LangChain middleware is <em>stateful</em> (it has access to the full agent <code>AgentState</code>) and can <em>jump</em> between nodes in the compiled graph, not just pass/fail the request.</p>
+</div>
+
+<h2 id="the-agent-loop">The Agent Loop</h2>
+
+<p>To understand where middleware hooks fire, you must first understand the <strong>agent loop</strong> — the core cycle that every agent built with <code>create_agent</code> follows:</p>
+
+<div class="mermaid">
+graph TD
+    A[Start] --> B[Call Model]
+    B --> C{Has tool_calls?}
+    C -->|Yes| D[Execute Tools]
+    D --> B
+    C -->|No| E[End]
+
+    style A fill:#e8f5e9,stroke:#42c02e
+    style E fill:#fdf2f2,stroke:#e74c3c
+    style B fill:#f0f7fd,stroke:#3194d0
+    style D fill:#fef0f0,stroke:#ea6f5a
+</div>
+
+<p>This loop is simple but fundamental:</p>
+<ol>
+  <li><strong>Call Model</strong> — send the current messages (history + system prompt) to the LLM.</li>
+  <li><strong>Check tool_calls</strong> — did the model request any tool calls?</li>
+  <li>If yes: <strong>Execute Tools</strong> one by one, collect the results, feed them back to step 1.</li>
+  <li>If no: <strong>End</strong> — the agent is done.</li>
+</ol>
+
+<div class="production-note">
+  <div class="header">Production reality</div>
+  <p>The loop is bounded by the <strong>model's single response</strong> — if the model returns 3 tool_calls in one response, all 3 are executed in <strong>parallel</strong> (within a single LangGraph superstep). The loop does NOT iterate one tool at a time internally; it only iterates <em>across</em> model calls. This is a common deep-grill trap — people think "loop" means "one tool per iteration" but it's actually "one model response per iteration."</p>
+</div>
+
+<h2 id="where-hooks-run">Where Hooks Run in the Loop</h2>
+
+<p>Middleware exposes hooks <strong>before and after</strong> each step of the loop:</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant User
+    participant Agent as Agent (Graph)
+    participant MW as Middleware
+    participant Model as LLM
+    participant Tools
+
+    User->>Agent: invoke(messages)
+    Agent->>MW: before_agent()  🔵 once
+    loop Agent Loop
+        Agent->>MW: before_model()  🔵
+        Agent->>MW: wrap_model_call()  🟠 around
+        Agent->>Model: call()
+        Model-->>Agent: response
+        Agent->>MW: wrap_model_call() returns
+        Agent->>MW: after_model()  🔵
+        alt has tool_calls
+            Agent->>MW: wrap_tool_call()  🟠 around each
+            Agent->>Tools: execute()
+            Tools-->>Agent: result
+            Agent->>MW: wrap_tool_call() returns
+        end
+    end
+    Agent->>MW: after_agent()  🔵 once
+    Agent-->>User: result
+</div>
+
+<p>The two styles are:</p>
+
+<table>
+  <tr><th>Style</th><th>Hooks</th><th>When they run</th><th>Behavior</th></tr>
+  <tr>
+    <td><strong>Node-style</strong> <code>🔵</code></td>
+    <td><code>before_agent</code>, <code>before_model</code>, <code>after_model</code>, <code>after_agent</code></td>
+    <td>At specific points in the graph</td>
+    <td>Run sequentially; return state updates or <code>None</code></td>
+  </tr>
+  <tr>
+    <td><strong>Wrap-style</strong> <code>🟠</code></td>
+    <td><code>wrap_model_call</code>, <code>wrap_tool_call</code></td>
+    <td>Around each model/tool call</td>
+    <td>Receive a <code>handler</code> callback; can call it 0, 1, or N times</td>
+  </tr>
+</table>
+
+<div class="note">
+  <div class="note-title">Key insight</div>
+  <p>Node-style hooks are <strong>observers</strong> — they see the state before/after each step. Wrap-style hooks are <strong>interceptors</strong> — they control <em>whether</em> the step happens at all, and can modify the request/response.</p>
+</div>
+
+<h2 id="node-style-hooks">Node-Style Hooks</h2>
+
+<p>Node-style hooks run at fixed points in the execution graph. They receive <code>(state, runtime)</code> and return a <code>dict</code> of state updates (or <code>None</code> for no change).</p>
+
+<h3><code>before_agent</code> — once per invocation</h3>
+
+<p>Fires <strong>once</strong> at the very start of agent execution. Use it for initialization, logging, or injecting setup messages.</p>
+
+<pre><code class="language-python">from langchain.agents.middleware import before_agent, AgentState
+from langgraph.runtime import Runtime
+
+@before_agent
+def init_session(state: AgentState, runtime: Runtime) -> dict | None:
+    print(f"Agent starting with {len(state['messages'])} messages")
+    return None  # no state change</code></pre>
+
+<h3><code>before_model</code> — before each LLM call</h3>
+
+<p>Fires <strong>before every model call</strong> in the loop. This is the most commonly used node-style hook. Use it to check message limits, inject context, or decide to exit early.</p>
+
+<pre><code class="language-python">from langchain.agents.middleware import before_model, AgentState
+from langchain.messages import AIMessage
+
+@before_model(can_jump_to=["end"])
+def check_message_limit(state: AgentState, runtime) -> dict | None:
+    if len(state["messages"]) >= 50:
+        return {
+            "messages": [AIMessage("Conversation limit reached.")],
+            "jump_to": "end"
+        }
+    return None</code></pre>
+
+<div class="warning">
+  <div class="warning-title">Critical detail</div>
+  <p>To use <code>jump_to</code> in a node-style hook, you MUST declare <code>can_jump_to=["end"]</code> (or <code>["tools"]</code> / <code>["model"]</code>). Without this declaration, the compiled graph won't have the conditional edges needed to redirect execution. The jump will be silently ignored.</p>
+</div>
+
+<h3><code>after_model</code> — after each LLM response</h3>
+
+<p>Fires <strong>after every model response</strong>. Use it to inspect the output, validate content, or log the response.</p>
+
+<pre><code class="language-python">from langchain.agents.middleware import after_model, AgentState
+
+@after_model
+def log_response(state: AgentState, runtime) -> dict | None:
+    last_msg = state["messages"][-1]
+    print(f"Model returned: {last_msg.content[:100]}...")
+    return None</code></pre>
+
+<h3><code>after_agent</code> — once per invocation</h3>
+
+<p>Fires <strong>once</strong> when the agent loop ends. Use it for cleanup, final logging, or emitting completion events.</p>
+
+<h2 id="wrap-style-hooks">Wrap-Style Hooks</h2>
+
+<p>Wrap-style hooks are fundamentally different: they receive a <strong>handler callback</strong> and decide <em>if</em> and <em>how many times</em> to call it.</p>
+
+<pre><code class="language-python"># Signature pattern
+def wrap_model_call(
+    request: ModelRequest,
+    handler: Callable[[ModelRequest], ModelResponse],
+) -> ModelResponse:
+    # You control: call handler()? once? many times?
+    return handler(request)  # normal flow
+    # OR: skip handler() entirely (short-circuit)
+    # OR: call handler() multiple times (retry logic)</code></pre>
+
+<h3><code>wrap_model_call</code> — around each model call</h3>
+
+<p>The most powerful hook. Use it for retries, fallbacks, dynamic prompt/model/tool selection, caching, and response rewriting.</p>
+
+<pre><code class="language-python">from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse
+
+@wrap_model_call
+def retry_model(request, handler):
+    for attempt in range(3):
+        try:
+            return handler(request)
+        except Exception as e:
+            if attempt == 2:
+                raise
+            print(f"Retry {attempt + 1}/3 after error: {e}")</code></pre>
+
+<h3><code>wrap_tool_call</code> — around each tool call</h3>
+
+<p>Same pattern but for tools. Use it for tool-level retries, monitoring, result caching, or argument rewriting.</p>
+
+<pre><code class="language-python">from langchain.agents.middleware import wrap_tool_call
+
+@wrap_tool_call
+def monitor_tool(request, handler):
+    print(f"Executing tool: {request.tool_call['name']}")
+    result = handler(request)
+    print("Tool completed successfully")
+    return result</code></pre>
+
+<div class="java-comparison">
+  <div class="header">From a Java perspective</div>
+  <p>Wrap-style hooks are very similar to <strong>Spring AOP's <code>@Around</code> advice</strong> or JAX-RS <code>ContainerRequestFilter</code>. The handler callback is equivalent to <code>ProceedingJoinPoint.proceed()</code> — you can call it zero, one, or many times, and you can modify the arguments before calling it or the result after.</p>
+</div>
+
+<h2 id="middleware-in-langgraph">Middleware Inside a LangGraph Workflow</h2>
+
+<p>Middleware is <strong>not a separate runtime</strong>. When you call <code>create_agent</code>, the middleware hooks are compiled into the resulting LangGraph <code>StateGraph</code> as nodes and edges. This means you can drop the entire agent (middleware and all) into a larger graph as a subgraph:</p>
+
+<pre><code class="language-python">from langchain.agents import create_agent, AgentState
+from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langgraph.graph import START, StateGraph
+
+email_agent = create_agent(
+    model="claude-sonnet-4-6",
+    tools=[read_email, send_email],
+    middleware=[HumanInTheLoopMiddleware(interrupt_on={"send_email": True})],
+)
+
+graph = (
+    StateGraph(AgentState)
+    .add_node("classify", classify_node)
+    .add_node("email_agent", email_agent)  # agent as a subgraph
+    .add_edge(START, "classify")
+    .add_conditional_edges("classify", route)
+    .compile()
+)</code></pre>
+
+<p>Every middleware hook (HITL interrupts, summarization, PII, retries, custom hooks) <strong>travels with the agent node</strong>. This is a key design decision: middleware is not a global interceptor; it's scoped to the agent it's attached to.</p>
+
+<h2 id="basic-usage">Basic Usage Pattern</h2>
+
+<p>The simplest complete example with custom middleware:</p>
+
+<pre><code class="language-python">from langchain.agents import create_agent
+from langchain.agents.middleware import before_model, after_model, AgentState
+
+@before_model
+def log_before(state: AgentState, runtime) -> None:
+    print(f"About to call model with {len(state['messages'])} messages")
+
+@after_model
+def log_after(state: AgentState, runtime) -> None:
+    print(f"Model returned: {state['messages'][-1].content}")
+
+agent = create_agent(
+    model="gpt-5.5",
+    middleware=[log_before, log_after],
+    tools=[...],
+)
+
+# The middleware runs automatically on every agent invocation
+result = agent.invoke({"messages": [{"role": "user", "content": "Hello"}]})</code></pre>
+
+<div class="note">
+  <div class="note-title">Mind the list order</div>
+  <p>The order of middleware in the list matters. <code>before_*</code> hooks run in list order (first to last). <code>after_*</code> hooks run in <strong>reverse</strong> (last to first). <code>wrap_*</code> hooks nest with the first middleware as the outermost layer. We'll explore this in detail in the L2 Principles lesson.</p>
+</div>
+
+<h2 id="checkpoint">The Role of the Checkpointer</h2>
+
+<p>Some middleware (HumanInTheLoopMiddleware, ModelCallLimitMiddleware with thread_limit, ToolCallLimitMiddleware with thread_limit) <strong>require a checkpointer</strong> to persist state across invocations:</p>
+
+<pre><code class="language-python">from langgraph.checkpoint.memory import InMemorySaver
+
+agent = create_agent(
+    model="gpt-5.5",
+    checkpointer=InMemorySaver(),  # required for HITL and thread limits
+    middleware=[HumanInTheLoopMiddleware(...)],
+)</code></pre>
+
+<p>Without a checkpointer, interrupt-based middleware cannot resume after a pause, and thread-level counters cannot persist across calls with the same <code>thread_id</code>.</p>
+
+<div class="deep-grill-readiness">
+  <h4>Deep-Grill Readiness</h4>
+  <ul>
+    <li class="done">Can explain the agent loop and where each hook fires</li>
+    <li class="done">Can distinguish node-style hooks from wrap-style hooks</li>
+    <li class="done">Can draw the sequence diagram of hook execution</li>
+    <li>Can explain what <code>handler</code> callbacks are and why they exist</li>
+    <li>Can write a simple <code>@before_model</code> middleware from memory</li>
+    <li>Can explain why <code>can_jump_to</code> exists and what happens without it</li>
+    <li>Can explain how middleware compiles into a LangGraph graph</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <span></span>
+  <span><a href="./0002-middleware-principles-l2.html">Next: L2 Principles →</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var au=document.getElementById('ppAudio'),btn=document.getElementById('ppBtn'),ip=document.getElementById('ppIconPlay'),pa=document.getElementById('ppIconPause'),cur=document.getElementById('ppCur'),dur=document.getElementById('ppDur'),bar=document.getElementById('ppBar'),fill=document.getElementById('ppFill'),err=document.getElementById('ppError');if(!au)return;function fmt(s){if(!isFinite(s))return'--:--';s=Math.floor(s);var m=Math.floor(s/60),x=s%60;return(m<10?'0':'')+m+':'+(x<10?'0':'')+x}function sync(){ip.style.display=au.paused?'':'none';pa.style.display=au.paused?'none':'';btn.classList.toggle('playing',!au.paused);btn.setAttribute('aria-label',au.paused?'播放播客':'暂停播客')}btn.addEventListener('click',function(){if(au.paused){au.play()}else{au.pause()}});au.addEventListener('loadedmetadata',function(){dur.textContent=fmt(au.duration)});au.addEventListener('timeupdate',function(){if(isFinite(au.duration)&&au.duration>0){fill.style.width=(au.currentTime/au.duration*100)+'%'}cur.textContent=fmt(au.currentTime)});au.addEventListener('play',sync);au.addEventListener('pause',sync);au.addEventListener('ended',function(){sync();au.currentTime=0;fill.style.width='0%'});au.addEventListener('error',function(){err.style.display='block'});bar.addEventListener('click',function(e){var r=bar.getBoundingClientRect(),p=(e.clientX-r.left)/r.width;if(isFinite(au.duration)){au.currentTime=p*au.duration}})})();
+(function() {
+  var btn = document.getElementById('backToTop');
+  window.addEventListener('scroll', function() {
+    if (window.scrollY > 400) btn.classList.add('visible');
+    else btn.classList.remove('visible');
+  });
+})();
+(function() {
+  var toc = document.getElementById('toc');
+  var headings = document.querySelectorAll('.article-body h2, .article-body h3');
+  headings.forEach(function(h) {
+    var id = h.id || h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+    h.id = id;
+    var a = document.createElement('a');
+    a.href = '#' + id;
+    a.textContent = h.textContent;
+    a.className = 'toc-' + h.tagName.toLowerCase();
+    toc.appendChild(a);
+  });
+  var links = toc.querySelectorAll('a');
+  var headingEls = [];
+  links.forEach(function(link) {
+    var id = link.getAttribute('href').replace('#', '');
+    var el = document.getElementById(id);
+    if (el) headingEls.push({ el: el, link: link });
+  });
+  window.addEventListener('scroll', function() {
+    var scrollY = window.scrollY + 120;
+    var current = null;
+    headingEls.forEach(function(item) {
+      if (item.el.offsetTop <= scrollY) current = item;
+    });
+    links.forEach(function(l) { l.classList.remove('active'); });
+    if (current) current.link.classList.add('active');
+  });
+})();
+</script>
+
+</body>
+</html>

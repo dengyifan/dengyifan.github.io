@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Middleware API Reference</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+  <style>
+    :root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-hover:#ec6149;--accent-blue:#3194d0;--accent-blue-hover:#187cb7;--accent-light:#fef0f0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--green-bg:#e8f5e9;--orange:#f5a623;--orange-bg:#fff8e1;--red:#e74c3c;--red-bg:#fdf2f2;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace;--content-width:1020px;--toc-width:240px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}body{font-family:var(--font-serif);font-size:16px;line-height:1.75;color:var(--text);background:var(--bg)}.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-0.5px}.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}.layout{display:flex;justify-content:center;margin-top:56px;padding:0 16px;min-height:100vh}.toc-sidebar{position:fixed;left:calc(50% - var(--content-width)/2 - var(--toc-width) - 40px);top:96px;width:var(--toc-width);max-height:calc(100vh - 140px);overflow-y:auto;z-index:100;font-family:var(--font-sans);font-size:13px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);padding:16px 0;box-shadow:0 1px 3px rgba(0,0,0,0.04)}.toc-sidebar::-webkit-scrollbar{width:3px}.toc-sidebar::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}.toc-title{padding:0 16px 12px;font-size:13px;font-weight:700;color:var(--text);border-bottom:1px solid var(--border);margin-bottom:8px;letter-spacing:0.5px}.toc-sidebar a{display:block;padding:5px 16px;color:var(--text-muted);text-decoration:none;border-left:2px solid transparent;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.toc-sidebar a:hover{color:var(--accent);background:#fafafa;border-left-color:var(--border-light)}.toc-sidebar a.active{color:var(--accent);font-weight:600;border-left-color:var(--accent);background:var(--accent-light)}.toc-sidebar a.toc-h2{padding-left:16px}.toc-sidebar a.toc-h3{padding-left:28px;font-size:12px}@media(max-width:1200px){.toc-sidebar{display:none}}.content{width:100%;max-width:var(--content-width);padding:32px 0 80px;margin-left:0}.article-header{background:var(--card-bg);border-radius:4px;padding:36px 40px 28px;margin-bottom:16px;border-bottom:1px solid var(--border)}.article-header h1{font-size:28px;font-weight:700;line-height:1.4;color:var(--text);font-family:var(--font-sans);margin-bottom:12px}.article-meta{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:20px;flex-wrap:wrap}.article-body{background:var(--card-bg);border-radius:4px;padding:32px 40px 48px}.article-body h2{font-size:21px;font-weight:700;margin:36px 0 14px;font-family:var(--font-sans);padding-bottom:8px;border-bottom:1px solid var(--border);color:var(--text)}.article-body h2:first-child{margin-top:0}.article-body h3{font-size:17px;font-weight:600;margin:24px 0 10px;font-family:var(--font-sans);color:#333}.article-body p{margin:12px 0;text-align:justify}.article-body a{color:var(--accent);text-decoration:none}.article-body a:hover{text-decoration:underline}.article-body strong{font-weight:700;color:#222}code{font-family:var(--font-mono);font-size:0.86em;background:var(--code-bg);padding:2px 6px;border-radius:3px;color:#c7254e}pre{font-family:var(--font-mono);font-size:13px;background:#282c34;color:#abb2bf;padding:16px 20px;border-radius:6px;overflow-x:auto;margin:16px 0;line-height:1.6}pre code{background:transparent;color:inherit;padding:0;font-size:inherit}blockquote{margin:16px 0;padding:12px 18px;border-left:4px solid var(--accent);background:#fafafa;color:#555;font-size:0.95em}table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px;font-family:var(--font-sans)}th,td{border:1px solid var(--border);padding:9px 12px;text-align:left;vertical-align:top}th{background:#fafafa;font-weight:600;color:#333;font-size:12.5px}tr:hover{background:#fafafa}.note,.warning,.tip{border-left:4px solid;margin:1rem 0;padding:12px 16px;border-radius:0 6px 6px 0;font-size:0.92em}.note{border-color:var(--accent-blue);background:#f0f7fd}.warning{border-color:var(--orange);background:var(--orange-bg)}.tip{border-color:var(--green);background:var(--green-bg)}.note-title,.warning-title,.tip-title{font-weight:700;margin-bottom:0.3rem;font-family:var(--font-sans)}.note-title{color:var(--accent-blue)}.warning-title{color:var(--orange)}.tip-title{color:var(--green)}.sig{font-family:var(--font-mono);font-size:13px;background:#f6f8fa;border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin:8px 0;overflow-x:auto;color:#24292f}.sig .kw{color:#d73a49}.sig .param{color:#6f42c1}.sig .ret{color:#005cc5}.param-table td:first-child{font-family:var(--font-mono);font-size:12.5px;color:#c7254e;white-space:nowrap}.podcast-player{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,#fef6f2,#fff);border:1px solid #f5d5c8;border-radius:12px;padding:18px 22px;margin:0 0 28px;font-family:var(--font-sans);box-shadow:0 2px 10px rgba(234,111,90,0.06)}.pp-btn{flex:none;width:52px;height:52px;border-radius:50%;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;box-shadow:0 3px 10px rgba(234,111,90,0.35);position:relative}.pp-btn:hover{background:var(--accent-hover);transform:scale(1.05)}.pp-btn.playing::after{content:"";position:absolute;width:52px;height:52px;border-radius:50%;border:2px solid var(--accent);animation:pp-pulse 1.6s ease-out infinite}@keyframes pp-pulse{0%{transform:scale(1);opacity:0.7}100%{transform:scale(1.45);opacity:0}}.pp-main{flex:1;min-width:0}.pp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pp-badge{font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-light);border:1px solid #f5d5c8;padding:1px 8px;border-radius:10px}.pp-bar-wrap{display:flex;align-items:center;gap:10px}.pp-time{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;flex:none;min-width:38px}.pp-bar{flex:1;height:6px;background:#f0ddd3;border-radius:3px;cursor:pointer;position:relative}.pp-bar-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--accent);border-radius:3px;transition:width 0.1s linear}.pp-bar-fill::after{content:"";position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,0.2);opacity:0;transition:opacity 0.15s}.pp-bar:hover .pp-bar-fill::after{opacity:1}.pp-error{font-size:12px;color:var(--red);margin-top:6px;display:none}@media(max-width:600px){.podcast-player{padding:14px 16px;gap:12px}.pp-btn{width:44px;height:44px}.pp-btn.playing::after{width:44px;height:44px}}
+.page-nav{display:flex;justify-content:space-between;margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border);font-size:0.95em}.page-nav a{color:var(--accent)}.back-to-top{position:fixed;bottom:40px;right:40px;width:44px;height:44px;background:#fff;border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--text-muted);box-shadow:0 2px 8px rgba(0,0,0,0.08);transition:all 0.2s;z-index:999;opacity:0;transform:translateY(10px);pointer-events:none}.back-to-top.visible{opacity:1;transform:translateY(0);pointer-events:auto}.back-to-top:hover{color:var(--accent);border-color:var(--accent)}@media(max-width:600px){.article-header{padding:24px 20px 20px}.article-header h1{font-size:22px}.article-body{padding:20px 20px 32px}.article-body h2{font-size:18px}.article-body h3{font-size:16px}body{font-size:15px}}
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <div class="logo">Deep&#8203;Mastery <span>/ Middleware API Reference</span></div>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">API Reference</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>LangChain Middleware — API Reference</h1>
+      <div class="article-meta">
+        <span>Source: reference.langchain.com</span>
+        <span>Verified against: langchain 1.3.14</span>
+      </div>
+    </div>
+    <div class="article-body">
+
+<div class="podcast-player">
+  <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+    <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+    <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+  </button>
+  <div class="pp-main">
+    <div class="pp-title">本期播客 · 双人对谈:API 参考音频版 <span class="pp-badge">女声 × 男声</span></div>
+    <div class="pp-bar-wrap">
+      <span class="pp-time" id="ppCur">00:00</span>
+      <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+      <span class="pp-time" id="ppDur">--:--</span>
+    </div>
+    <div class="pp-error" id="ppError">音频加载失败,请确认 middleware-api-reference-podcast.mp3 与本页面在同一目录。</div>
+  </div>
+  <audio id="ppAudio" preload="metadata" src="./middleware-api-reference-podcast.mp3"></audio>
+</div>
+
+<p>This page is the complete API reference for <code>langchain.agents.middleware</code>, sourced from
+<a href="https://reference.langchain.com/python/langchain/middleware">reference.langchain.com/python/langchain/middleware</a>
+and cross-verified against the locally installed <code>langchain==1.3.14</code> source. See the conceptual guides and lessons for usage examples.</p>
+
+<div class="note">
+  <div class="note-title">Import path</div>
+  <p>All middleware, decorators, and types are importable from <code>langchain.agents.middleware</code>. Example: <code>from langchain.agents.middleware import SummarizationMiddleware, before_model, AgentState</code>.</p>
+</div>
+
+<h2 id="middleware-classes">Middleware Classes</h2>
+
+<p>LangChain provides 14 prebuilt middleware classes for common agent use cases, plus the base class for custom middleware.</p>
+
+<table>
+  <tr><th>Class</th><th>Description</th></tr>
+  <tr><td><a href="#summarization">SummarizationMiddleware</a></td><td>Automatically summarize conversation history when approaching token limits</td></tr>
+  <tr><td><a href="#hitl">HumanInTheLoopMiddleware</a></td><td>Pause execution for human approval of tool calls</td></tr>
+  <tr><td><a href="#model-call-limit">ModelCallLimitMiddleware</a></td><td>Limit the number of model calls to prevent excessive costs</td></tr>
+  <tr><td><a href="#tool-call-limit">ToolCallLimitMiddleware</a></td><td>Control tool execution by limiting call counts</td></tr>
+  <tr><td><a href="#model-fallback">ModelFallbackMiddleware</a></td><td>Automatically fallback to alternative models when primary fails</td></tr>
+  <tr><td><a href="#pii">PIIMiddleware</a></td><td>Detect and handle Personally Identifiable Information</td></tr>
+  <tr><td><a href="#todo">TodoListMiddleware</a></td><td>Equip agents with task planning and tracking capabilities</td></tr>
+  <tr><td><a href="#llm-tool-selector">LLMToolSelectorMiddleware</a></td><td>Use an LLM to select relevant tools before calling main model</td></tr>
+  <tr><td><a href="#tool-retry">ToolRetryMiddleware</a></td><td>Automatically retry failed tool calls with exponential backoff</td></tr>
+  <tr><td><a href="#llm-tool-emulator">LLMToolEmulator</a></td><td>Emulate tool execution using LLM for testing purposes</td></tr>
+  <tr><td><a href="#context-editing">ContextEditingMiddleware</a></td><td>Manage conversation context by trimming or clearing tool uses</td></tr>
+  <tr><td><a href="#shell-tool">ShellToolMiddleware</a></td><td>Expose a persistent shell session to agents for command execution</td></tr>
+  <tr><td><a href="#file-search">FilesystemFileSearchMiddleware</a></td><td>Provide Glob and Grep search tools over filesystem files</td></tr>
+  <tr><td><a href="#agent-middleware">AgentMiddleware</a></td><td>Base middleware class for creating custom middleware</td></tr>
+</table>
+
+<h3 id="summarization">SummarizationMiddleware</h3>
+<p>Summarizes conversation history when token limits are approached.</p>
+<div class="sig"><span class="kw">class</span> SummarizationMiddleware(<span class="param">model</span>, <span class="param">trigger</span>=None, <span class="param">keep</span>=("messages", 20), <span class="param">token_counter</span>=None, <span class="param">summary_prompt</span>=None, <span class="param">trim_tokens_to_summarize</span>=4000)</div>
+<table class="param-table">
+  <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>model</code></td><td>str | BaseChatModel</td><td>required</td><td>Model for generating summaries (identifier string or instance)</td></tr>
+  <tr><td><code>trigger</code></td><td>ContextSize | TriggerClause | list | None</td><td>None</td><td>Condition(s) for triggering summarization (single threshold = met; dict = AND; list = OR)</td></tr>
+  <tr><td><code>keep</code></td><td>ContextSize</td><td>("messages", 20)</td><td>How much context to preserve after summarization</td></tr>
+  <tr><td><code>token_counter</code></td><td>function</td><td>None</td><td>Custom token counting function (defaults to char-based)</td></tr>
+  <tr><td><code>summary_prompt</code></td><td>str</td><td>None</td><td>Custom prompt template (must include <code>{messages}</code> placeholder)</td></tr>
+  <tr><td><code>trim_tokens_to_summarize</code></td><td>number</td><td>4000</td><td>Max tokens to include when generating summary</td></tr>
+</table>
+
+<h3 id="hitl">HumanInTheLoopMiddleware</h3>
+<p>Pause agent execution for human approval, editing, or rejection of tool calls. Requires a checkpointer.</p>
+<div class="sig"><span class="kw">class</span> HumanInTheLoopMiddleware(<span class="param">interrupt_on</span>, <span class="param">description_prefix</span>="Tool execution requires approval")</div>
+<table class="param-table">
+  <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>interrupt_on</code></td><td>dict[str, bool | InterruptOnConfig]</td><td>required</td><td>Mapping of tool name → allowed actions. <code>True</code> = all decisions; <code>False</code> = auto-approve; config = specific decisions</td></tr>
+  <tr><td><code>description_prefix</code></td><td>str</td><td>"Tool execution requires approval"</td><td>Prefix used when constructing action requests</td></tr>
+</table>
+<div class="note">
+  <div class="note-title">InterruptOnConfig fields</div>
+  <p><code>allowed_decisions</code> (list of "approve"/"edit"/"reject"/"respond"), <code>description</code> (str or callable), <code>args_schema</code> (JSON schema for edits), <code>when</code> (predicate controlling whether to interrupt).</p>
+</div>
+
+<h3 id="model-call-limit">ModelCallLimitMiddleware</h3>
+<p>Tracks model call counts and enforces limits.</p>
+<div class="sig"><span class="kw">class</span> ModelCallLimitMiddleware(<span class="param">thread_limit</span>=None, <span class="param">run_limit</span>=None, <span class="param">exit_behavior</span>="end")</div>
+<table class="param-table">
+  <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>thread_limit</code></td><td>int | None</td><td>None</td><td>Max model calls across all runs in a thread</td></tr>
+  <tr><td><code>run_limit</code></td><td>int | None</td><td>None</td><td>Max model calls per single invocation</td></tr>
+  <tr><td><code>exit_behavior</code></td><td>"end" | "error"</td><td>"end"</td><td>"end" = graceful termination; "error" = raise ModelCallLimitExceededError</td></tr>
+</table>
+
+<h3 id="tool-call-limit">ToolCallLimitMiddleware</h3>
+<p>Track tool call counts and enforce limits during agent execution.</p>
+<div class="sig"><span class="kw">class</span> ToolCallLimitMiddleware(<span class="param">tool_name</span>=None, <span class="param">thread_limit</span>=None, <span class="param">run_limit</span>=None, <span class="param">exit_behavior</span>="continue")</div>
+<table class="param-table">
+  <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>tool_name</code></td><td>str | None</td><td>None</td><td>Name of specific tool to limit (None = all tools)</td></tr>
+  <tr><td><code>thread_limit</code></td><td>int | None</td><td>None</td><td>Max tool calls across a thread</td></tr>
+  <tr><td><code>run_limit</code></td><td>int | None</td><td>None</td><td>Max tool calls per invocation</td></tr>
+  <tr><td><code>exit_behavior</code></td><td>"continue" | "error" | "end"</td><td>"continue"</td><td>"continue" = block with error; "error" = raise; "end" = stop immediately</td></tr>
+</table>
+
+<h3 id="model-fallback">ModelFallbackMiddleware</h3>
+<p>Automatic fallback to alternative models on errors.</p>
+<div class="sig"><span class="kw">class</span> ModelFallbackMiddleware(<span class="param">first_model</span>, <span class="param">*additional_models</span>)</div>
+<table class="param-table">
+  <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>first_model</code></td><td>str | BaseChatModel</td><td>required</td><td>First fallback model to try (identifier or instance)</td></tr>
+  <tr><td><code>*additional_models</code></td><td>str | BaseChatModel</td><td>—</td><td>Additional fallbacks tried in order</td></tr>
+</table>
+
+<h3 id="pii">PIIMiddleware</h3>
+<p>Detect and handle Personally Identifiable Information in conversations.</p>
+<div class="sig"><span class="kw">class</span> PIIMiddleware(<span class="param">pii_type</span>, <span class="param">strategy</span>="redact", <span class="param">detector</span>=None, <span class="param">apply_to_input</span>=True, <span class="param">apply_to_output</span>=False, <span class="param">apply_to_tool_results</span>=False)</div>
+<table class="param-table">
+  <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>pii_type</code></td><td>str</td><td>required</td><td>Built-in (<code>email</code>, <code>credit_card</code>, <code>ip</code>, <code>mac_address</code>, <code>url</code>) or custom name</td></tr>
+  <tr><td><code>strategy</code></td><td>"block" | "redact" | "mask" | "hash"</td><td>"redact"</td><td>How to handle detected PII</td></tr>
+  <tr><td><code>detector</code></td><td>Callable | str | None</td><td>None</td><td>Custom detector function or regex pattern</td></tr>
+  <tr><td><code>apply_to_input</code></td><td>bool</td><td>True</td><td>Check user messages before model call</td></tr>
+  <tr><td><code>apply_to_output</code></td><td>bool</td><td>False</td><td>Check AI messages after model call</td></tr>
+  <tr><td><code>apply_to_tool_results</code></td><td>bool</td><td>False</td><td>Check tool result messages after execution</td></tr>
+</table>
+
+<h3 id="todo">TodoListMiddleware</h3>
+<p>Provides todo list management capabilities to agents (registers a <code>write_todos</code> tool).</p>
+<div class="sig"><span class="kw">class</span> TodoListMiddleware(<span class="param">system_prompt</span>=None, <span class="param">tool_description</span>=None)</div>
+
+<h3 id="llm-tool-selector">LLMToolSelectorMiddleware</h3>
+<p>Uses an LLM to select relevant tools before calling the main model.</p>
+<div class="sig"><span class="kw">class</span> LLMToolSelectorMiddleware(<span class="param">model</span>=None, <span class="param">system_prompt</span>=None, <span class="param">max_tools</span>=None, <span class="param">always_include</span>=None)</div>
+<table class="param-table">
+  <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>model</code></td><td>str | BaseChatModel</td><td>agent's main model</td><td>Model for tool selection</td></tr>
+  <tr><td><code>max_tools</code></td><td>number</td><td>None</td><td>Max tools to select (no limit if unspecified)</td></tr>
+  <tr><td><code>always_include</code></td><td>list[str]</td><td>None</td><td>Tools always included regardless of selection</td></tr>
+</table>
+
+<h3 id="tool-retry">ToolRetryMiddleware</h3>
+<p>Automatically retries failed tool calls with configurable backoff.</p>
+<div class="sig"><span class="kw">class</span> ToolRetryMiddleware(<span class="param">max_retries</span>=2, <span class="param">tools</span>=None, <span class="param">retry_on</span>=(Exception,), <span class="param">on_failure</span>="continue", <span class="param">backoff_factor</span>=2.0, <span class="param">initial_delay</span>=1.0, <span class="param">max_delay</span>=60.0, <span class="param">jitter</span>=True)</div>
+<table class="param-table">
+  <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>max_retries</code></td><td>int</td><td>2</td><td>Max retry attempts after initial call</td></tr>
+  <tr><td><code>tools</code></td><td>list[BaseTool | str] | None</td><td>None</td><td>Tools to apply retry to (None = all)</td></tr>
+  <tr><td><code>retry_on</code></td><td>tuple | callable</td><td>(Exception,)</td><td>Exceptions to retry on</td></tr>
+  <tr><td><code>on_failure</code></td><td>"continue" | "error" | callable</td><td>"continue"</td><td>Behavior when retries exhausted</td></tr>
+  <tr><td><code>backoff_factor</code></td><td>float</td><td>2.0</td><td>Exponential backoff multiplier (0.0 = constant)</td></tr>
+  <tr><td><code>initial_delay</code></td><td>float</td><td>1.0</td><td>Initial delay in seconds</td></tr>
+  <tr><td><code>max_delay</code></td><td>float</td><td>60.0</td><td>Max delay cap</td></tr>
+  <tr><td><code>jitter</code></td><td>bool</td><td>True</td><td>Add ±25% random jitter</td></tr>
+</table>
+
+<h3 id="llm-tool-emulator">LLMToolEmulator</h3>
+<p>Emulates specified tools using an LLM instead of executing them (for testing).</p>
+<div class="sig"><span class="kw">class</span> LLMToolEmulator(<span class="param">tools</span>=None, <span class="param">model</span>=None)</div>
+<table class="param-table">
+  <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>tools</code></td><td>list[str | BaseTool]</td><td>None</td><td>Tools to emulate (None = ALL; [] = none)</td></tr>
+  <tr><td><code>model</code></td><td>str | BaseChatModel</td><td>agent's model</td><td>Model for generating emulated responses</td></tr>
+</table>
+
+<h3 id="context-editing">ContextEditingMiddleware</h3>
+<p>Automatically prune tool results to manage context size.</p>
+<div class="sig"><span class="kw">class</span> ContextEditingMiddleware(<span class="param">edits</span>=None, <span class="param">token_count_method</span>="approximate")</div>
+<table class="param-table">
+  <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>edits</code></td><td>Iterable[ContextEdit] | None</td><td>[ClearToolUsesEdit()]</td><td>Edit strategies to apply</td></tr>
+  <tr><td><code>token_count_method</code></td><td>"approximate" | "model"</td><td>"approximate"</td><td>Token counting method</td></tr>
+</table>
+<h4>ClearToolUsesEdit</h4>
+<div class="sig"><span class="kw">class</span> ClearToolUsesEdit(<span class="param">trigger</span>=100000, <span class="param">clear_at_least</span>=0, <span class="param">keep</span>=3, <span class="param">clear_tool_inputs</span>=False, <span class="param">exclude_tools</span>=(), <span class="param">placeholder</span>="[cleared]")</div>
+
+<h3 id="shell-tool">ShellToolMiddleware</h3>
+<p>Registers a persistent shell tool for agents.</p>
+<div class="sig"><span class="kw">class</span> ShellToolMiddleware(<span class="param">workspace_root</span>=None, <span class="param">startup_commands</span>=None, <span class="param">shutdown_commands</span>=None, <span class="param">execution_policy</span>=None, <span class="param">redaction_rules</span>=None, <span class="param">tool_description</span>=None, <span class="param">shell_command</span>=None, <span class="param">env</span>=None)</div>
+
+<h3 id="file-search">FilesystemFileSearchMiddleware</h3>
+<p>Provides Glob and Grep search over filesystem files.</p>
+<div class="sig"><span class="kw">class</span> FilesystemFileSearchMiddleware(<span class="param">root_path</span>, <span class="param">use_ripgrep</span>=True, <span class="param">max_file_size_mb</span>=10)</div>
+
+<h3 id="agent-middleware">AgentMiddleware (Base Class)</h3>
+<p>Base middleware class for creating custom middleware. Subclass it and implement hook methods.</p>
+<div class="sig"><span class="kw">class</span> AgentMiddleware(Generic[StateT, ContextT, ResponseT])</div>
+<p>Class attributes declared on a subclass:</p>
+<table>
+  <tr><th>Attribute</th><th>Purpose</th></tr>
+  <tr><td><code>state_schema</code></td><td>Extend the agent state with custom fields</td></tr>
+  <tr><td><code>tools</code></td><td>Register additional tools shipped with the middleware</td></tr>
+  <tr><td><code>transformers</code></td><td>Register scope-aware stream transformer factories</td></tr>
+</table>
+<p>Hook methods (all optional; sync/async pairs):</p>
+<table>
+  <tr><th>Method</th><th>Async</th><th>Runs</th></tr>
+  <tr><td><code>before_agent</code></td><td><code>abefore_agent</code></td><td>Once, before agent starts</td></tr>
+  <tr><td><code>before_model</code></td><td><code>abefore_model</code></td><td>Before each model call</td></tr>
+  <tr><td><code>after_model</code></td><td><code>aafter_model</code></td><td>After each model response</td></tr>
+  <tr><td><code>wrap_model_call</code></td><td><code>awrap_model_call</code></td><td>Around each model call</td></tr>
+  <tr><td><code>wrap_tool_call</code></td><td><code>awrap_tool_call</code></td><td>Around each tool call</td></tr>
+  <tr><td><code>after_agent</code></td><td><code>aafter_agent</code></td><td>Once, after agent completes</td></tr>
+</table>
+
+<h2 id="decorators">Decorators</h2>
+
+<p>Create custom middleware using these decorators. Each returns an <code>AgentMiddleware</code> instance.</p>
+
+<table>
+  <tr><th>Decorator</th><th>Hook Type</th><th>Description</th><th>Signature</th></tr>
+  <tr><td><code>@before_agent</code></td><td>Node-style</td><td>Execute logic before agent execution starts</td><td><code>func(state, runtime) -> dict | None</code></td></tr>
+  <tr><td><code>@before_model</code></td><td>Node-style</td><td>Execute logic before each model call</td><td><code>func(state, runtime) -> dict | None</code></td></tr>
+  <tr><td><code>@after_model</code></td><td>Node-style</td><td>Execute logic after each model response</td><td><code>func(state, runtime) -> dict | None</code></td></tr>
+  <tr><td><code>@after_agent</code></td><td>Node-style</td><td>Execute logic after agent execution completes</td><td><code>func(state, runtime) -> dict | None</code></td></tr>
+  <tr><td><code>@wrap_model_call</code></td><td>Wrap-style</td><td>Wrap and intercept model calls</td><td><code>func(request, handler) -> ModelResponse</code></td></tr>
+  <tr><td><code>@wrap_tool_call</code></td><td>Wrap-style</td><td>Wrap and intercept tool calls</td><td><code>func(request, handler) -> ToolMessage | Command</code></td></tr>
+  <tr><td><code>@dynamic_prompt</code></td><td>Convenience</td><td>Generate dynamic system prompts from request context</td><td><code>func(request) -> str | SystemMessage</code></td></tr>
+  <tr><td><code>@hook_config</code></td><td>Config</td><td>Configure hook behavior (e.g. <code>can_jump_to</code>)</td><td><code>@hook_config(can_jump_to=[...])</code></td></tr>
+</table>
+
+<div class="note">
+  <div class="note-title">Decorator parameters</div>
+  <p>Node-style decorators (<code>before_agent</code>, <code>before_model</code>, <code>after_model</code>, <code>after_agent</code>) accept <code>state_schema</code>, <code>tools</code>, <code>can_jump_to</code>, and <code>name</code>. Wrap-style decorators (<code>wrap_model_call</code>, <code>wrap_tool_call</code>) accept <code>state_schema</code>, <code>tools</code>, and <code>name</code>.</p>
+</div>
+
+<h2 id="types">Types and Utilities</h2>
+
+<h3>Core Types</h3>
+<table>
+  <tr><th>Type</th><th>Description</th></tr>
+  <tr><td><code>AgentState</code></td><td>State container for agent execution (fields: <code>messages</code>, <code>jump_to</code>, <code>structured_response</code>)</td></tr>
+  <tr><td><code>ModelRequest</code></td><td>Request details passed to model calls (model, messages, system_message, tools, state, runtime)</td></tr>
+  <tr><td><code>ModelResponse</code></td><td>Response details from model calls (<code>result</code>, <code>structured_response</code>)</td></tr>
+  <tr><td><code>ClearToolUsesEdit</code></td><td>Utility for clearing tool usage history from context</td></tr>
+  <tr><td><code>InterruptOnConfig</code></td><td>Configuration for human-in-the-loop interruptions</td></tr>
+</table>
+
+<h3>Summarization Types</h3>
+<table>
+  <tr><th>Type / Constant</th><th>Description</th></tr>
+  <tr><td><code>ContextSize</code></td><td>Union type: <code>ContextFraction | ContextTokens | ContextMessages</code></td></tr>
+  <tr><td><code>ContextFraction</code></td><td>Summarize at fraction of total context (e.g. <code>("fraction", 0.8)</code>)</td></tr>
+  <tr><td><code>ContextTokens</code></td><td>Summarize at token threshold (e.g. <code>("tokens", 4000)</code>)</td></tr>
+  <tr><td><code>ContextMessages</code></td><td>Summarize at message threshold (e.g. <code>("messages", 20)</code>)</td></tr>
+</table>
+
+<h2 id="exception-types">Exception Types</h2>
+
+<table>
+  <tr><th>Exception</th><th>Raised By</th><th>When</th></tr>
+  <tr><td><code>ModelCallLimitExceededError</code></td><td>ModelCallLimitMiddleware</td><td>When <code>exit_behavior="error"</code> and limit exceeded</td></tr>
+  <tr><td><code>ToolCallLimitExceededError</code></td><td>ToolCallLimitMiddleware</td><td>When <code>exit_behavior="error"</code> and limit exceeded</td></tr>
+  <tr><td><code>PIIDetectionError</code></td><td>PIIMiddleware</td><td>When <code>strategy="block"</code> and PII detected</td></tr>
+</table>
+
+<div class="tip">
+  <div class="tip-title">Cross-reference</div>
+  <p>For deeper analysis of the core types and built-in implementations, see the <a href="../lessons/0003-middleware-source-l3.html">L3 Source Walkthrough lesson</a>. For the conceptual overview, see <a href="../lessons/0001-middleware-overview-l1.html">L1 Concepts</a>.</p>
+</div>
+
+<div class="page-nav">
+  <span><a href="../index.html">← Back to Course Index</a></span>
+  <span><a href="../interview/0001-middleware-interview-l5.html">L5 Interview Bank →</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var au=document.getElementById('ppAudio'),btn=document.getElementById('ppBtn'),ip=document.getElementById('ppIconPlay'),pa=document.getElementById('ppIconPause'),cur=document.getElementById('ppCur'),dur=document.getElementById('ppDur'),bar=document.getElementById('ppBar'),fill=document.getElementById('ppFill'),err=document.getElementById('ppError');if(!au)return;function fmt(s){if(!isFinite(s))return'--:--';s=Math.floor(s);var m=Math.floor(s/60),x=s%60;return(m<10?'0':'')+m+':'+(x<10?'0':'')+x}function sync(){ip.style.display=au.paused?'':'none';pa.style.display=au.paused?'none':'';btn.classList.toggle('playing',!au.paused);btn.setAttribute('aria-label',au.paused?'播放播客':'暂停播客')}btn.addEventListener('click',function(){if(au.paused){au.play()}else{au.pause()}});au.addEventListener('loadedmetadata',function(){dur.textContent=fmt(au.duration)});au.addEventListener('timeupdate',function(){if(isFinite(au.duration)&&au.duration>0){fill.style.width=(au.currentTime/au.duration*100)+'%'}cur.textContent=fmt(au.currentTime)});au.addEventListener('play',sync);au.addEventListener('pause',sync);au.addEventListener('ended',function(){sync();au.currentTime=0;fill.style.width='0%'});au.addEventListener('error',function(){err.style.display='block'});bar.addEventListener('click',function(e){var r=bar.getBoundingClientRect(),p=(e.clientX-r.left)/r.width;if(isFinite(au.duration)){au.currentTime=p*au.duration}})})();
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

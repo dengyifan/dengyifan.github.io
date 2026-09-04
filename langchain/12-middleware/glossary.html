@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GLOSSARY — LangChain Middleware</title>
+  <style>
+    :root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-blue:#3194d0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace;--content-width:1020px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-0.5px}.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}.container{max-width:var(--content-width);margin:80px auto 80px;padding:0 16px}.card{background:var(--card-bg);border-radius:4px;padding:36px 40px;margin-bottom:16px;border:1px solid var(--border)}.card h1{font-size:28px;font-weight:700;font-family:var(--font-sans);margin-bottom:20px;color:var(--text)}code{font-family:var(--font-mono);font-size:0.88em;background:var(--code-bg);padding:2px 6px;border-radius:3px;color:#c7254e}table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px;font-family:var(--font-sans)}th,td{border:1px solid var(--border);padding:10px 14px;text-align:left;vertical-align:top}th{background:#fafafa;font-weight:600;color:#333;font-size:13px}tr:hover{background:#fafafa}td:first-child{font-weight:600;white-space:nowrap;color:#333}.back-link{display:inline-block;margin-bottom:12px;font-size:14px;color:var(--accent-blue);font-family:var(--font-sans);text-decoration:none}.back-link:hover{text-decoration:underline}.podcast-player{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,#fef6f2,#fff);border:1px solid #f5d5c8;border-radius:12px;padding:18px 22px;margin:0 0 24px;font-family:var(--font-sans);box-shadow:0 2px 10px rgba(234,111,90,0.06)}.pp-btn{flex:none;width:52px;height:52px;border-radius:50%;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;box-shadow:0 3px 10px rgba(234,111,90,0.35);position:relative}.pp-btn:hover{background:#ec6149;transform:scale(1.05)}.pp-btn.playing::after{content:"";position:absolute;width:52px;height:52px;border-radius:50%;border:2px solid var(--accent);animation:pp-pulse 1.6s ease-out infinite}@keyframes pp-pulse{0%{transform:scale(1);opacity:0.7}100%{transform:scale(1.45);opacity:0}}.pp-main{flex:1;min-width:0}.pp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pp-badge{font-size:11px;font-weight:600;color:var(--accent);background:#fef0f0;border:1px solid #f5d5c8;padding:1px 8px;border-radius:10px}.pp-bar-wrap{display:flex;align-items:center;gap:10px}.pp-time{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;flex:none;min-width:38px}.pp-bar{flex:1;height:6px;background:#f0ddd3;border-radius:3px;cursor:pointer;position:relative}.pp-bar-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--accent);border-radius:3px;transition:width 0.1s linear}.pp-bar-fill::after{content:"";position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,0.2);opacity:0;transition:opacity 0.15s}.pp-bar:hover .pp-bar-fill::after{opacity:1}.pp-error{font-size:12px;color:#e74c3c;margin-top:6px;display:none}@media(max-width:600px){.podcast-player{padding:14px 16px;gap:12px}.pp-btn{width:44px;height:44px}.pp-btn.playing::after{width:44px;height:44px}}
+@media(max-width:600px){.card{padding:24px 20px}.card h1{font-size:22px}}
+  </style>
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ GLOSSARY</span></div></nav>
+<div class="container">
+  <div class="card">
+    <a class="back-link" href="./index.html">← Back to Course Index</a>
+    <h1>LangChain Middleware — Glossary</h1>
+    <div class="podcast-player">
+      <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+        <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+        <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+      </button>
+      <div class="pp-main">
+        <div class="pp-title">本期播客 · 双人对谈:术语快问快答 <span class="pp-badge">女声 × 男声</span></div>
+        <div class="pp-bar-wrap">
+          <span class="pp-time" id="ppCur">00:00</span>
+          <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+          <span class="pp-time" id="ppDur">--:--</span>
+        </div>
+        <div class="pp-error" id="ppError">音频加载失败,请确认 glossary-podcast.mp3 与本页面在同一目录。</div>
+      </div>
+      <audio id="ppAudio" preload="metadata" src="./glossary-podcast.mp3"></audio>
+    </div>
+    <table>
+      <tr><th>Term</th><th>Definition</th></tr>
+      <tr><td>Middleware</td><td>A configurable layer that intercepts and customizes agent execution at specific points (hooks) in the agent loop.</td></tr>
+      <tr><td>Agent loop</td><td>The core cycle: call model → model chooses tools → execute tools → feed results back → repeat until no more tool calls.</td></tr>
+      <tr><td>Hook</td><td>A method/callback that runs at a specific point in agent execution (before/after model, before/after agent, around model/tool calls).</td></tr>
+      <tr><td>Node-style hook</td><td>Runs sequentially at a fixed execution point: <code>before_agent</code>, <code>before_model</code>, <code>after_model</code>, <code>after_agent</code>.</td></tr>
+      <tr><td>Wrap-style hook</td><td>Runs <em>around</em> each call, controlling whether the handler is called zero/one/many times: <code>wrap_model_call</code>, <code>wrap_tool_call</code>.</td></tr>
+      <tr><td><code>create_agent</code></td><td>Factory function that compiles a LangGraph StateGraph with middleware wired in as nodes/edges.</td></tr>
+      <tr><td><code>AgentMiddleware</code></td><td>Base class; subclass it and implement hook methods to customize agent behavior.</td></tr>
+      <tr><td><code>AgentState</code></td><td>Default state schema: <code>messages</code> (additive), <code>jump_to</code> (ephemeral), <code>structured_response</code>.</td></tr>
+      <tr><td><code>ModelRequest</code></td><td>Immutable dataclass describing a model call (model, messages, system_message, tools, state, runtime). Use <code>.override()</code> to change it.</td></tr>
+      <tr><td><code>ModelResponse</code></td><td>Dataclass holding <code>result</code> (list of messages) and optional <code>structured_response</code>.</td></tr>
+      <tr><td><code>ExtendedModelResponse</code></td><td><code>ModelResponse</code> + optional <code>Command</code> for injecting state updates from <code>wrap_model_call</code>.</td></tr>
+      <tr><td><code>ToolCallRequest</code></td><td>Dataclass describing a tool call (tool_call dict, tool, state, runtime).</td></tr>
+      <tr><td><code>jump_to</code></td><td>State key that redirects execution to <code>'tools'</code>, <code>'model'</code>, or <code>'end'</code>; requires <code>can_jump_to</code> declared on the hook.</td></tr>
+      <tr><td><code>can_jump_to</code></td><td>Hook configuration declaring which conditional edges (jump targets) the graph should build.</td></tr>
+      <tr><td><code>hook_config</code></td><td>Decorator for class methods to configure hook behavior (currently <code>can_jump_to</code>).</td></tr>
+      <tr><td>Reducer</td><td>A function that merges state updates (e.g. <code>add_messages</code> appends instead of replacing).</td></tr>
+      <tr><td><code>Command</code></td><td>LangGraph type for flow control / state injection (used in <code>ExtendedModelResponse</code>, <code>wrap_tool_call</code>).</td></tr>
+      <tr><td>Checkpointer</td><td>Persists graph state across runs; required by HumanInTheLoopMiddleware and thread-level limits.</td></tr>
+      <tr><td>Thread limit</td><td>Maximum calls across all runs sharing a <code>thread_id</code> (requires checkpointer).</td></tr>
+      <tr><td>Run limit</td><td>Maximum calls within a single invocation (one user message → response).</td></tr>
+      <tr><td>Exponential backoff</td><td>Retry delay <code>initial_delay * (backoff_factor ** retry_number)</code>, capped by <code>max_delay</code>, with optional jitter.</td></tr>
+      <tr><td>PII</td><td>Personally Identifiable Information.</td></tr>
+      <tr><td>Stream transformer</td><td>Scope-aware factory that projects live stream events onto typed channels.</td></tr>
+      <tr><td>Trace policy</td><td>Controls what middleware hook spans record (e.g. <code>omit_payload</code>).</td></tr>
+      <tr><td><code>dynamic_prompt</code></td><td>Convenience decorator wrapping <code>wrap_model_call</code> to generate the system prompt.</td></tr>
+      <tr><td>Deep Agents</td><td>A companion package (<code>deepagents</code>) providing FilesystemMiddleware, SubAgentMiddleware, RubricMiddleware.</td></tr>
+    </table>
+  </div>
+</div>
+<script>
+(function(){var au=document.getElementById('ppAudio'),btn=document.getElementById('ppBtn'),ip=document.getElementById('ppIconPlay'),pa=document.getElementById('ppIconPause'),cur=document.getElementById('ppCur'),dur=document.getElementById('ppDur'),bar=document.getElementById('ppBar'),fill=document.getElementById('ppFill'),err=document.getElementById('ppError');if(!au)return;function fmt(s){if(!isFinite(s))return'--:--';s=Math.floor(s);var m=Math.floor(s/60),x=s%60;return(m<10?'0':'')+m+':'+(x<10?'0':'')+x}function sync(){ip.style.display=au.paused?'':'none';pa.style.display=au.paused?'none':'';btn.classList.toggle('playing',!au.paused);btn.setAttribute('aria-label',au.paused?'播放播客':'暂停播客')}btn.addEventListener('click',function(){if(au.paused){au.play()}else{au.pause()}});au.addEventListener('loadedmetadata',function(){dur.textContent=fmt(au.duration)});au.addEventListener('timeupdate',function(){if(isFinite(au.duration)&&au.duration>0){fill.style.width=(au.currentTime/au.duration*100)+'%'}cur.textContent=fmt(au.currentTime)});au.addEventListener('play',sync);au.addEventListener('pause',sync);au.addEventListener('ended',function(){sync();au.currentTime=0;fill.style.width='0%'});au.addEventListener('error',function(){err.style.display='block'});bar.addEventListener('click',function(e){var r=bar.getBoundingClientRect(),p=(e.clientX-r.left)/r.width;if(isFinite(au.duration)){au.currentTime=p*au.duration}})})();
+</script>
+</body>
+</html>

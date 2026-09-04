@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LangChain 主题 · DeepMastery</title>
+  <style>
+    :root {
+      --bg: #f9f9f9; --card-bg: #fff; --text: #2f2f2f; --text-secondary: #666;
+      --text-muted: #999; --accent: #ea6f5a; --accent-hover: #ec6149;
+      --accent-blue: #3194d0; --accent-blue-hover: #187cb7; --accent-light: #fef0f0;
+      --border: #f0f0f0; --border-light: #e8e8e8; --code-bg: #f7f7f7;
+      --green: #42c02e; --green-bg: #e8f5e9; --orange: #f5a623; --orange-bg: #fff8e1;
+      --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+      --font-serif: "Noto Serif SC", "Source Han Serif SC", "STSong", "Songti SC", "SimSun", serif;
+      --font-mono: "SF Mono", "Fira Code", "Consolas", "Menlo", monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-serif);
+      font-size: 17px;
+      line-height: 1.8;
+      color: var(--text);
+      background: var(--bg);
+    }
+    .top-nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      height: 56px; background: #fff;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px;
+    }
+    .top-nav .logo {
+      font-size: 22px; font-weight: 700; color: var(--accent);
+      font-family: var(--font-sans); letter-spacing: -0.5px;
+    }
+    .top-nav .logo a { color: inherit; text-decoration: none; }
+    .top-nav .logo span { color: var(--text); font-weight: 400; font-size: 14px; margin-left: 8px; }
+    .top-nav .back {
+      font-size: 13px; color: var(--text-muted); text-decoration: none;
+      font-family: var(--font-sans);
+    }
+    .top-nav .back:hover { color: var(--accent); }
+
+    .container {
+      max-width: 1020px; margin: 80px auto 80px; padding: 0 16px;
+    }
+
+    /* Hero */
+    .hero {
+      background: var(--card-bg);
+      border-radius: 4px;
+      padding: 48px 40px 36px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero h1 {
+      font-size: 34px; font-weight: 700; line-height: 1.3;
+      font-family: var(--font-sans); color: var(--text);
+      margin-bottom: 12px;
+    }
+    .hero .subtitle {
+      font-size: 17px; color: var(--text-secondary);
+      font-family: var(--font-sans); line-height: 1.6;
+    }
+    .hero .meta {
+      margin-top: 20px; font-size: 13px; color: var(--text-muted);
+      font-family: var(--font-sans);
+      display: flex; gap: 24px; flex-wrap: wrap;
+    }
+
+    /* Stats bar */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border-radius: 4px;
+      padding: 20px 24px;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+    .stat-card .number {
+      font-size: 32px; font-weight: 700; font-family: var(--font-sans);
+      color: var(--accent);
+    }
+    .stat-card .label {
+      font-size: 13px; color: var(--text-muted);
+      font-family: var(--font-sans); margin-top: 4px;
+    }
+
+    /* Section */
+    .section {
+      background: var(--card-bg);
+      border-radius: 4px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .section-header {
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-sans);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .section-header h2 {
+      font-size: 18px; font-weight: 700; color: var(--text);
+      flex: 1;
+    }
+    .section-header .badge {
+      font-size: 12px; padding: 3px 10px; border-radius: 12px;
+      font-weight: 600; letter-spacing: 0.3px;
+    }
+    .badge.core { background: #fdf2f2; color: #e74c3c; }
+    .badge.optional { background: #f5f5f5; color: var(--text-muted); }
+
+    /* Item list */
+    .item-list { padding: 4px 0; }
+    .item {
+      display: flex; align-items: center; gap: 16px;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+      text-decoration: none; color: inherit;
+    }
+    .item:last-child { border-bottom: none; }
+    .item:hover { background: #fafafa; }
+    .item.disabled { cursor: default; opacity: 0.55; }
+    .item.disabled:hover { background: inherit; }
+    .item .icon {
+      width: 44px; height: 44px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-family: var(--font-sans); font-weight: 700;
+      flex-shrink: 0;
+    }
+    .icon.course { background: #fef0f0; color: var(--accent); }
+    .icon.doc { background: #f5f5f5; color: var(--text-muted); }
+
+    .item .info { flex: 1; min-width: 0; }
+    .item .info .title {
+      font-size: 16px; font-weight: 600; font-family: var(--font-sans);
+      color: var(--text); margin-bottom: 2px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .item .info .desc {
+      font-size: 13px; color: var(--text-muted);
+      font-family: var(--font-sans); line-height: 1.5;
+    }
+    .item .info .tags { margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .item .info .tag {
+      font-size: 11px; padding: 1px 8px; border-radius: 10px;
+      font-family: var(--font-sans); background: #f5f5f5; color: var(--text-muted);
+    }
+    .item .arrow {
+      color: var(--text-muted); font-size: 18px;
+      font-family: var(--font-sans); flex-shrink: 0;
+    }
+    .badge.soon {
+      font-size: 11px; padding: 1px 8px; border-radius: 10px;
+      font-weight: 600; background: #f5f5f5; color: var(--text-muted);
+      font-family: var(--font-sans);
+    }
+
+    .footer {
+      text-align: center; padding: 32px 0 0;
+      font-size: 13px; color: var(--text-muted);
+      font-family: var(--font-sans);
+      border-top: 1px solid var(--border);
+      margin-top: 32px;
+    }
+
+    @media (max-width: 700px) {
+      .hero { padding: 32px 20px 24px; }
+      .hero h1 { font-size: 24px; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .item { padding: 14px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <div class="logo">Deep&#8203;Mastery <span>/ LangChain</span></div>
+  <a class="back" href="../index.html">← 返回首页</a>
+</nav>
+
+<div class="container">
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>LangChain 主题</h1>
+    <p class="subtitle">
+      基于 <code>langchain 1.x</code> 官方文档与源码的深度专题系列。
+      每门课程按五层模型展开：概念（L1）→ 原理（L2）→ 源码（L3）→ 边界（L4）→ 面试（L5），
+      全部内容源码级验证。
+    </p>
+    <div class="meta">
+      <span>🔬 Source-verified</span>
+      <span>🎧 全套双人播客</span>
+      <span>🎬 课时讲解视频</span>
+      <span>🧪 面试题库对齐</span>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="number">1</div>
+      <div class="label">深度课程</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">15</div>
+      <div class="label">内容页面</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">5</div>
+      <div class="label">层级模型 (L1–L5)</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">19</div>
+      <div class="label">音视频资源</div>
+    </div>
+  </div>
+
+  <!-- Courses -->
+  <div class="section">
+    <div class="section-header">
+      <h2>🎓 课程列表</h2>
+      <span class="badge core">COURSES</span>
+    </div>
+    <div class="item-list">
+      <a class="item" href="./12-middleware/index.html">
+        <div class="icon course">MW</div>
+        <div class="info">
+          <div class="title">LangChain Middleware — Deep Mastery Course</div>
+          <div class="desc">From concept to source code: master the interception layer that turns a naive agent loop into a production-grade system. Built from the official docs and <code>langchain==1.3.14</code> source.</div>
+          <div class="tags"><span class="tag">L1–L4 课时</span><span class="tag">L5 面试题库</span><span class="tag">API 参考</span><span class="tag">播客 × 视频</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <div class="item disabled">
+        <div class="icon doc">+</div>
+        <div class="info">
+          <div class="title">更多 LangChain 专题 <span class="badge soon">筹备中</span></div>
+          <div class="desc">Memory、Tool、Structured Output、LangGraph 等主题持续补充。</div>
+        </div>
+        <div class="arrow">→</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>Built with Deep Mastery · <code>langchain==1.3.14</code></p>
+  </div>
+
+</div>
+
+</body>
+</html>

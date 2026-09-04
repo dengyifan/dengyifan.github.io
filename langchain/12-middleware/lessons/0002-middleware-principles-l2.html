@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>L2: Middleware Principles — Execution Order, Composition, State &amp; Jumps</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+  <style>
+    :root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-hover:#ec6149;--accent-blue:#3194d0;--accent-blue-hover:#187cb7;--accent-light:#fef0f0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--green-bg:#e8f5e9;--orange:#f5a623;--orange-bg:#fff8e1;--red:#e74c3c;--red-bg:#fdf2f2;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace;--content-width:1020px;--toc-width:220px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-0.5px}.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}.layout{display:flex;justify-content:center;margin-top:56px;padding:0 16px;min-height:100vh}.toc-sidebar{position:fixed;left:calc(50% - var(--content-width)/2 - var(--toc-width) - 40px);top:96px;width:var(--toc-width);max-height:calc(100vh - 140px);overflow-y:auto;z-index:100;font-family:var(--font-sans);font-size:13px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);padding:16px 0;box-shadow:0 1px 3px rgba(0,0,0,0.04)}.toc-sidebar::-webkit-scrollbar{width:3px}.toc-sidebar::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}.toc-title{padding:0 16px 12px;font-size:13px;font-weight:700;color:var(--text);border-bottom:1px solid var(--border);margin-bottom:8px;letter-spacing:0.5px}.toc-sidebar a{display:block;padding:5px 16px;color:var(--text-muted);text-decoration:none;border-left:2px solid transparent;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.toc-sidebar a:hover{color:var(--accent);background:#fafafa;border-left-color:var(--border-light)}.toc-sidebar a.active{color:var(--accent);font-weight:600;border-left-color:var(--accent);background:var(--accent-light)}.toc-sidebar a.toc-h2{padding-left:16px}.toc-sidebar a.toc-h3{padding-left:28px;font-size:12px}@media(max-width:1200px){.toc-sidebar{display:none}}.content{width:100%;max-width:var(--content-width);padding:32px 0 80px;margin-left:0}.article-header{background:var(--card-bg);border-radius:4px;padding:36px 40px 28px;margin-bottom:16px;border-bottom:1px solid var(--border)}.article-header h1{font-size:30px;font-weight:700;line-height:1.4;color:var(--text);font-family:var(--font-sans);margin-bottom:16px}.article-meta{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:20px;flex-wrap:wrap}.article-body{background:var(--card-bg);border-radius:4px;padding:32px 40px 48px}.article-body h2{font-size:22px;font-weight:700;margin:40px 0 16px;font-family:var(--font-sans);padding-bottom:8px;border-bottom:1px solid var(--border);color:var(--text)}.article-body h2:first-child{margin-top:0}.article-body h3{font-size:18px;font-weight:600;margin:28px 0 12px;font-family:var(--font-sans);color:#333}.article-body p{margin:14px 0;text-align:justify}.article-body a{color:var(--accent);text-decoration:none}.article-body a:hover{text-decoration:underline}.article-body strong{font-weight:700;color:#222}code{font-family:var(--font-mono);font-size:0.88em;background:var(--code-bg);padding:2px 6px;border-radius:3px;color:#c7254e}pre{font-family:var(--font-mono);font-size:13px;background:#282c34;color:#abb2bf;padding:18px 22px;border-radius:6px;overflow-x:auto;margin:18px 0;line-height:1.6}pre code{background:transparent;color:inherit;padding:0;font-size:inherit}blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid var(--accent);background:#fafafa;color:#555;font-size:0.95em}table{border-collapse:collapse;width:100%;margin:18px 0;font-size:14px;font-family:var(--font-sans)}th,td{border:1px solid var(--border);padding:10px 14px;text-align:left}th{background:#fafafa;font-weight:600;color:#333;font-size:13px}tr:hover{background:#fafafa}.note,.warning,.tip,.info{border-left:4px solid;margin:1rem 0;padding:12px 16px;border-radius:0 6px 6px 0;font-size:0.95em}.note{border-color:var(--accent-blue);background:#f0f7fd}.warning{border-color:var(--orange);background:var(--orange-bg)}.tip{border-color:var(--green);background:var(--green-bg)}.note-title,.warning-title,.tip-title{font-weight:700;margin-bottom:0.3rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.note-title{color:var(--accent-blue)}.warning-title{color:var(--orange)}.tip-title{color:var(--green)}.java-comparison{background:linear-gradient(135deg,#fef9f0,#fff);border:1px solid #e8d5b0;border-radius:6px;padding:1rem 1.2rem;margin:1rem 0;font-size:0.95em}.java-comparison .header{font-weight:700;color:#b87333;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.production-note{background:#fef6f0;border:1px solid #f0c8a0;border-radius:6px;padding:1rem 1.2rem;margin:1rem 0;font-size:0.95em}.production-note .header{font-weight:700;color:#d8763a;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.deep-grill-readiness{background:#f5f5f5;border:1px solid var(--border);border-radius:6px;padding:1rem 1.5rem;margin:2rem 0 1rem;font-size:0.95em}.deep-grill-readiness h4{margin-top:0;color:var(--text);font-family:var(--font-sans)}.deep-grill-readiness ul{list-style:none;margin-left:0}.deep-grill-readiness li{padding:0.25rem 0;color:var(--text-muted)}.deep-grill-readiness li.done{color:var(--text)}.deep-grill-readiness li.done::before{content:"☑ ";color:#5cb85c}.deep-grill-readiness li::before{content:"☐ ";color:var(--text-muted)}.mermaid{display:flex;justify-content:center;background:#fafafa;border:1px solid var(--border);border-radius:8px;padding:24px;margin:20px 0;overflow-x:auto}.video-player{background:linear-gradient(135deg,#fef6f2,#fff);border:1px solid #f5d5c8;border-radius:12px;padding:18px 22px;margin:0 0 28px;font-family:var(--font-sans);box-shadow:0 2px 10px rgba(234,111,90,0.06)}.video-player .vp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.video-player video{width:100%;border-radius:8px;background:#000;display:block}.podcast-player{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,#fef6f2,#fff);border:1px solid #f5d5c8;border-radius:12px;padding:18px 22px;margin:0 0 28px;font-family:var(--font-sans);box-shadow:0 2px 10px rgba(234,111,90,0.06)}.pp-btn{flex:none;width:52px;height:52px;border-radius:50%;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;box-shadow:0 3px 10px rgba(234,111,90,0.35)}.pp-btn:hover{background:var(--accent-hover);transform:scale(1.05)}.pp-btn:focus-visible{outline:2px solid var(--accent-blue);outline-offset:2px}.pp-btn.playing::after{content:"";position:absolute;width:52px;height:52px;border-radius:50%;border:2px solid var(--accent);animation:pp-pulse 1.6s ease-out infinite}@keyframes pp-pulse{0%{transform:scale(1);opacity:0.7}100%{transform:scale(1.45);opacity:0}}.pp-main{flex:1;min-width:0}.pp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pp-badge{font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-light);border:1px solid #f5d5c8;padding:1px 8px;border-radius:10px}.pp-bar-wrap{display:flex;align-items:center;gap:10px}.pp-time{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;flex:none;min-width:38px}.pp-bar{flex:1;height:6px;background:#f0ddd3;border-radius:3px;cursor:pointer;position:relative}.pp-bar-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--accent);border-radius:3px;transition:width 0.1s linear}.pp-bar-fill::after{content:"";position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,0.2);opacity:0;transition:opacity 0.15s}.pp-bar:hover .pp-bar-fill::after{opacity:1}.pp-error{font-size:12px;color:var(--red);margin-top:6px;display:none}@media(max-width:600px){.podcast-player{padding:14px 16px;gap:12px}.pp-btn{width:44px;height:44px}.pp-btn.playing::after{width:44px;height:44px}}
+.page-nav{display:flex;justify-content:space-between;margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border);font-size:0.95em}.page-nav a{color:var(--accent)}.back-to-top{position:fixed;bottom:40px;right:40px;width:44px;height:44px;background:#fff;border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--text-muted);box-shadow:0 2px 8px rgba(0,0,0,0.08);transition:all 0.2s;z-index:999;opacity:0;transform:translateY(10px);pointer-events:none}.back-to-top.visible{opacity:1;transform:translateY(0);pointer-events:auto}.back-to-top:hover{color:var(--accent);border-color:var(--accent)}@media(max-width:600px){.article-header{padding:24px 20px 20px}.article-header h1{font-size:22px}.article-body{padding:20px 20px 32px}.article-body h2{font-size:19px}.article-body h3{font-size:16px}body{font-size:16px}}
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep&#8203;Mastery <span>/ L2: Middleware Principles</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">Table of Contents</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>L2: Middleware Principles — Execution Order, Composition, State &amp; Jumps</h1>
+      <div class="article-meta"><span>Layer: L2 Principles</span><span>Reading time: 35 min</span><span>Source: langchain 1.3.14</span></div>
+    </div>
+    <div class="article-body">
+
+<div class="video-player">
+  <div class="vp-title">授课动画 · 同步讲解 <span class="pp-badge">1080p</span></div>
+  <video controls preload="metadata" src="./0002-middleware-principles-l2-video.mp4"></video>
+</div>
+
+<div class="podcast-player">
+  <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+    <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+    <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+  </button>
+  <div class="pp-main">
+    <div class="pp-title">本期播客 · 双人对谈讲透中间件原理 <span class="pp-badge">女声 × 男声</span></div>
+    <div class="pp-bar-wrap">
+      <span class="pp-time" id="ppCur">00:00</span>
+      <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+      <span class="pp-time" id="ppDur">--:--</span>
+    </div>
+    <div class="pp-error" id="ppError">音频加载失败,请确认 0002-middleware-principles-l2-podcast.mp3 与本页面在同一目录。</div>
+  </div>
+  <audio id="ppAudio" preload="metadata" src="./0002-middleware-principles-l2-podcast.mp3"></audio>
+</div>
+
+<h2 id="execution-order">Execution Order: The Critical Rule</h2>
+
+<p>When you pass multiple middleware to <code>create_agent</code>, they execute in a <strong>specific, predictable order</strong> that is fundamental to understanding middleware behavior:</p>
+
+<pre><code class="language-python">agent = create_agent(
+    model="gpt-5.5",
+    middleware=[middleware1, middleware2, middleware3],
+    tools=[...],
+)</code></pre>
+
+<div class="mermaid">
+sequenceDiagram
+    participant A as Agent Start
+    participant M1 as middleware1
+    participant M2 as middleware2
+    participant M3 as middleware3
+    participant M as Model
+    participant T as Tools
+
+    Note over A,T: === BEFORE hooks run in order ===
+    A->>M1: before_agent()
+    A->>M2: before_agent()
+    A->>M3: before_agent()
+
+    Note over A,T: === Agent Loop ===
+    A->>M1: before_model()
+    A->>M2: before_model()
+    A->>M3: before_model()
+
+    Note over A,T: === WRAP hooks nest (first = outermost) ===
+    M1->>M2: wrap_model_call()
+    M2->>M3: wrap_model_call()
+    M3->>M: call model
+    M-->>M3: response
+    M3-->>M2: 
+    M2-->>M1: 
+
+    Note over A,T: === AFTER hooks run in REVERSE ===
+    M3->>A: after_model()
+    M2->>A: after_model()
+    M1->>A: after_model()
+
+    Note over A,T: === Tool calls (if any) ===
+    M3->>A: wrap_tool_call() (nested)
+    M2->>A: wrap_tool_call() (nested)
+    M1->>A: wrap_tool_call() (outermost)
+
+    Note over A,T: === Agent ends ===
+    M3->>A: after_agent()
+    M2->>A: after_agent()
+    M1->>A: after_agent()
+</div>
+
+<p>The three rules are:</p>
+
+<table>
+  <tr><th>Rule</th><th>Direction</th><th>Rationale</th></tr>
+  <tr>
+    <td><strong>before_* hooks</strong></td>
+    <td>First → Last</td>
+    <td>Earliest middleware gets to prepare state first</td>
+  </tr>
+  <tr>
+    <td><strong>after_* hooks</strong></td>
+    <td>Last → First <em>(reverse)</em></td>
+    <td>Like a call stack unwinding — the last to be called returns first</td>
+  </tr>
+  <tr>
+    <td><strong>wrap_* hooks</strong></td>
+    <td>Nested: first middleware is outermost</td>
+    <td>Like function composition: <code>m1(m2(m3(handler)))</code></td>
+  </tr>
+</table>
+
+<div class="note">
+  <div class="note-title">Why reverse for after-hooks?</div>
+  <p>This follows the same pattern as middleware in Express.js, Django, and virtually every middleware framework. The "after" is the unwinding of the "before" — like a stack. If you think of middleware as wrappers around a core operation, the outermost wrapper (first in list) naturally wraps the entire chain, so its "after" runs last.</p>
+</div>
+
+<h2 id="why-this-design">Why This Design? (Design Principle Analysis)</h2>
+
+<h3>Q1: Why two hook styles instead of just one?</h3>
+
+<p>The two styles serve fundamentally different purposes:</p>
+
+<table>
+  <tr><th>Need</th><th>Best style</th><th>Why</th></tr>
+  <tr><td>Logging / monitoring</td><td>Node-style</td><td>Just observe; no need to control execution</td></tr>
+  <tr><td>Retry logic</td><td>Wrap-style</td><td>Must call handler multiple times</td></tr>
+  <tr><td>Short-circuit (skip model)</td><td>Wrap-style</td><td>Must decide whether to call handler at all</td></tr>
+  <tr><td>State validation</td><td>Node-style</td><td>Runs after the model; can jump if invalid</td></tr>
+  <tr><td>Request/response transformation</td><td>Wrap-style</td><td>Must modify request before calling handler</td></tr>
+</table>
+
+<p>A single hook style would force either unnecessary complexity (node-style trying to express retry) or lack of clarity (wrap-style for simple logging).</p>
+
+<h3>Q2: What's the trade-off of the nesting model?</h3>
+
+<p><strong>Cost</strong>: The outermost middleware (first in list) has the most power — it can short-circuit the entire chain. This means <strong>order matters</strong> and you must think carefully about which middleware goes first. A middleware that logs must come before one that retries, or the retry won't be logged.</p>
+
+<p><strong>Benefit</strong>: The nesting model creates a clear "chain of responsibility" where each middleware only sees the request/response <em>after</em> all inner middleware have processed it. This is exactly what you want for patterns like retry-around-fallback: the outer middleware retries the entire inner chain, including the fallback logic.</p>
+
+<h3>Q3: If you were to redesign this, what would you change?</h3>
+
+<p>The current design has two pain points:</p>
+<ol>
+  <li><strong>Silent failure of <code>jump_to</code></strong> without <code>can_jump_to</code> — a compile-time check would be safer.</li>
+  <li><strong>No explicit priority system</strong> — order is purely positional. A middleware that "must run last" has no way to enforce that; it just documents the requirement.</li>
+</ol>
+
+<h2 id="pseudocode">Pseudocode: How the Agent Loop Routes</h2>
+
+<p>This is the routing logic that the compiled LangGraph uses to decide whether to continue the loop:</p>
+
+<pre><code class="language-python">def should_continue(state: AgentState) -> str:
+    """Route after each model call: continue or end?"""
+    last_message = state["messages"][-1]
+
+    # Check if middleware requested a jump
+    if state.get("jump_to") == "end":
+        return "end"
+    if state.get("jump_to") == "tools":
+        return "tools"
+    if state.get("jump_to") == "model":
+        return "model"
+
+    # Default: check if model has tool calls
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        return "tools"
+    else:
+        return "end"</code></pre>
+
+<div class="warning">
+  <div class="warning-title">Common deep-grill trap</div>
+  <p>The loop does <strong>NOT</strong> check for a dedicated "next_node" field. It checks <code>messages[-1].tool_calls</code> and <code>jump_to</code>. Many people wrongly assume <code>AgentState</code> has a <code>next_node</code> field like some graph frameworks do — it doesn't. The routing is purely data-driven from the last message.</p>
+</div>
+
+<h2 id="agent-jumps">Agent Jumps: Redirecting Execution</h2>
+
+<p>The <code>jump_to</code> mechanism lets middleware redirect the agent to a different node in the graph. It's how <code>ModelCallLimitMiddleware</code> terminates the agent, how guardrails block execution, and how custom middleware exits early.</p>
+
+<h3>Available jump targets</h3>
+
+<table>
+  <tr><th>Target</th><th>Meaning</th><th>Use case</th></tr>
+  <tr><td><code>'end'</code></td><td>Jump to end of agent (or first <code>after_agent</code> hook)</td><td>Terminate early, block content</td></tr>
+  <tr><td><code>'tools'</code></td><td>Jump to the tools node</td><td>Force tool execution</td></tr>
+  <tr><td><code>'model'</code></td><td>Jump to the model node (or first <code>before_model</code> hook)</td><td>Force another model call</td></tr>
+</table>
+
+<h3>How <code>can_jump_to</code> works</h3>
+
+<p>When you declare <code>can_jump_to=["end"]</code> on a hook, the agent factory adds a <strong>conditional edge</strong> from that hook's node to the specified target. Without this declaration, the graph has no edge for the jump, and the <code>jump_to</code> value is silently ignored.</p>
+
+<pre><code class="language-python"># Decorator-based: pass can_jump_to as parameter
+@before_model(can_jump_to=["end"])
+def my_guard(state, runtime):
+    if should_block(state):
+        return {"jump_to": "end", "messages": [AIMessage("Blocked")]}
+    return None
+
+# Class-based: use @hook_config decorator
+class GuardMiddleware(AgentMiddleware):
+    @hook_config(can_jump_to=["end"])
+    def before_model(self, state, runtime):
+        if should_block(state):
+            return {"jump_to": "end", "messages": [AIMessage("Blocked")]}
+        return None</code></pre>
+
+<div class="java-comparison">
+  <div class="header">From a Java perspective</div>
+  <p><code>jump_to</code> is analogous to <strong>Spring WebFlux's <code>WebFilter</code> chain short-circuiting</strong> or <strong>Apache Camel's <code>ControlBus</code> pattern</strong>. The key difference is that LangChain's jump is <em>declared at graph build time</em> (via <code>can_jump_to</code>) and <em>triggered at runtime</em> (via <code>jump_to</code> return value). This compile-time declaration + runtime trigger split is unique to LangGraph's design.</p>
+</div>
+
+<h2 id="state-updates">State Updates: How Middleware Modifies State</h2>
+
+<p>Both hook styles can update agent state, but the mechanism differs:</p>
+
+<h3>Node-style: Return a dict</h3>
+
+<p>Node-style hooks return a <code>dict[str, Any]</code> that is merged into the agent state using the graph's <strong>reducers</strong>. The most important reducer is <code>add_messages</code>, which <strong>appends</strong> messages rather than replacing them.</p>
+
+<pre><code class="language-python">@after_model
+def count_calls(state, runtime):
+    return {"model_call_count": state.get("model_call_count", 0) + 1}
+    # Simple dict merge: overwrites 'model_call_count'</code></pre>
+
+<h3>Wrap-style: Return <code>ExtendedModelResponse</code> with <code>Command</code></h3>
+
+<p>For <code>wrap_model_call</code>, return <code>ExtendedModelResponse</code> with a <code>Command</code> to inject state updates alongside the model response:</p>
+
+<pre><code class="language-python">from langchain.agents.middleware import (
+    wrap_model_call, ModelRequest, ModelResponse, ExtendedModelResponse
+)
+from langgraph.types import Command
+
+@wrap_model_call
+def track_usage(request, handler):
+    response = handler(request)
+    return ExtendedModelResponse(
+        model_response=response,
+        command=Command(update={"last_model_call_tokens": 150}),
+    )</code></pre>
+
+<div class="production-note">
+  <div class="header">Production: Composition with multiple middleware</div>
+  <p>When multiple middleware layers return <code>ExtendedModelResponse</code>:</p>
+  <ul>
+    <li><strong>Messages</strong> are additive (via <code>add_messages</code> reducer) — they append, not replace.</li>
+    <li><strong>Non-reducer fields</strong> use <strong>outer wins</strong> — the outermost middleware's value takes precedence on conflicting keys.</li>
+    <li><strong>Retry-safe</strong>: If the outer middleware calls <code>handler()</code> multiple times (retry), commands from earlier calls are discarded.</li>
+  </ul>
+</div>
+
+<h2 id="custom-state-schema">Custom State Schema</h2>
+
+<p>Middleware can extend the agent's state with custom properties by declaring a <code>state_schema</code>:</p>
+
+<pre><code class="language-python">from langchain.agents.middleware import AgentState, AgentMiddleware
+from typing_extensions import NotRequired
+
+class CustomState(AgentState):
+    model_call_count: NotRequired[int]
+    user_id: NotRequired[str]
+
+class CallCounterMiddleware(AgentMiddleware[CustomState]):
+    state_schema = CustomState
+
+    def before_model(self, state, runtime):
+        if state.get("model_call_count", 0) > 10:
+            return {"jump_to": "end"}
+        return None
+
+    def after_model(self, state, runtime):
+        return {"model_call_count": state.get("model_call_count", 0) + 1}
+
+# Invoke with custom state
+agent = create_agent(
+    model="gpt-5.5",
+    middleware=[CallCounterMiddleware()],
+    tools=[],
+)
+
+result = agent.invoke({
+    "messages": [HumanMessage("Hello")],
+    "model_call_count": 0,
+    "user_id": "user-123",
+})</code></pre>
+
+<p>This is how built-in middleware like <code>ModelCallLimitMiddleware</code> tracks its internal counters — it declares a custom state field that the middleware reads/writes across hooks.</p>
+
+<h2 id="summary">Summary: The Five Principles</h2>
+
+<ol>
+  <li><strong>Middleware is graph-native</strong> — hooks are compiled into LangGraph nodes/edges, not a separate runtime.</li>
+  <li><strong>Node-style = observer, Wrap-style = interceptor</strong> — choose based on whether you need to control execution.</li>
+  <li><strong>Order matters</strong> — before-hooks run first→last, after-hooks run reverse, wrap-hooks nest.</li>
+  <li><strong><code>jump_to</code> requires <code>can_jump_to</code></strong> — the graph must have edges built at compile time.</li>
+  <li><strong>State updates use reducers</strong> — messages are additive, non-reducer fields use outer-wins.</li>
+</ol>
+
+<div class="deep-grill-readiness">
+  <h4>Deep-Grill Readiness</h4>
+  <ul>
+    <li class="done">Can draw the execution order diagram for 3 middleware from memory</li>
+    <li class="done">Can explain why after-hooks run in reverse</li>
+    <li class="done">Can explain why wrap-hooks nest and what "outermost" means</li>
+    <li class="done">Can write the <code>should_continue</code> routing pseudocode</li>
+    <li class="done">Can explain <code>jump_to</code> and why <code>can_jump_to</code> is required</li>
+    <li class="done">Can explain the difference between node-style and wrap-style state updates</li>
+    <li>Can explain the "outer wins" composition rule for <code>ExtendedModelResponse</code></li>
+    <li>Can write a custom state schema middleware from memory</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <span><a href="./0001-middleware-overview-l1.html">← L1: Concepts</a></span>
+  <span><a href="./0003-middleware-source-l3.html">Next: L3 Source Walkthrough →</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var au=document.getElementById('ppAudio'),btn=document.getElementById('ppBtn'),ip=document.getElementById('ppIconPlay'),pa=document.getElementById('ppIconPause'),cur=document.getElementById('ppCur'),dur=document.getElementById('ppDur'),bar=document.getElementById('ppBar'),fill=document.getElementById('ppFill'),err=document.getElementById('ppError');if(!au)return;function fmt(s){if(!isFinite(s))return'--:--';s=Math.floor(s);var m=Math.floor(s/60),x=s%60;return(m<10?'0':'')+m+':'+(x<10?'0':'')+x}function sync(){ip.style.display=au.paused?'':'none';pa.style.display=au.paused?'none':'';btn.classList.toggle('playing',!au.paused);btn.setAttribute('aria-label',au.paused?'播放播客':'暂停播客')}btn.addEventListener('click',function(){if(au.paused){au.play()}else{au.pause()}});au.addEventListener('loadedmetadata',function(){dur.textContent=fmt(au.duration)});au.addEventListener('timeupdate',function(){if(isFinite(au.duration)&&au.duration>0){fill.style.width=(au.currentTime/au.duration*100)+'%'}cur.textContent=fmt(au.currentTime)});au.addEventListener('play',sync);au.addEventListener('pause',sync);au.addEventListener('ended',function(){sync();au.currentTime=0;fill.style.width='0%'});au.addEventListener('error',function(){err.style.display='block'});bar.addEventListener('click',function(e){var r=bar.getBoundingClientRect(),p=(e.clientX-r.left)/r.width;if(isFinite(au.duration)){au.currentTime=p*au.duration}})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

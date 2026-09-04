@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TOPIC-MAP — LangChain Middleware</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+  <style>
+    :root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-blue:#3194d0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--green-bg:#e8f5e9;--orange:#f5a623;--orange-bg:#fff8e1;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace;--content-width:1020px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-0.5px}.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}.container{max-width:var(--content-width);margin:80px auto 80px;padding:0 16px}.card{background:var(--card-bg);border-radius:4px;padding:36px 40px;margin-bottom:16px;border:1px solid var(--border)}.card h1{font-size:28px;font-weight:700;font-family:var(--font-sans);margin-bottom:20px;color:var(--text)}.card h2{font-size:20px;font-weight:700;margin:32px 0 12px;font-family:var(--font-sans);padding-bottom:8px;border-bottom:1px solid var(--border);color:var(--text)}.card h3{font-size:17px;font-weight:600;margin:20px 0 8px;font-family:var(--font-sans);color:#333}.card p{margin:10px 0;text-align:justify}.card ul,.card ol{margin:8px 0 8px 24px}.card li{margin:4px 0}code{font-family:var(--font-mono);font-size:0.88em;background:var(--code-bg);padding:2px 6px;border-radius:3px;color:#c7254e}pre{font-family:var(--font-mono);font-size:13px;background:#282c34;color:#abb2bf;padding:16px 20px;border-radius:6px;overflow-x:auto;margin:14px 0;line-height:1.6}pre code{background:transparent;color:inherit;padding:0;font-size:inherit}blockquote{margin:14px 0;padding:12px 18px;border-left:4px solid var(--accent);background:#fafafa;color:#555;font-size:0.95em}table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px;font-family:var(--font-sans)}th,td{border:1px solid var(--border);padding:9px 12px;text-align:left}th{background:#fafafa;font-weight:600;color:#333;font-size:13px}tr:hover{background:#fafafa}.mermaid{display:flex;justify-content:center;background:#fafafa;border:1px solid var(--border);border-radius:8px;padding:24px;margin:16px 0;overflow-x:auto}.back-link{display:inline-block;margin-top:8px;font-size:14px;color:var(--accent-blue);font-family:var(--font-sans);text-decoration:none}.back-link:hover{text-decoration:underline}.podcast-player{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,#fef6f2,#fff);border:1px solid #f5d5c8;border-radius:12px;padding:18px 22px;margin:0 0 24px;font-family:var(--font-sans);box-shadow:0 2px 10px rgba(234,111,90,0.06)}.pp-btn{flex:none;width:52px;height:52px;border-radius:50%;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;box-shadow:0 3px 10px rgba(234,111,90,0.35);position:relative}.pp-btn:hover{background:#ec6149;transform:scale(1.05)}.pp-btn.playing::after{content:"";position:absolute;width:52px;height:52px;border-radius:50%;border:2px solid var(--accent);animation:pp-pulse 1.6s ease-out infinite}@keyframes pp-pulse{0%{transform:scale(1);opacity:0.7}100%{transform:scale(1.45);opacity:0}}.pp-main{flex:1;min-width:0}.pp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pp-badge{font-size:11px;font-weight:600;color:var(--accent);background:#fef0f0;border:1px solid #f5d5c8;padding:1px 8px;border-radius:10px}.pp-bar-wrap{display:flex;align-items:center;gap:10px}.pp-time{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;flex:none;min-width:38px}.pp-bar{flex:1;height:6px;background:#f0ddd3;border-radius:3px;cursor:pointer;position:relative}.pp-bar-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--accent);border-radius:3px;transition:width 0.1s linear}.pp-bar-fill::after{content:"";position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,0.2);opacity:0;transition:opacity 0.15s}.pp-bar:hover .pp-bar-fill::after{opacity:1}.pp-error{font-size:12px;color:#e74c3c;margin-top:6px;display:none}@media(max-width:600px){.podcast-player{padding:14px 16px;gap:12px}.pp-btn{width:44px;height:44px}.pp-btn.playing::after{width:44px;height:44px}}
+@media(max-width:600px){.card{padding:24px 20px}.card h1{font-size:22px}}
+  </style>
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ TOPIC-MAP</span></div></nav>
+<div class="container">
+  <div class="card">
+    <a class="back-link" href="./index.html">← Back to Course Index</a>
+    <h1>LangChain Middleware — Topic Map</h1>
+    <div class="podcast-player">
+      <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+        <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+        <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+      </button>
+      <div class="pp-main">
+        <div class="pp-title">本期播客 · 双人对谈:主题地图全景导览 <span class="pp-badge">女声 × 男声</span></div>
+        <div class="pp-bar-wrap">
+          <span class="pp-time" id="ppCur">00:00</span>
+          <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+          <span class="pp-time" id="ppDur">--:--</span>
+        </div>
+        <div class="pp-error" id="ppError">音频加载失败,请确认 topic-map-podcast.mp3 与本页面在同一目录。</div>
+      </div>
+      <audio id="ppAudio" preload="metadata" src="./topic-map-podcast.mp3"></audio>
+    </div>
+    <p>This map anchors the breadth boundary for the LangChain Middleware deep-mastery course. It is the master index for all lessons that follow.</p>
+
+    <h2>Concept Graph</h2>
+    <div class="mermaid">
+mindmap
+  root((LangChain Middleware))
+    Overview
+      The Agent Loop
+      Where hooks run
+      Middleware in a LangGraph workflow
+    Built-in Middleware
+      Reliability
+        Tool Error
+        Tool Retry
+        Model Retry
+        Model Fallback
+      Context Management
+        Summarization
+        Context Editing
+      Safety & Guardrails
+        PII Detection
+        Human-in-the-loop
+        Rubric Grading
+      Cost & Limits
+        Model Call Limit
+        Tool Call Limit
+      Planning
+        To-do List
+      Tool Selection
+        LLM Tool Selector
+        Provider Tool Search
+      Environment
+        Shell Tool
+        Filesystem
+        File Search
+        Subagent
+      Testing
+        LLM Tool Emulator
+    Custom Middleware
+      Hooks
+        Node-style hooks
+        Wrap-style hooks
+      State Updates
+        Node-style
+        Wrap-style
+      Composition
+        Multiple middleware
+        Execution order
+      Creation
+        Decorator-based
+        Class-based
+      Custom State Schema
+      Custom Stream Transformers
+      Agent Jumps
+      Tracing
+      Examples
+        Dynamic prompt
+        Dynamic model selection
+        Dynamic tool selection
+        Tool call monitoring
+        Prompt caching
+    </div>
+
+    <h2>Branch Priority</h2>
+    <table>
+      <tr><th>Branch</th><th>Priority</th><th>Rationale</th></tr>
+      <tr><td>Overview / Agent Loop</td><td>🔴 Deep-dive</td><td>The mental model every other concept depends on</td></tr>
+      <tr><td>Hooks (node-style + wrap-style)</td><td>🔴 Deep-dive</td><td>Core mechanism of all middleware, interview hotspot</td></tr>
+      <tr><td>Execution Order / Composition</td><td>🔴 Deep-dive</td><td>Classic "why / trade-off" interview question</td></tr>
+      <tr><td>Agent Jumps (<code>jump_to</code>)</td><td>🔴 Deep-dive</td><td>Underpins ModelCallLimit, guardrails, early exit</td></tr>
+      <tr><td>Custom State Schema</td><td>🔴 Deep-dive</td><td>How middleware persists data across hooks</td></tr>
+      <tr><td>Custom middleware (decorator + class)</td><td>🔴 Deep-dive</td><td>The practical skill you must be able to write</td></tr>
+      <tr><td>Built-in middleware (Reliability cluster)</td><td>🟡 Recommended</td><td>Retry/fallback/error — production essentials</td></tr>
+      <tr><td>Built-in middleware (Context cluster)</td><td>🟡 Recommended</td><td>Summarization, context editing</td></tr>
+      <tr><td>Built-in middleware (Safety cluster)</td><td>🟡 Recommended</td><td>PII, HITL</td></tr>
+      <tr><td>Built-in middleware (Limits cluster)</td><td>🟡 Recommended</td><td>Model/tool call limits</td></tr>
+      <tr><td>Custom Stream Transformers</td><td>🟢 Awareness</td><td>Advanced; read when needed</td></tr>
+      <tr><td>Tracing (<code>trace_policy</code>)</td><td>🟢 Awareness</td><td>Optimization concern</td></tr>
+      <tr><td>Deep Agents built-ins</td><td>🟢 Awareness</td><td>Depends on <code>deepagents</code> package, not core <code>langchain</code></td></tr>
+    </table>
+
+    <h2>Cross-Links</h2>
+    <ul>
+      <li><strong>Hooks</strong> depend on understanding the <strong>agent loop</strong> (model → tools → model).</li>
+      <li><strong>Wrap-style hooks</strong> compose by nesting, which is why <strong>execution order</strong> matters.</li>
+      <li><strong>Agent Jumps</strong> (<code>jump_to</code>) only work when the hook declares <code>can_jump_to=[...]</code> — this builds <em>conditional edges</em> in the compiled LangGraph.</li>
+      <li><strong>Custom State Schema</strong> reuses the TypedDict + reducer model from LangGraph — same <code>add_messages</code> reducer semantics as <code>AgentState</code>.</li>
+      <li><strong>Built-in middleware</strong> are themselves just <code>AgentMiddleware</code> subclasses — mastering custom middleware makes the built-ins readable.</li>
+      <li>This topic overlaps with <strong>LangGraph</strong> (StateGraph, checkpointer, Command) and <strong>Streaming</strong> (custom stream transformers, <code>stream_mode="custom"</code>).</li>
+    </ul>
+
+    <h2>Learning Path</h2>
+    <p>Suggested order (core → peripheral):</p>
+    <ol>
+      <li>Overview / Agent Loop</li>
+      <li>Hooks (node-style + wrap-style)</li>
+      <li>Execution Order / Composition</li>
+      <li>Agent Jumps + Custom State Schema</li>
+      <li>Custom middleware creation (decorator + class)</li>
+      <li>Built-in middleware: Reliability cluster</li>
+      <li>Built-in middleware: Context cluster</li>
+      <li>Built-in middleware: Safety + Limits clusters</li>
+      <li>Deep Agents built-ins (awareness only)</li>
+      <li>Custom Stream Transformers + Tracing (optional)</li>
+    </ol>
+  </div>
+</div>
+<script>
+(function(){var au=document.getElementById('ppAudio'),btn=document.getElementById('ppBtn'),ip=document.getElementById('ppIconPlay'),pa=document.getElementById('ppIconPause'),cur=document.getElementById('ppCur'),dur=document.getElementById('ppDur'),bar=document.getElementById('ppBar'),fill=document.getElementById('ppFill'),err=document.getElementById('ppError');if(!au)return;function fmt(s){if(!isFinite(s))return'--:--';s=Math.floor(s);var m=Math.floor(s/60),x=s%60;return(m<10?'0':'')+m+':'+(x<10?'0':'')+x}function sync(){ip.style.display=au.paused?'':'none';pa.style.display=au.paused?'none':'';btn.classList.toggle('playing',!au.paused);btn.setAttribute('aria-label',au.paused?'播放播客':'暂停播客')}btn.addEventListener('click',function(){if(au.paused){au.play()}else{au.pause()}});au.addEventListener('loadedmetadata',function(){dur.textContent=fmt(au.duration)});au.addEventListener('timeupdate',function(){if(isFinite(au.duration)&&au.duration>0){fill.style.width=(au.currentTime/au.duration*100)+'%'}cur.textContent=fmt(au.currentTime)});au.addEventListener('play',sync);au.addEventListener('pause',sync);au.addEventListener('ended',function(){sync();au.currentTime=0;fill.style.width='0%'});au.addEventListener('error',function(){err.style.display='block'});bar.addEventListener('click',function(e){var r=bar.getBoundingClientRect(),p=(e.clientX-r.left)/r.width;if(isFinite(au.duration)){au.currentTime=p*au.duration}})})();
+</script>
+</body>
+</html>

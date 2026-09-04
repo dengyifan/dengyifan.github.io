@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>L3: Middleware Source Walkthrough — Core Types &amp; Built-in Implementations</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+  <style>
+    :root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-hover:#ec6149;--accent-blue:#3194d0;--accent-blue-hover:#187cb7;--accent-light:#fef0f0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--green-bg:#e8f5e9;--orange:#f5a623;--orange-bg:#fff8e1;--red:#e74c3c;--red-bg:#fdf2f2;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace;--content-width:1020px;--toc-width:220px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-0.5px}.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}.layout{display:flex;justify-content:center;margin-top:56px;padding:0 16px;min-height:100vh}.toc-sidebar{position:fixed;left:calc(50% - var(--content-width)/2 - var(--toc-width) - 40px);top:96px;width:var(--toc-width);max-height:calc(100vh - 140px);overflow-y:auto;z-index:100;font-family:var(--font-sans);font-size:13px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);padding:16px 0;box-shadow:0 1px 3px rgba(0,0,0,0.04)}.toc-sidebar::-webkit-scrollbar{width:3px}.toc-sidebar::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}.toc-title{padding:0 16px 12px;font-size:13px;font-weight:700;color:var(--text);border-bottom:1px solid var(--border);margin-bottom:8px;letter-spacing:0.5px}.toc-sidebar a{display:block;padding:5px 16px;color:var(--text-muted);text-decoration:none;border-left:2px solid transparent;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.toc-sidebar a:hover{color:var(--accent);background:#fafafa;border-left-color:var(--border-light)}.toc-sidebar a.active{color:var(--accent);font-weight:600;border-left-color:var(--accent);background:var(--accent-light)}.toc-sidebar a.toc-h2{padding-left:16px}.toc-sidebar a.toc-h3{padding-left:28px;font-size:12px}@media(max-width:1200px){.toc-sidebar{display:none}}.content{width:100%;max-width:var(--content-width);padding:32px 0 80px;margin-left:0}.article-header{background:var(--card-bg);border-radius:4px;padding:36px 40px 28px;margin-bottom:16px;border-bottom:1px solid var(--border)}.article-header h1{font-size:30px;font-weight:700;line-height:1.4;color:var(--text);font-family:var(--font-sans);margin-bottom:16px}.article-meta{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:20px;flex-wrap:wrap}.article-body{background:var(--card-bg);border-radius:4px;padding:32px 40px 48px}.article-body h2{font-size:22px;font-weight:700;margin:40px 0 16px;font-family:var(--font-sans);padding-bottom:8px;border-bottom:1px solid var(--border);color:var(--text)}.article-body h2:first-child{margin-top:0}.article-body h3{font-size:18px;font-weight:600;margin:28px 0 12px;font-family:var(--font-sans);color:#333}.article-body p{margin:14px 0;text-align:justify}.article-body a{color:var(--accent);text-decoration:none}.article-body a:hover{text-decoration:underline}.article-body strong{font-weight:700;color:#222}code{font-family:var(--font-mono);font-size:0.88em;background:var(--code-bg);padding:2px 6px;border-radius:3px;color:#c7254e}pre{font-family:var(--font-mono);font-size:13px;background:#282c34;color:#abb2bf;padding:18px 22px;border-radius:6px;overflow-x:auto;margin:18px 0;line-height:1.6}pre code{background:transparent;color:inherit;padding:0;font-size:inherit}blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid var(--accent);background:#fafafa;color:#555;font-size:0.95em}table{border-collapse:collapse;width:100%;margin:18px 0;font-size:14px;font-family:var(--font-sans)}th,td{border:1px solid var(--border);padding:10px 14px;text-align:left}th{background:#fafafa;font-weight:600;color:#333;font-size:13px}tr:hover{background:#fafafa}.note,.warning,.tip,.info{border-left:4px solid;margin:1rem 0;padding:12px 16px;border-radius:0 6px 6px 0;font-size:0.95em}.note{border-color:var(--accent-blue);background:#f0f7fd}.warning{border-color:var(--orange);background:var(--orange-bg)}.tip{border-color:var(--green);background:var(--green-bg)}.note-title,.warning-title,.tip-title{font-weight:700;margin-bottom:0.3rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.note-title{color:var(--accent-blue)}.warning-title{color:var(--orange)}.tip-title{color:var(--green)}.java-comparison{background:linear-gradient(135deg,#fef9f0,#fff);border:1px solid #e8d5b0;border-radius:6px;padding:1rem 1.2rem;margin:1rem 0;font-size:0.95em}.java-comparison .header{font-weight:700;color:#b87333;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.production-note{background:#fef6f0;border:1px solid #f0c8a0;border-radius:6px;padding:1rem 1.2rem;margin:1rem 0;font-size:0.95em}.production-note .header{font-weight:700;color:#d8763a;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.deep-grill-readiness{background:#f5f5f5;border:1px solid var(--border);border-radius:6px;padding:1rem 1.5rem;margin:2rem 0 1rem;font-size:0.95em}.deep-grill-readiness h4{margin-top:0;color:var(--text);font-family:var(--font-sans)}.deep-grill-readiness ul{list-style:none;margin-left:0}.deep-grill-readiness li{padding:0.25rem 0;color:var(--text-muted)}.deep-grill-readiness li.done{color:var(--text)}.deep-grill-readiness li.done::before{content:"☑ ";color:#5cb85c}.deep-grill-readiness li::before{content:"☐ ";color:var(--text-muted)}.mermaid{display:flex;justify-content:center;background:#fafafa;border:1px solid var(--border);border-radius:8px;padding:24px;margin:20px 0;overflow-x:auto}.podcast-player{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,#fef6f2,#fff);border:1px solid #f5d5c8;border-radius:12px;padding:18px 22px;margin:0 0 28px;font-family:var(--font-sans);box-shadow:0 2px 10px rgba(234,111,90,0.06)}.pp-btn{flex:none;width:52px;height:52px;border-radius:50%;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;box-shadow:0 3px 10px rgba(234,111,90,0.35);position:relative}.pp-btn:hover{background:var(--accent-hover);transform:scale(1.05)}.pp-btn.playing::after{content:"";position:absolute;width:52px;height:52px;border-radius:50%;border:2px solid var(--accent);animation:pp-pulse 1.6s ease-out infinite}@keyframes pp-pulse{0%{transform:scale(1);opacity:0.7}100%{transform:scale(1.45);opacity:0}}.pp-main{flex:1;min-width:0}.pp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pp-badge{font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-light);border:1px solid #f5d5c8;padding:1px 8px;border-radius:10px}.pp-bar-wrap{display:flex;align-items:center;gap:10px}.pp-time{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;flex:none;min-width:38px}.pp-bar{flex:1;height:6px;background:#f0ddd3;border-radius:3px;cursor:pointer;position:relative}.pp-bar-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--accent);border-radius:3px;transition:width 0.1s linear}.pp-bar-fill::after{content:"";position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,0.2);opacity:0;transition:opacity 0.15s}.pp-bar:hover .pp-bar-fill::after{opacity:1}.pp-error{font-size:12px;color:var(--red);margin-top:6px;display:none}.video-player{background:linear-gradient(135deg,#fef6f2,#fff);border:1px solid #f5d5c8;border-radius:12px;padding:18px 22px;margin:0 0 28px;font-family:var(--font-sans);box-shadow:0 2px 10px rgba(234,111,90,0.06)}.video-player .vp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.video-player video{width:100%;border-radius:8px;background:#000;display:block}@media(max-width:600px){.podcast-player,.video-player{padding:14px 16px;gap:12px}.pp-btn{width:44px;height:44px}.pp-btn.playing::after{width:44px;height:44px}}
+.page-nav{display:flex;justify-content:space-between;margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border);font-size:0.95em}.page-nav a{color:var(--accent)}.back-to-top{position:fixed;bottom:40px;right:40px;width:44px;height:44px;background:#fff;border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--text-muted);box-shadow:0 2px 8px rgba(0,0,0,0.08);transition:all 0.2s;z-index:999;opacity:0;transform:translateY(10px);pointer-events:none}.back-to-top.visible{opacity:1;transform:translateY(0);pointer-events:auto}.back-to-top:hover{color:var(--accent);border-color:var(--accent)}@media(max-width:600px){.article-header{padding:24px 20px 20px}.article-header h1{font-size:22px}.article-body{padding:20px 20px 32px}.article-body h2{font-size:19px}.article-body h3{font-size:16px}body{font-size:16px}}.line-num{color:#636d83;margin-right:12px;user-select:none;display:inline-block;width:28px;text-align:right}
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep&#8203;Mastery <span>/ L3: Source Walkthrough</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">Table of Contents</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>L3: Middleware Source Walkthrough — Core Types &amp; Built-in Implementations</h1>
+      <div class="article-meta"><span>Layer: L3 Source</span><span>Reading time: 40 min</span><span>Source: langchain 1.3.14</span></div>
+    </div>
+    <div class="article-body">
+
+<div class="video-player">
+  <div class="vp-title">授课动画 · 源码走读：核心类型与内置实现 <span class="pp-badge">1080p</span></div>
+  <video controls preload="metadata" src="./0003-middleware-source-l3-video.mp4"></video>
+</div>
+<div class="podcast-player">
+  <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+    <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+    <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+  </button>
+  <div class="pp-main">
+    <div class="pp-title">本期播客 · 双人对谈:源码走读——核心类型与内置实现 <span class="pp-badge">女声 × 男声</span></div>
+    <div class="pp-bar-wrap">
+      <span class="pp-time" id="ppCur">00:00</span>
+      <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+      <span class="pp-time" id="ppDur">--:--</span>
+    </div>
+    <div class="pp-error" id="ppError">音频加载失败,请确认 0003-middleware-source-l3-podcast.mp3 与本页面在同一目录。</div>
+  </div>
+  <audio id="ppAudio" preload="metadata" src="./0003-middleware-source-l3-podcast.mp3"></audio>
+</div>
+
+<h2 id="key-data-structures">Key Data Structures</h2>
+
+<table>
+  <tr><th>Class / Type</th><th>Purpose</th><th>File</th></tr>
+  <tr><td><code>AgentMiddleware</code></td><td>Base class for all middleware; defines hook method signatures</td><td><code>types.py</code></td></tr>
+  <tr><td><code>AgentState</code></td><td>Default state schema: <code>messages</code>, <code>jump_to</code>, <code>structured_response</code></td><td><code>types.py</code></td></tr>
+  <tr><td><code>ModelRequest</code></td><td>Immutable dataclass describing a model call; uses <code>.override()</code></td><td><code>types.py</code></td></tr>
+  <tr><td><code>ModelResponse</code></td><td>Holds <code>result</code> (list of messages) and optional <code>structured_response</code></td><td><code>types.py</code></td></tr>
+  <tr><td><code>ExtendedModelResponse</code></td><td><code>ModelResponse</code> + optional <code>Command</code> for state injection</td><td><code>types.py</code></td></tr>
+  <tr><td><code>JumpTo</code></td><td>Literal type: <code>'tools' | 'model' | 'end'</code></td><td><code>types.py</code></td></tr>
+  <tr><td><code>ModelRetryMiddleware</code></td><td>Retry failed model calls with exponential backoff</td><td><code>model_retry.py</code></td></tr>
+  <tr><td><code>ToolRetryMiddleware</code></td><td>Retry failed tool calls with exponential backoff</td><td><code>tool_retry.py</code></td></tr>
+  <tr><td><code>ToolErrorMiddleware</code></td><td>Convert tool exceptions to error <code>ToolMessage</code>s</td><td><code>tool_error.py</code></td></tr>
+  <tr><td><code>ModelFallbackMiddleware</code></td><td>Fallback to alternative models on failure</td><td><code>model_fallback.py</code></td></tr>
+  <tr><td><code>SummarizationMiddleware</code></td><td>Summarize conversation history near token limits</td><td><code>summarization.py</code></td></tr>
+  <tr><td><code>calculate_delay</code></td><td>Shared utility for exponential backoff with jitter</td><td><code>_retry.py</code></td></tr>
+</table>
+
+<h2 id="core-call-chain">Core Call Chain: How Hooks Become Graph Nodes</h2>
+
+<p>When <code>create_agent</code> is called, the middleware list is compiled into a LangGraph <code>StateGraph</code>. The decorator functions (<code>@before_model</code>, <code>@wrap_model_call</code>, etc.) use Python's <code>type()</code> to dynamically create <code>AgentMiddleware</code> subclasses at runtime:</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant User
+    participant CA as create_agent()
+    participant MW as Decoded Middleware
+    participant Graph as StateGraph
+    participant Hook as Hook Nodes
+
+    User->>CA: create_agent(model, middleware=[...])
+    CA->>MW: For each decorator: type() creates subclass
+    CA->>Graph: Compile hooks into nodes
+    alt @before_model
+        Graph->>Hook: Add before_model node
+        Graph->>Hook: If can_jump_to, add conditional edges
+    end
+    alt @wrap_model_call
+        Graph->>Hook: Nest wrap handlers
+    end
+    CA->>Graph: .compile()
+    Graph-->>User: Compiled Runnable
+</div>
+
+<h2 id="agentstate-source">AgentState — The Default State Schema</h2>
+
+<p><strong>Source</strong>: <code>langchain/agents/middleware/types.py</code>, lines 347-352</p>
+
+<pre><code class="language-python">class AgentState(TypedDict, Generic[ResponseT]):
+    """State schema for the agent."""
+
+    messages: Required[Annotated[list[AnyMessage], add_messages]]
+    jump_to: NotRequired[Annotated[JumpTo | None, EphemeralValue, PrivateStateAttr]]
+    structured_response: NotRequired[Annotated[ResponseT, OmitFromInput]]</code></pre>
+
+<p><strong>Analysis</strong>:</p>
+<ul>
+  <li><code>messages</code> uses the <code>add_messages</code> <strong>reducer</strong> — updates append, not replace. This is the most important annotation in the entire middleware system.</li>
+  <li><code>jump_to</code> is <code>EphemeralValue</code> — it resets after each superstep. You cannot set it once and have it persist; you must set it each time you want a jump.</li>
+  <li><code>jump_to</code> is also <code>PrivateStateAttr</code> — it's hidden from input/output schemas. Users never see it; it's purely internal routing.</li>
+  <li><code>structured_response</code> is <code>OmitFromInput</code> — the user can't provide it; only the agent can set it.</li>
+</ul>
+
+<div class="note">
+  <div class="note-title">Why <code>EphemeralValue</code> for <code>jump_to</code>?</div>
+  <p>If <code>jump_to</code> persisted, a single "jump to end" would permanently route all subsequent invocations to the end. The reset ensures that each invocation starts fresh. The middleware must explicitly set <code>jump_to</code> each time it wants to redirect.</p>
+</div>
+
+<h2 id="modelrequest-source">ModelRequest — Immutable Request Pattern</h2>
+
+<p><strong>Source</strong>: <code>langchain/agents/middleware/types.py</code>, lines 85-267</p>
+
+<p>The <code>ModelRequest</code> is a <code>@dataclass(init=False)</code> — the <code>__init__</code> is custom-written, not auto-generated. This allows it to handle the deprecated <code>system_prompt</code> parameter gracefully:</p>
+
+<pre><code class="language-python">@dataclass(init=False)
+class ModelRequest(Generic[ContextT]):
+    model: BaseChatModel
+    messages: list[AnyMessage]  # excluding system message
+    system_message: SystemMessage | None
+    tool_choice: Any | None
+    tools: list[BaseTool | dict[str, Any]]
+    response_format: ResponseFormat[Any] | None
+    state: AgentState[Any]
+    runtime: Runtime[ContextT]
+    model_settings: dict[str, Any] = field(default_factory=dict)</code></pre>
+
+<p><strong>Key design: <code>override()</code> method</strong> (lines 201-267):</p>
+
+<pre><code class="language-python">def override(self, **overrides: Unpack[_ModelRequestOverrides]) -> ModelRequest[ContextT]:
+    """Replace the request with a new request with the given overrides.
+
+    Returns a new `ModelRequest` instance with the specified attributes replaced.
+    This follows an immutable pattern, leaving the original request unchanged.
+    """
+    if "system_prompt" in overrides and "system_message" in overrides:
+        msg = "Cannot specify both system_prompt and system_message"
+        raise ValueError(msg)
+
+    if "system_prompt" in overrides:
+        system_prompt = cast("str | None", overrides.pop("system_prompt"))
+        if system_prompt is None:
+            overrides["system_message"] = None
+        else:
+            overrides["system_message"] = SystemMessage(content=system_prompt)
+
+    return replace(self, **overrides)</code></pre>
+
+<p><strong>Analysis</strong>:</p>
+<ul>
+  <li><code>ModelRequest</code> is <strong>immutable</strong> — you never modify it in place. Instead, call <code>.override()</code> to get a new instance. This is critical for middleware composition: one middleware's modifications don't leak into another's.</li>
+  <li>Direct attribute assignment is deprecated (lines 167-199) — <code>__setattr__</code> emits a <code>DeprecationWarning</code>. This is a strong signal: "never mutate, always create."</li>
+  <li>Backward compatibility with <code>system_prompt</code> (string) is handled by converting it to <code>SystemMessage</code> internally.</li>
+  <li>Uses <code>dataclasses.replace()</code> — a shallow copy with field overrides. Efficient because it doesn't deep-copy the message list.</li>
+</ul>
+
+<div class="java-comparison">
+  <div class="header">From a Java perspective</div>
+  <p>This is conceptually identical to <strong>Java 17 Records</strong> or <strong>Lombok's <code>@With</code></strong> annotation — the object is immutable, and you create a new instance with specific fields changed. The difference is Python uses <code>dataclasses.replace()</code> instead of a <code>withX()</code> method.</p>
+</div>
+
+<h2 id="model-retry-source">ModelRetryMiddleware — Retry with Exponential Backoff</h2>
+
+<p><strong>Source</strong>: <code>langchain/agents/middleware/model_retry.py</code>, lines 31-312</p>
+
+<h3>The <code>wrap_model_call</code> implementation</h3>
+
+<pre><code class="language-python">def wrap_model_call(
+    self,
+    request: ModelRequest[ContextT],
+    handler: Callable[[ModelRequest[ContextT]], ModelResponse[ResponseT]],
+) -> ModelResponse[ResponseT] | AIMessage:
+    # Initial attempt + retries
+    for attempt in range(self.max_retries + 1):          # Line 232
+        try:
+            return handler(request)                       # Line 234
+        except Exception as exc:
+            attempts_made = attempt + 1                   # Line 236
+
+            # Check if we should retry this exception
+            if not should_retry_exception(exc, self.retry_on):  # Line 239
+                # Exception is not retryable, handle failure immediately
+                return self._handle_failure(exc, attempts_made) # Line 241
+
+            # Check if we have more retries left
+            if attempt < self.max_retries:                # Line 244
+                # Calculate and apply backoff delay
+                delay = calculate_delay(
+                    attempt,
+                    backoff_factor=self.backoff_factor,
+                    initial_delay=self.initial_delay,
+                    max_delay=self.max_delay,
+                    jitter=self.jitter,
+                )                                         # Lines 246-251
+                if delay > 0:
+                    time.sleep(delay)                     # Line 254
+                # Continue to next retry
+            else:
+                # No more retries, handle failure
+                return self._handle_failure(exc, attempts_made) # Line 258</code></pre>
+
+<p><strong>Analysis</strong>:</p>
+<ul>
+  <li><strong>Line 232</strong>: The loop runs <code>max_retries + 1</code> times (initial attempt + retries). With default <code>max_retries=2</code>, that's 3 total attempts.</li>
+  <li><strong>Line 239</strong>: <code>should_retry_exception</code> checks if the exception is retryable <em>before</em> checking if retries remain. If the exception is not retryable, it fails immediately — even if retries are available.</li>
+  <li><strong>Line 244-254</strong>: Only sleeps if retries remain. The delay calculation uses <code>calculate_delay</code> from the shared <code>_retry.py</code> module.</li>
+  <li><strong>Early-return pattern</strong>: The loop follows the "fail fast" style — each branch returns immediately. No deep nesting of if/else.</li>
+</ul>
+
+<h3>Failure handling</h3>
+
+<pre><code class="language-python">def _handle_failure(self, exc: Exception, attempts_made: int) -> ModelResponse[ResponseT]:
+    if self.on_failure == "error":           # Line 203
+        raise exc                            # Re-raise, stopping agent
+
+    if callable(self.on_failure):            # Line 206
+        content = self.on_failure(exc)       # Custom message from callable
+        ai_msg = AIMessage(content=content)
+    else:
+        ai_msg = self._format_failure_message(exc, attempts_made)  # Line 210
+
+    return ModelResponse(result=[ai_msg])    # Line 212</code></pre>
+
+<p><strong>Analysis</strong>:</p>
+<ul>
+  <li>Three failure modes: <strong>re-raise</strong> (<code>"error"</code>), <strong>custom message</strong> (callable), <strong>default message</strong> (<code>"continue"</code>).</li>
+  <li>When <code>on_failure="continue"</code>, the agent receives an <code>AIMessage</code> with the error — it can decide to retry differently or give up. This is the "graceful degradation" path.</li>
+  <li>The default message format reveals the exception type name but NOT the full traceback. This is deliberate — you don't want to leak internal details to the model.</li>
+</ul>
+
+<h2 id="shared-retry-source">Shared Retry Utilities: <code>calculate_delay</code></h2>
+
+<p><strong>Source</strong>: <code>langchain/agents/middleware/_retry.py</code>, lines 87-125</p>
+
+<pre><code class="language-python">def calculate_delay(
+    retry_number: int,
+    *,
+    backoff_factor: float,
+    initial_delay: float,
+    max_delay: float,
+    jitter: bool,
+) -> float:
+    if backoff_factor == 0.0:                          # Line 111
+        delay = initial_delay                          # Constant delay
+    else:
+        delay = initial_delay * (backoff_factor ** retry_number)  # Line 114
+
+    # Cap at max_delay
+    delay = min(delay, max_delay)                      # Line 117
+
+    if jitter and delay > 0:                           # Line 119
+        jitter_amount = delay * 0.25                   # ±25% jitter
+        delay += random.uniform(-jitter_amount, jitter_amount)  # Line 121
+        # Ensure delay is not negative after jitter
+        delay = max(0, delay)                          # Line 123
+
+    return delay</code></pre>
+
+<p><strong>Analysis</strong>:</p>
+<ul>
+  <li><strong>Line 111</strong>: <code>backoff_factor=0.0</code> gives constant delay. This is the "retry with fixed wait" mode.</li>
+  <li><strong>Line 114</strong>: Standard exponential backoff: <code>delay = initial_delay * (backoff_factor ^ retry_number)</code>. With defaults (1.0 * 2.0^0 = 1s, 1.0 * 2.0^1 = 2s, 1.0 * 2.0^2 = 4s).</li>
+  <li><strong>Line 117</strong>: Capped at <code>max_delay=60.0</code> — prevents unbounded growth for high retry counts.</li>
+  <li><strong>Line 121</strong>: <strong>±25% jitter</strong> — critical for production. Without jitter, many clients retrying simultaneously create a "thundering herd" problem. The jitter spreads retries across a 50% window.</li>
+  <li><strong>Line 123</strong>: Safety clamp — jitter cannot make delay negative (though with 25% of a positive value, this is a defensive check).</li>
+</ul>
+
+<h2 id="tool-error-source">ToolErrorMiddleware — Exception-to-ToolMessage Conversion</h2>
+
+<p><strong>Source</strong>: <code>langchain/agents/middleware/tool_error.py</code>, lines 30-200</p>
+
+<h3>The <code>wrap_tool_call</code> implementation</h3>
+
+<pre><code class="language-python">def wrap_tool_call(
+    self,
+    request: ToolCallRequest,
+    handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
+) -> ToolMessage | Command[Any]:
+    tool_name = request.tool.name if request.tool else request.tool_call["name"]  # Line 138
+
+    if not self._should_handle_tool(tool_name):          # Line 140
+        return handler(request)                          # Pass through for excluded tools
+
+    try:
+        return handler(request)                          # Line 144
+    except GraphBubbleUp:                                # Line 145
+        # Control-flow signals (interrupts, parent commands) must propagate.
+        raise
+    except Exception as exc:                             # Line 148
+        if self.on_error is None:                        # Line 149
+            msg = ("ToolErrorMiddleware has no sync `on_error`; run async "
+                   "(ainvoke/astream) or provide `on_error`.")
+            raise RuntimeError(msg) from exc             # Line 155
+        content = self.on_error(exc, request)            # Line 156
+        if content is None:                              # Line 157
+            raise                                        # Propagate: handler chose not to handle
+        return ToolMessage(
+            content=cast("str | list[str | dict[Any, Any]]", content),
+            tool_call_id=request.tool_call["id"],        # Line 161
+            name=tool_name,
+            status="error",                              # Line 163
+        )</code></pre>
+
+<p><strong>Analysis</strong>:</p>
+<ul>
+  <li><strong>Line 145</strong>: <code>GraphBubbleUp</code> is a special exception that carries LangGraph control-flow signals (interrupts, parent <code>Command</code>s). It <strong>must</strong> propagate — catching it would break the graph's control flow.</li>
+  <li><strong>Line 140</strong>: The <code>_should_handle_tool</code> filter lets you scope error handling to specific tools. Tools not in the filter pass through unchanged.</li>
+  <li><strong>Line 157</strong>: <strong>Opt-in handling</strong>. If <code>on_error</code> returns <code>None</code>, the exception propagates. This means you only handle the exceptions you want to handle — unhandled exceptions crash the agent as normal.</li>
+  <li><strong>Line 161</strong>: The <code>tool_call_id</code> must match the original tool call. This is how the model associates the error message with the right tool call — without it, the model can't correct its mistake.</li>
+  <li><strong>Line 163</strong>: <code>status="error"</code> is the signal that tells the model this ToolMessage represents an error, not a normal result.</li>
+</ul>
+
+<div class="production-note">
+  <div class="header">Production: ToolError + ToolRetry composition</div>
+  <p>The docs emphasize: "Place retry <strong>inner</strong> (earlier in the list) with <code>on_failure="error"</code> so exceptions reach ToolErrorMiddleware after retries are exhausted."</p>
+  <pre><code class="language-python">middleware=[
+    ToolRetryMiddleware(max_retries=3, on_failure="error"),  # inner: retries first
+    ToolErrorMiddleware(on_error=on_error),                    # outer: converts errors
+]</code></pre>
+  <p>The retry middleware runs first (inner), and when it exhausts retries, it re-raises (<code>on_failure="error"</code>). The exception then reaches ToolErrorMiddleware, which converts it to a ToolMessage the model can see.</p>
+</div>
+
+<h2 id="model-fallback-source">ModelFallbackMiddleware — Sequential Fallback</h2>
+
+<p><strong>Source</strong>: <code>langchain/agents/middleware/model_fallback.py</code>, lines 278-408</p>
+
+<pre><code class="language-python">def wrap_model_call(
+    self,
+    request: ModelRequest[ContextT],
+    handler: Callable[[ModelRequest[ContextT]], ModelResponse[ResponseT]],
+) -> ModelResponse[ResponseT] | AIMessage:
+    # Try primary model first
+    last_exception: Exception
+    try:
+        return handler(request)                          # Line 346
+    except Exception as e:
+        last_exception = e                               # Line 348
+
+    # Try fallback models
+    for fallback_model in self.models:                   # Line 354
+        fallback_request = (
+            request
+            if _supports_anthropic_cache_control(fallback_model)
+            else _sanitize_request_for_fallback(request) # Line 358
+        )
+        try:
+            return handler(fallback_request.override(model=fallback_model))  # Line 361
+        except Exception as e:
+            last_exception = e                           # Line 363
+            continue
+
+    raise last_exception                                 # Line 366</code></pre>
+
+<p><strong>Analysis</strong>:</p>
+<ul>
+  <li><strong>Lines 355-358</strong>: The <strong>cache control sanitization</strong> is a subtle but important detail. When an outer middleware (like AnthropicPromptCachingMiddleware) adds <code>cache_control</code> markers to the request, those markers are Anthropic-specific. If the fallback model is non-Anthropic (e.g., OpenAI), the markers would cause an API error. The middleware detects this via <code>_llm_type</code> and strips them.</li>
+  <li><strong>Line 361</strong>: Uses <code>request.override(model=fallback_model)</code> — the immutable pattern again. The original request is unchanged; only the model field changes.</li>
+  <li><strong>Line 366</strong>: If all fallbacks fail, re-raises the <strong>last</strong> exception. This means you see the failure from the last model tried, not the first.</li>
+</ul>
+
+<h2 id="decorator-internals">How Decorators Create Middleware Classes at Runtime</h2>
+
+<p><strong>Source</strong>: <code>langchain/agents/middleware/types.py</code>, lines 1026-1100</p>
+
+<p>The <code>@before_model</code> decorator doesn't just wrap a function — it creates a <strong>new <code>AgentMiddleware</code> subclass at runtime</strong> using <code>type()</code>:</p>
+
+<pre><code class="language-python"># From @before_model decorator (simplified)
+def decorator(func):
+    is_async = iscoroutinefunction(func)
+
+    if is_async:
+        async def async_wrapped(_self, state, runtime):
+            return await func(state, runtime)
+
+        return type(
+            middleware_name,          # e.g., "log_before_model"
+            (AgentMiddleware,),       # parent class
+            {
+                "state_schema": AgentState,
+                "tools": [],
+                "abefore_model": async_wrapped,  # async hook
+            },
+        )()                           # instantiate!
+    else:
+        def wrapped(_self, state, runtime):
+            return func(state, runtime)
+
+        return type(
+            middleware_name,
+            (AgentMiddleware,),
+            {
+                "state_schema": AgentState,
+                "tools": [],
+                "before_model": wrapped,  # sync hook
+            },
+        )()</code></pre>
+
+<p><strong>Analysis</strong>:</p>
+<ul>
+  <li>This is <strong>Python metaprogramming</strong> — creating classes at runtime with <code>type()</code>. The decorator function's name becomes the class name.</li>
+  <li>The <strong>sync/async detection</strong> (<code>iscoroutinefunction</code>) determines which hook method to set. If the function is async, <code>abefore_model</code> is set; if sync, <code>before_model</code>.</li>
+  <li>The <strong>instantiation</strong> happens immediately — <code>type()(...)</code> calls the constructor. The returned object is an <code>AgentMiddleware</code> instance, ready to pass to <code>create_agent</code>.</li>
+  <li><code>can_jump_to</code> is stored as <code>__can_jump_to__</code> on the function object (<code>func.__can_jump_to__</code>), then read by the agent factory when building the graph.</li>
+</ul>
+
+<div class="java-comparison">
+  <div class="header">From a Java perspective</div>
+  <p>Java has nothing directly equivalent to Python's <code>type()</code> for creating classes at runtime. The closest analogue is <strong>dynamic proxies</strong> (<code>java.lang.reflect.Proxy</code>) or <strong>CGLIB</strong> — both create proxy classes at runtime but are far more limited than Python's runtime class creation. In Java, you'd typically use a <strong>Builder pattern</strong> or <strong>annotation processor</strong> to achieve similar middleware registration.</p>
+</div>
+
+<h2 id="design-decisions">Key Design Decisions</h2>
+
+<table>
+  <tr><th>Decision</th><th>Why</th><th>Cost</th></tr>
+  <tr>
+    <td><code>ModelRequest</code> is immutable</td>
+    <td>Prevents middleware from leaking state into each other; enables safe composition</td>
+    <td>Every change requires a new object allocation; <code>dataclasses.replace()</code> is shallow</td>
+  </tr>
+  <tr>
+    <td>Decorators create classes with <code>type()</code></td>
+    <td>Zero boilerplate for single-hook middleware; decorator name becomes class name</td>
+    <td>Opaque class names; hard to debug; no static type checking for dynamically created classes</td>
+  </tr>
+  <tr>
+    <td><code>jump_to</code> is <code>EphemeralValue</code></td>
+    <td>Prevents stale jump values from persisting across invocations</td>
+    <td>Middleware must explicitly set <code>jump_to</code> every time; easy to forget and have jump silently ignored</td>
+  </tr>
+  <tr>
+    <td><code>GraphBubbleUp</code> always propagates</td>
+    <td>Protects LangGraph control-flow from being swallowed by error handlers</td>
+    <td>Every middleware's <code>except</code> clause must handle it; easy to forget</td>
+  </tr>
+  <tr>
+    <td>Cache control sanitization in fallback</td>
+    <td>Provider cache markers (Anthropic) cause API errors on non-Anthropic models</td>
+    <td>Knowledge of <code>cache_control</code> is duplicated here; fragile if new providers add similar markers</td>
+  </tr>
+</table>
+
+<div class="deep-grill-readiness">
+  <h4>Deep-Grill Readiness</h4>
+  <ul>
+    <li class="done">Can explain the three fields of <code>AgentState</code> and why <code>messages</code> uses <code>add_messages</code></li>
+    <li class="done">Can explain why <code>ModelRequest</code> is immutable and how <code>.override()</code> works</li>
+    <li class="done">Can trace the retry loop in <code>ModelRetryMiddleware.wrap_model_call</code></li>
+    <li class="done">Can explain the <code>calculate_delay</code> formula and why jitter matters</li>
+    <li class="done">Can explain why <code>GraphBubbleUp</code> must propagate and what happens if it doesn't</li>
+    <li class="done">Can explain the <code>ToolErrorMiddleware</code> + <code>ToolRetryMiddleware</code> composition pattern</li>
+    <li>Can explain how decorators use <code>type()</code> to create <code>AgentMiddleware</code> subclasses</li>
+    <li>Can explain the cache control sanitization in <code>ModelFallbackMiddleware</code></li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <span><a href="./0002-middleware-principles-l2.html">← L2: Principles</a></span>
+  <span><a href="./0004-middleware-boundaries-l4.html">Next: L4 Boundaries →</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var au=document.getElementById('ppAudio'),btn=document.getElementById('ppBtn'),ip=document.getElementById('ppIconPlay'),pa=document.getElementById('ppIconPause'),cur=document.getElementById('ppCur'),dur=document.getElementById('ppDur'),bar=document.getElementById('ppBar'),fill=document.getElementById('ppFill'),err=document.getElementById('ppError');if(!au)return;function fmt(s){if(!isFinite(s))return'--:--';s=Math.floor(s);var m=Math.floor(s/60),x=s%60;return(m<10?'0':'')+m+':'+(x<10?'0':'')+x}function sync(){ip.style.display=au.paused?'':'none';pa.style.display=au.paused?'none':'';btn.classList.toggle('playing',!au.paused);btn.setAttribute('aria-label',au.paused?'播放播客':'暂停播客')}btn.addEventListener('click',function(){if(au.paused){au.play()}else{au.pause()}});au.addEventListener('loadedmetadata',function(){dur.textContent=fmt(au.duration)});au.addEventListener('timeupdate',function(){if(isFinite(au.duration)&&au.duration>0){fill.style.width=(au.currentTime/au.duration*100)+'%'}cur.textContent=fmt(au.currentTime)});au.addEventListener('play',sync);au.addEventListener('pause',sync);au.addEventListener('ended',function(){sync();au.currentTime=0;fill.style.width='0%'});au.addEventListener('error',function(){err.style.display='block'});bar.addEventListener('click',function(e){var r=bar.getBoundingClientRect(),p=(e.clientX-r.left)/r.width;if(isFinite(au.duration)){au.currentTime=p*au.duration}})})();
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+</body>
+</html>

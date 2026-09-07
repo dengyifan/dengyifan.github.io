@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L5 面试题库 | LangChain Middleware Deep-Grill 实录</title>
+<link rel="stylesheet" href="../assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<style>
+.podcast-player{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,#fef6f2,#fff);border:1px solid #f5d5c8;border-radius:12px;padding:18px 22px;margin:0 0 28px;font-family:var(--font-sans);box-shadow:0 2px 10px rgba(234,111,90,0.06)}.pp-btn{flex:none;width:52px;height:52px;border-radius:50%;border:none;background:var(--accent);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s,transform 0.15s;box-shadow:0 3px 10px rgba(234,111,90,0.35);position:relative}.pp-btn:hover{background:var(--accent-hover);transform:scale(1.05)}.pp-btn.playing::after{content:"";position:absolute;width:52px;height:52px;border-radius:50%;border:2px solid var(--accent);animation:pp-pulse 1.6s ease-out infinite}@keyframes pp-pulse{0%{transform:scale(1);opacity:0.7}100%{transform:scale(1.45);opacity:0}}.pp-main{flex:1;min-width:0}.pp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.pp-badge{font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-light);border:1px solid #f5d5c8;padding:1px 8px;border-radius:10px}.pp-bar-wrap{display:flex;align-items:center;gap:10px}.pp-time{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums;flex:none;min-width:38px}.pp-bar{flex:1;height:6px;background:#f0ddd3;border-radius:3px;cursor:pointer;position:relative}.pp-bar-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--accent);border-radius:3px;transition:width 0.1s linear}.pp-bar-fill::after{content:"";position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,0.2);opacity:0;transition:opacity 0.15s}.pp-bar:hover .pp-bar-fill::after{opacity:1}.pp-error{font-size:12px;color:var(--red);margin-top:6px;display:none}@media(max-width:600px){.podcast-player{padding:14px 16px;gap:12px}.pp-btn{width:44px;height:44px}.pp-btn.playing::after{width:44px;height:44px}}
+.qa-user-answer {
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  background: #fafafa;
+  border-left: 3px solid #999;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.95em;
+  color: #555;
+  font-style: italic;
+}
+.qa-user-answer .ua-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  font-style: normal;
+  color: #999;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: var(--font-sans);
+}
+</style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a href="../index.html" class="logo">Deep&#8203;Mastery <span>/ LangChain Middleware</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">目录</div>
+  </nav>
+
+  <main class="content">
+    <div class="article-header">
+      <h1>L5 面试题库：LangChain Middleware（Deep-Grill 实录）</h1>
+      <div class="article-meta">
+        <span><span class="tag tag-l5">L5 面试层</span></span>
+        <span>15 题 · 五角度 · 含追问链 + 用户回答 + 修正</span>
+        <span>Source: langchain 1.3.14</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+<div class="podcast-player">
+  <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+    <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+    <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+  </button>
+  <div class="pp-main">
+    <div class="pp-title">本期播客 · Deep-Grill 面试十五题深度对谈 <span class="pp-badge">女声 × 男声</span></div>
+    <div class="pp-bar-wrap">
+      <span class="pp-time" id="ppCur">00:00</span>
+      <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+      <span class="pp-time" id="ppDur">--:--</span>
+    </div>
+    <div class="pp-error" id="ppError">音频加载失败,请确认 0002-middleware-deep-grill-interview-podcast.mp3 与本页面在同一目录。</div>
+  </div>
+  <audio id="ppAudio" preload="metadata" src="./0002-middleware-deep-grill-interview-podcast.mp3"></audio>
+</div>
+
+<p>15 道面试题，来自两次 Deep-Grill 实战记录。每题包含<strong>用户原始回答</strong>和<strong>参考答案</strong>，帮助理解常见错误和改进方向。建议先自测再看答案。</p>
+
+<div class="mermaid">
+mindmap
+  root((Middleware 面试))
+    面试官角度
+      概念与四大维度
+      Node vs Wrap 本质
+      执行顺序与洋葱模型
+      jump_to / can_jump_to
+      路由伪代码
+      ModelRequest 不可变性
+    架构师角度
+      Decorator vs Class
+      自定义 State Schema
+    代码审查者角度
+      can_jump_to 遗漏
+      GraphBubbleUp 吞掉
+      消息追加语义
+    故障排查者角度
+      Sync/Async 不匹配
+      静默跳转排障
+    技术讲师角度
+      费曼类比
+      最核心 insight
+</div>
+
+<!-- ============================================================ -->
+<div class="interview-section-header">
+  <span class="section-icon">🎯</span>
+  <span class="section-title">一、面试官角度</span>
+  <span class="section-desc">概念定义 + 原理追问 · Q1-Q7</span>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge interviewer">Q1</div>
+    <div class="qa-question-text">什么是 LangChain Middleware？它解决了什么问题？</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答</span>
+      middleware 是中间件；存在的原因是用于在 agent 调用前后、模型调用前后、工具调用前后以增加自定义逻辑来完善业务流程和增加 langchain 的可扩展性。例如在调用模型前需要对用户输入的内容进行特殊处理，模型输出时对于其中涉及敏感信息增加脱敏，工具调用失败在问题排查时增加日志。agent 前、后，模型调用前后、工具调用前后触发运行。
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <p>Middleware 是可配置的拦截层，在 Agent 执行流程的特定点位（模型调用前后、工具调用前后、Agent 开始/结束）插入自定义逻辑。它解决四大生产问题：</p>
+    <ol>
+    <li><strong>可靠性（Reliability）</strong>：重试、降级、错误恢复 — <code>ModelRetryMiddleware</code>、<code>ToolRetryMiddleware</code>、<code>ModelFallbackMiddleware</code></li>
+    <li><strong>安全性（Safety）</strong>：PII 检测、人工审批、护栏 — <code>PIIMiddleware</code>、<code>HumanInTheLoopMiddleware</code></li>
+    <li><strong>成本控制（Cost Control）</strong>：模型/工具调用限制、自动摘要 — <code>ModelCallLimitMiddleware</code>、<code>ToolCallLimitMiddleware</code>、<code>SummarizationMiddleware</code></li>
+    <li><strong>可观测性（Observability）</strong>：日志、追踪、自定义事件 — <code>runtime.stream_writer</code> + <code>trace_policy</code></li>
+    </ol>
+    <p>无中间件时，这些逻辑只能硬编码进 Agent 核心循环，与业务逻辑耦合、不可维护。中间件即 Agent 版 AOP（切面编程），把横切关注点从核心逻辑剥离。</p>
+    <div class="qa-key-point"><strong>核心 insight：</strong>中间件是 graph-native 的——hook 被编译成 LangGraph 的节点和边，不是独立的运行时层。每个 hook 都能访问 <code>AgentState</code> 与 <code>Runtime</code>。</div>
+  </div>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge interviewer">Q2</div>
+    <div class="qa-question-text"><span class="followup-label">追问</span>工具层面有哪些 hook？有 before_tool_call 和 after_tool_call 吗？</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答</span>
+      不存在，对应的是 wrap_tool_call，属于包裹式。
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <p><strong>没有</strong> <code>before_tool_call</code> / <code>after_tool_call</code> 这类 node-style hook。工具层面只有一个 wrap-style hook：<code>wrap_tool_call</code>（异步为 <code>awrap_tool_call</code>）。</p>
+    <table>
+    <tr><th>风格</th><th>Hook</th><th>数量</th></tr>
+    <tr><td>Node-style（观察者）</td><td><code>before_agent</code>、<code>before_model</code>、<code>after_model</code>、<code>after_agent</code></td><td>4 个</td></tr>
+    <tr><td>Wrap-style（拦截器）</td><td><code>wrap_model_call</code>、<code>wrap_tool_call</code></td><td>2 个</td></tr>
+    </table>
+    <div class="qa-key-point"><strong>易错点：</strong>很多人误以为工具调用也有 before/after hook，但源码 <code>types.py</code> 中只有 6 个 hook 方法签名。</div>
+  </div>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge interviewer">Q3</div>
+    <div class="qa-question-text">Node-style 和 Wrap-style hook 的本质区别是什么？</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答（首次，不准确）</span>
+      「最根本的区别是 node-style 只关注某一侧，要么调用前面，要么调用后；而 wrap-style 是调用前调用后都能处理。例如工具有时会调用超时，需要用 wrap_tool_call 增加重试逻辑。」
+      <br><br>
+      <span class="ua-label">追问：缓存命中场景 handler 调用次数？</span>
+      「对应 1。」
+      <br><br>
+      <span class="ua-label">用户回答（重考后，正确）</span>
+      「wrap-style 里有 handler，可以决定 handler 是否调用、调用几次；而 node-style 里没有。」
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <p><strong>Node-style = 观察者（Observer）</strong>：签名 <code>(state, runtime)</code>，只能看状态、改状态，不能控制核心操作是否发生、发生几次。</p>
+    <p><strong>Wrap-style = 拦截器（Interceptor）</strong>：签名 <code>(request, handler)</code>，多了一个 <code>handler</code> 回调。可以决定调用 handler <strong>0 次、1 次、N 次</strong>。</p>
+    <p><strong>判断标准：你是否需要控制 handler 被调用几次？</strong></p>
+    <div class="qa-key-point"><strong>易错点：</strong>缓存命中场景对应"0 次或 1 次"，不是单纯 1 次。缓存命中时不调用模型（handler 调 0 次），这才是必须用 wrap-style 的原因。</div>
+  </div>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge interviewer">Q4</div>
+    <div class="qa-question-text">middleware=[m1, m2, m3] 时，所有 hook 的执行顺序是什么？</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答</span>
+      before 按列表出现顺序执行；洋葱模型；after 按出现顺序逆序执行，原因是调用栈天然是 LIFO。m1 { m2 { m3 }}，m1 是最外层；最外层可以决定后面的中间件是否能被触发。
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <p><strong>最外层（m1）的三大特权：</strong></p>
+    <ol>
+    <li><strong>短路</strong>：可在调用 handler 前决定不触发内层，m2/m3 完全不执行</li>
+    <li><strong>看到最终结果</strong>：m1 的 handler(request) 返回整个内层链处理完的结果</li>
+    <li><strong>outer wins</strong>：多个中间件返回同一非 reducer 字段时，最外层值胜出</li>
+    </ol>
+    <div class="qa-key-point"><strong>顺序很关键：</strong>日志中间件必须放重试中间件外面，才能记录到每次重试。</div>
+  </div>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge interviewer">Q5</div>
+    <div class="qa-question-text">jump_to 是什么？为什么必须配合 can_jump_to？</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答</span>
+      jump_to 合法目标值有：end 跳转到结束节点、tools 跳转到工具调用、model 跳转到模型调用。必须配合 can_jump_to 的原因是编译时根据 can_jump_to 来生成相应节点的边。忘记声明 can_jump_to 时不会抛异常，是静默的，在编译时也不会生成相应的边。
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <p><code>jump_to</code> 是 <code>AgentState</code> 中的一个 key，可以重定向 agent 到：<code>'tools'</code>（工具节点）、<code>'model'</code>（模型节点）、<code>'end'</code>（结束）。</p>
+    <p><code>can_jump_to</code> 必须在编译时声明，因为 LangGraph 需要在编译时建好条件边。没有声明 → 图里无边 → <code>jump_to</code> <strong>静默失效</strong>。</p>
+    <p><code>jump_to</code> 是 <code>EphemeralValue</code>（临时值），每次 superstep 结束后自动重置为 <code>None</code>。</p>
+    <div class="qa-key-point"><strong>#1 自定义中间件 bug：</strong>静默失效是最高频的自定义中间件问题——无编译器警告、无 lint、无运行时错误，只是不生效。</div>
+  </div>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge interviewer">Q6</div>
+    <div class="qa-question-text">写出 Agent Loop 路由函数 should_continue 的伪代码</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答</span>
+      从 state 获取 jump_to 值：若 a==end 返回 "end"；若 a==tools 返回 "tools"；若 a==model 返回 "model"。然后获取最近一条消息，判断是否有 tool_calls 属性，有且不为空则返回 "tools" 触发工具调用，否则跳转结束节点。误以为有 next_node 是因为自然想到执行完一步后通过 next_node 明确下一步节点。
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <pre><code class="language-python">def should_continue(state: AgentState) -> str:
+    if state.get("jump_to") == "end":
+        return "end"
+    if state.get("jump_to") == "tools":
+        return "tools"
+    if state.get("jump_to") == "model":
+        return "model"
+
+    last_message = state["messages"][-1]
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        return "tools"
+    else:
+        return "end"</code></pre>
+    <p>路由只检查两个条件：(1) <code>jump_to</code>（中间件覆盖），(2) <code>messages[-1].tool_calls</code>（正常循环）。没有显式状态机、没有 <code>next_node</code> 字段。</p>
+    <div class="qa-key-point"><strong>循环迭代粒度：</strong>是"每次模型响应"而非"每个工具调用"。模型一次返回 3 个 tool_calls 会并行执行。</div>
+  </div>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge interviewer">Q7</div>
+    <div class="qa-question-text">为什么 ModelRequest 是不可变的？override() 性能开销是多少？</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答（首次，不准确）</span>
+      如果模型一次返回了多个 tool 它们是并发调用的，为此对于 ModelRequest 需要是不可变的，防止并发误写；override() 对于属性很多时是会存在很大的开销，根据属性的多少。赋值之后不会起作用，因为它是不可变的。
+      <br><br>
+      <span class="ua-label">用户回答（重考后，正确）</span>
+      中间件是可以组合的，特别是嵌套 m1{m2{m3}}，如果 ModelRequest 是可变的，那么嵌套到内部变更后，外层之前获取的 ModelRequest 就不一致。开销是 O(1)。在 python 语言的角度可以进行设值，但会有一个 warning 日志输出提示。
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <p><strong>不可变性的首要原因不是并发安全</strong>，而是<strong>中间件组合（nesting）的可预测性</strong>。如果可变，内层 m3 修改 request 会污染 m2 和 m1 看到的请求，造成隐藏耦合。</p>
+    <p><strong>性能开销：O(1)</strong>。底层用 <code>dataclasses.replace()</code>（源码第 267 行），只做浅拷贝——<code>messages</code> 列表共享引用不被深拷贝。</p>
+    <p><strong>直接赋值会怎样？</strong><code>ModelRequest</code> 没用 <code>frozen=True</code>，所以赋值会<strong>生效</strong>。但 <code>__setattr__</code> 会先发出 <code>DeprecationWarning</code>，然后照样执行。这是"约定优于配置"，不是语言层面强制不可变。</p>
+    <div class="qa-key-point"><strong>易错点：</strong>很多人把原因说成"并发安全"、把性能开销说成 O(n)，都错了。并发安全只是附带收益。</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<div class="interview-section-header">
+  <span class="section-icon">🏗️</span>
+  <span class="section-title">二、架构师角度</span>
+  <span class="section-desc">系统设计 + 选型对比 · Q8-Q9</span>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge architect">Q8</div>
+    <div class="qa-question-text">Decorator-based vs Class-based 创建方式：底层怎么工作？</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答（首次）</span>
+      不知道。
+      <br><br>
+      <span class="ua-label">用户回答（重考后）</span>
+      底层将装饰器所对应的方法动态地创建一个类。如果需要多个场景处理如 before_model + after_model，例如想限制调用模型次数，node-style 只能处理单场景。装饰器方式一个函数对应一个 hook，不能支持多场景，另外没有构造参数，只能获取全局和闭包内部的参数。
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <p><strong>装饰器方式真的创建了一个类。</strong><code>@before_model</code> 装饰器调用 <code>type()</code> 动态创建 <code>AgentMiddleware</code> 子类并立即实例化。装饰器不是魔法，只是帮你写了一个类。</p>
+    <p><strong>必须用类方式的场景：</strong>多个 hook 协同、需要 __init__ 构造参数、多 hook 共享状态、同时实现 sync+async。</p>
+    <div class="qa-key-point"><strong>选择原则：</strong>装饰器 → 单 hook、无配置、一次性使用；类 → 多 hook、共享状态、复杂配置、跨项目复用。</div>
+  </div>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge architect">Q9</div>
+    <div class="qa-question-text">设计一个中间件：计算模型调用次数，超过 10 次时终止 Agent。</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答（首次，有四个错误）</span>
+      State 未继承 AgentState；return 返回的是 str 而非 dict；after_model 原地修改了 state；用两个装饰器当多 hook 协同。
+      <br><br>
+      <span class="ua-label">用户回答（重考后，正确）</span>
+<pre><code>class CallLimitState(AgentState):
+    call_model_count: NotRequired[int]
+
+class CallLimitMiddleware(AgentMiddleware[CallLimitState]):
+    state_schema = CallLimitState
+
+    @hook_config(can_jump_to=["end"])
+    def before_model(self, state, runtime):
+        if state.get("call_model_count", 0) >= 10:
+            return {"jump_to": "end"}
+        return None
+
+    def after_model(self, state, runtime):
+        return {"call_model_count": state.get("call_model_count", 0) + 1}</code></pre>
+      「在自定义的 State 里通过 call_model_count 来更新的，在流转时会将最新的 state 传递到下一次的 before_model 中；中间件实例自身不会存储这个 count。」
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <p><strong>状态传递：</strong>中间件实例无状态，所有持久数据在 Graph State 中。after_model 返回 dict → 框架 merge 入 AgentState → 下一次 before_model 看到最新值。</p>
+    <div class="qa-key-point"><strong>常见错误：</strong>State 未继承 AgentState、返回值类型错误（返回 str 而非 dict）、原地修改 state（<code>state["xxx"] += 1</code>）、两个装饰器当多 hook 协同用。</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<div class="interview-section-header">
+  <span class="section-icon">🔍</span>
+  <span class="section-title">三、代码审查者角度</span>
+  <span class="section-desc">Bug 检测 + 最佳实践 · Q10-Q12</span>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge reviewer">Q10</div>
+    <div class="qa-question-text">以下中间件想阻止 agent 回复敏感内容，找 bug：</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答</span>
+      函数签名没有返回类型的定义；jump_to 应该在上面通过装饰器指定，并且缺少 can_jump_to。
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <pre><code class="language-python">@after_model
+def block_content(state, runtime):
+    last_msg = state["messages"][-1]
+    if "BLOCKED" in last_msg.content:
+        return {"messages": [AIMessage("I cannot respond.")], "jump_to": "end"}
+    return None</code></pre>
+    <p><strong>Bug 1：缺少 can_jump_to 声明。</strong>必须 <code>@after_model(can_jump_to=["end"])</code>。</p>
+    <p><strong>Bug 2：messages 是追加而非替换。</strong><code>add_messages</code> reducer 是追加语义，原敏感消息仍在历史中，用户会看到两条消息。</p>
+    <div class="qa-key-point"><strong>修复：</strong>添加 <code>can_jump_to=["end"]</code>，并意识到 <code>messages</code> 的追加语义。</div>
+  </div>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge reviewer">Q11</div>
+    <div class="qa-question-text">以下中间件想安全捕获工具异常，找 bug：</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答</span>
+      不能直接全量捕获 Exception，而应该先捕获 GraphBubbleUp。
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <pre><code class="language-python">@wrap_tool_call
+def safe_tool_handler(request, handler):
+    try:
+        return handler(request)
+    except Exception as e:
+        return ToolMessage(content=f"Tool failed: {e}",
+                           tool_call_id=request.tool_call["id"], status="error")</code></pre>
+    <p><strong>Bug 1：吞掉 GraphBubbleUp。</strong><code>except Exception</code> 会吞掉 LangGraph 的控制流信号。</p>
+    <p><strong>Bug 2：错误信息泄露敏感数据。</strong><code>{e}</code> 直接拼接原始异常消息，应改用 <code>type(e).__name__</code>。</p>
+    <pre><code class="language-python">from langgraph.errors import GraphBubbleUp
+
+@wrap_tool_call
+def safe_tool_handler(request, handler):
+    try:
+        return handler(request)
+    except GraphBubbleUp:       # 先放行控制流信号
+        raise
+    except Exception as e:
+        return ToolMessage(
+            content=f"Tool failed: {type(e).__name__}",
+            tool_call_id=request.tool_call["id"],
+            status="error",
+        )</code></pre>
+    <div class="qa-key-point"><strong>硬性要求：</strong>任何 wrap-style hook 中的 <code>except Exception</code> 必须显式 re-raise <code>GraphBubbleUp</code>。</div>
+  </div>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge reviewer">Q12</div>
+    <div class="qa-question-text"><span class="followup-label">追问</span>messages 用 add_messages reducer，替换 vs 追加？</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">追问：jump_to 生效了但消息是追加不是替换，用户会看到什么？</span>
+      「用户会看到敏感的内容。」
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <table>
+    <tr><th>字段类型</th><th>规则</th></tr>
+    <tr><td>非 reducer 字段</td><td><strong>outer wins</strong> — 最外层覆盖内层</td></tr>
+    <tr><td><code>messages</code>（<code>add_messages</code> reducer）</td><td><strong>追加</strong> — 所有层都保留</td></tr>
+    </table>
+    <div class="qa-key-point"><strong>安全影响：</strong>返回 <code>{"messages": [AIMessage("blocked")]}</code> 想替换敏感内容，但 <code>add_messages</code> 是追加语义，敏感消息仍在历史中。</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<div class="interview-section-header">
+  <span class="section-icon">🚨</span>
+  <span class="section-title">四、故障排查者角度</span>
+  <span class="section-desc">排查 + 调试 · Q13-Q14</span>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge incident">Q13</div>
+    <div class="qa-question-text">只有 async awrap_model_call，ainvoke() 正常，invoke() 报 NotImplementedError？</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答</span>
+      agent.invoke 默认调用 sync 同步方法，因为前面只实现了 async 异步的，没有 sync 实现，所以报 NotImplementedError；增加同步的实现方式。
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <p>基类 <code>AgentMiddleware.wrap_model_call</code> 默认抛 <code>NotImplementedError</code>。当只定义了 <code>awrap_model_call</code>（async）时，sync 路径无实现。</p>
+    <p><strong>三种修复：</strong>(1) 同时实现 sync+async；(2) 始终用异步路径；(3) 始终用同步路径。</p>
+    <div class="qa-key-point"><strong>诊断技巧：</strong>基类错误消息非常友好，会明确告诉你"你只定义了 async 版本却同步调用了"。</div>
+  </div>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge incident">Q14</div>
+    <div class="qa-question-text">返回 {"jump_to": "end"} 但 agent 继续执行。完整排障路径？</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答（首次，不完整）</span>
+      检查代码涉及 jump_to 的地方有无配置 can_jump_to 属性。
+      <br><br>
+      <span class="ua-label">用户回答（重考后，仍不完整）</span>
+      检查代码针对于有返回 jump_to 的地方是否有 can_jump_to 的属性配置；在对应的中间件里补充日志；检查 jump_to 的取值是否为 end, model, tools 三个中的一个。
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <p><strong>5 步排障路径，按优先级：</strong></p>
+    <ol>
+    <li><strong>can_jump_to 是否声明</strong>（90% 案例）</li>
+    <li><strong>jump_to 值拼写是否正确</strong>（静态检查，零成本）</li>
+    <li><strong>hook 是否真的在运行</strong>（加 print/日志）</li>
+    <li><strong>EphemeralValue 语义</strong>（jump_to 每次 superstep 后重置为 None）</li>
+    <li><strong>中间件顺序</strong>（后面 hook 可能覆盖你的 jump_to）</li>
+    </ol>
+    <div class="qa-key-point"><strong>排障思维：</strong>先零成本静态检查（can_jump_to、拼写），再加日志验证运行时，最后考虑运行时语义陷阱（EphemeralValue、顺序覆盖）。</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<div class="interview-section-header">
+  <span class="section-icon">📖</span>
+  <span class="section-title">五、技术讲师角度</span>
+  <span class="section-desc">费曼讲解 + 本质洞察 · Q15</span>
+</div>
+
+<div class="qa-card">
+  <div class="qa-header">
+    <div class="qa-badge instructor">Q15</div>
+    <div class="qa-question-text">用生活类比向新手解释中间件；如果只能教一个道理，教什么？</div>
+  </div>
+  <div class="qa-body">
+    <div class="qa-user-answer">
+      <span class="ua-label">用户回答</span>
+      坐火车时的安检。安检对应 before_agent；查票有点像 before_model；晚点改签 after_model；出站 after_agent。
+      <br><br>
+      <span class="ua-label">最核心 insight 追问</span>
+      「如果不改变执行流程就用 node-style；如果需要改变执行流程就用 wrap-style。」
+    </div>
+    <div class="qa-answer-label">参考答案</div>
+    <p><strong>火车出行类比：</strong></p>
+    <table>
+    <tr><th>生活场景</th><th>对应 hook</th><th>类型</th></tr>
+    <tr><td>进站安检</td><td><code>before_agent</code></td><td>观察者</td></tr>
+    <tr><td>上车查票</td><td><code>before_model</code></td><td>观察者</td></tr>
+    <tr><td>晚点改签/换乘</td><td><code>wrap_model_call</code></td><td>拦截器</td></tr>
+    <tr><td>乘务员巡查</td><td><code>after_model</code></td><td>观察者</td></tr>
+    <tr><td>到站出站</td><td><code>after_agent</code></td><td>观察者</td></tr>
+    </table>
+    <p><strong>最核心 insight：中间件是 graph-native 的。</strong>Hook 被编译成 LangGraph 的节点和边，不是独立的运行时层。所有其他概念都是这个本质的推论。</p>
+    <div class="qa-key-point"><strong>易错点：</strong>很多人把"改签"归到 <code>after_model</code>（观察者），但改签本质是控制执行，只有 wrap-style 拦截器能做到。很多人误以为中间件是"在 agent 外部运行的插件系统"。</div>
+  </div>
+</div>
+
+<div class="deep-grill-readiness">
+  <h4>Deep-Grill 就绪度 — 最终清单</h4>
+  <ul>
+    <li>☑ 能解释中间件是什么及四大生产维度（Q1）</li>
+    <li>☑ 能区分 node-style vs wrap-style hook 及选择标准（Q3）</li>
+    <li>☑ 能画出 3 个中间件的执行顺序图（Q4）</li>
+    <li>☑ 能解释 jump_to / can_jump_to 及静默失败陷阱（Q5）</li>
+    <li>☑ 能写出 should_continue 路由伪代码（Q6）</li>
+    <li>☑ 能解释 ModelRequest 不可变性设计理由（Q7）</li>
+    <li>☑ 能对比 Decorator vs Class 创建方式（Q8）</li>
+    <li>☑ 能写出多 hook 协同的自定义 State Schema（Q9）</li>
+    <li>☑ 能发现 can_jump_to 遗漏 bug（Q10）</li>
+    <li>☑ 能发现 GraphBubbleUp 被吞掉 bug（Q11）</li>
+    <li>☑ 能理解 messages 追加 vs 替换语义（Q12）</li>
+    <li>☑ 能诊断 sync/async 不匹配错误（Q13）</li>
+    <li>☑ 能提供静默跳转失败完整排障路径（Q14）</li>
+    <li>☑ 能用类比讲解 + 说出最核心 insight（Q15）</li>
+  </ul>
+</div>
+
+<div class="lesson-nav">
+  <a class="nav-prev" href="./0001-middleware-interview-l5.html">
+    <div class="nav-label">上一课</div>
+    <div class="nav-title">L5: 面试题库</div>
+  </a>
+  <a class="nav-next" href="../../../01-langchain/12-middleware/learning-records/deep-grill-session-20260906-191428.md">
+    <div class="nav-label">下一课</div>
+    <div class="nav-title">Deep-Grill 记录</div>
+  </a>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var au=document.getElementById('ppAudio'),btn=document.getElementById('ppBtn'),ip=document.getElementById('ppIconPlay'),pa=document.getElementById('ppIconPause'),cur=document.getElementById('ppCur'),dur=document.getElementById('ppDur'),bar=document.getElementById('ppBar'),fill=document.getElementById('ppFill'),err=document.getElementById('ppError');if(!au)return;function fmt(s){if(!isFinite(s))return'--:--';s=Math.floor(s);var m=Math.floor(s/60),x=s%60;return(m<10?'0':'')+m+':'+(x<10?'0':'')+x}function sync(){ip.style.display=au.paused?'':'none';pa.style.display=au.paused?'none':'';btn.classList.toggle('playing',!au.paused);btn.setAttribute('aria-label',au.paused?'播放播客':'暂停播客')}btn.addEventListener('click',function(){if(au.paused){au.play()}else{au.pause()}});au.addEventListener('loadedmetadata',function(){dur.textContent=fmt(au.duration)});au.addEventListener('timeupdate',function(){if(isFinite(au.duration)&&au.duration>0){fill.style.width=(au.currentTime/au.duration*100)+'%'}cur.textContent=fmt(au.currentTime)});au.addEventListener('play',sync);au.addEventListener('pause',sync);au.addEventListener('ended',function(){sync();au.currentTime=0;fill.style.width='0%'});au.addEventListener('error',function(){err.style.display='block'});bar.addEventListener('click',function(e){var r=bar.getBoundingClientRect(),p=(e.clientX-r.left)/r.width;if(isFinite(au.duration)){au.currentTime=p*au.duration}})})();
+(function(){
+  var toc=document.getElementById('toc');
+  var headers=document.querySelectorAll('.interview-section-header .section-title');
+  var links=[];
+  headers.forEach(function(h,i){
+    var id='section-'+i;
+    h.closest('.interview-section-header').id=id;
+    var a=document.createElement('a');
+    a.href='#'+id;
+    a.textContent=h.textContent;
+    a.className='toc-h2';
+    toc.appendChild(a);
+    links.push(a);
+  });
+  var bs=document.getElementById('backToTop');
+  window.addEventListener('scroll',function(){
+    if(window.scrollY>400)bs.classList.add('visible');
+    else bs.classList.remove('visible');
+    var scrollPos=window.scrollY+100;
+    links.forEach(function(a,i){
+      var sec=document.getElementById('section-'+i);
+      if(sec&&sec.offsetTop<=scrollPos&&(i===links.length-1||document.getElementById('section-'+(i+1)).offsetTop>scrollPos)){
+        links.forEach(function(l){l.classList.remove('active')});
+        a.classList.add('active');
+      }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -322,6 +322,459 @@ cursor_config 来自 tup.parent_config，包含具体 checkpoint_id。因此 get
 <tr><td><code>EncryptedSerializer</code></td><td>class</td><td>AES 加密序列化器</td><td>serde/encrypted.py</td></tr>
 </table>
 
+
+<!-- ==================== 新增：具体实现类深度剖析（Mermaid 流程图版） ==================== -->
+
+<h2>📌 <code>BaseCheckpointSaver</code> 常用实现类深度剖析</h2>
+
+<p><code>BaseCheckpointSaver</code> 作为抽象基类，在 LangGraph 生态中被多种具体实现所继承。这些实现覆盖了从开发测试到生产部署的全部场景，各自在存储后端、并发模型和数据持久化策略上有所不同。以下我们将从“类结构总览”、“核心数据结构”和“核心方法（含流程图）”三个维度，对最常用的几个实现类进行逐一剖析。</p>
+
+<h3>1. 实现类总览</h3>
+
+<p>下表对比了 LangGraph 官方提供的主要 <code>BaseCheckpointSaver</code> 实现类，以便你快速定位适合自身场景的方案：</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>实现类</th>
+      <th>存储后端</th>
+      <th>线程安全</th>
+      <th>适用场景</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>MemorySaver</code></td>
+      <td>进程内存（<code>dict</code>）</td>
+      <td>否（单进程）</td>
+      <td>单元测试、快速原型、临时会话</td>
+    </tr>
+    <tr>
+      <td><code>SqliteSaver</code></td>
+      <td>本地 SQLite 文件</td>
+      <td>是（内部锁）</td>
+      <td>轻量级 Demo、本地开发、单机应用</td>
+    </tr>
+    <tr>
+      <td><code>AsyncSqliteSaver</code></td>
+      <td>本地 SQLite 文件（异步驱动）</td>
+      <td>是</td>
+      <td>异步轻量级 Demo、异步单机应用</td>
+    </tr>
+    <tr>
+      <td><code>PostgresSaver</code></td>
+      <td>PostgreSQL（<code>psycopg2</code> 同步驱动）</td>
+      <td>是（连接池）</td>
+      <td>生产环境、多进程/多节点部署</td>
+    </tr>
+    <tr>
+      <td><code>AsyncPostgresSaver</code></td>
+      <td>PostgreSQL（<code>asyncpg</code> 异步驱动）</td>
+      <td>是</td>
+      <td>异步生产环境、高并发 Web 应用</td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h3>2. <code>MemorySaver</code>：内存存储</h3>
+
+<div class="tag tag-l4">L4 实现层</div>
+
+<h4>📐 类结构总览</h4>
+
+<p><code>MemorySaver</code> 直接继承自 <code>BaseCheckpointSaver</code>，是全部实现中最轻量、最简洁的一个。它不依赖任何外部存储系统，所有检查点数据均保存在进程内存的 Python 字典结构中。由于其数据并非持久化，进程重启后所有检查点即被清除，因此它被官方明确标记为适用于开发和测试环境。</p>
+
+<pre><code class="language-python">class MemorySaver(BaseCheckpointSaver):
+    """将检查点数据保存在内存字典中的同步实现。"""
+    storage: Dict[str, Dict[str, Dict[str, Any]]]</code></pre>
+
+<h4>🗂️ 核心数据结构</h4>
+
+<p><code>MemorySaver</code> 的核心数据存储是一个三层嵌套的 Python 字典，其结构如下：</p>
+
+<pre><code class="language-python">self.storage = {
+    "thread_id_1": {                      # 第一层：thread_id
+        "checkpoint_ns": {                # 第二层：checkpoint_namespace
+            "checkpoint_id_1": { ... },   # 第三层：checkpoint_id -> 完整的检查点数据
+            "checkpoint_id_2": { ... },
+        }
+    },
+    "thread_id_2": { ... }
+}</code></pre>
+
+<p>除了主存储 <code>storage</code> 之外，<code>MemorySaver</code> 通常还会配合一个 <code>writes</code> 字典来暂存每个检查点关联的待写入数据（pending writes），其结构设计与主存储类似，以 <code>thread_id</code> → <code>checkpoint_id</code> → <code>task_id</code> → <code>writes</code> 的方式组织。</p>
+
+<h4>⚙️ 核心方法（流程图）</h4>
+
+<p><code>put</code> 方法执行流程：</p>
+
+<pre class="mermaid">
+graph TD
+    A[开始 put] --> B[解析 config 获取 thread_id, checkpoint_ns, checkpoint_id]
+    B --> C[以 thread_id 为键获取或创建子字典]
+    C --> D[以 checkpoint_ns 为键获取或创建子字典]
+    D --> E[以 checkpoint_id 为键存入检查点数据]
+    E --> F[结束]
+</pre>
+
+<p><code>get_tuple</code> 方法执行流程：</p>
+
+<pre class="mermaid">
+graph TD
+    A["开始 get_tuple"] --> B["解析 config 获取 thread_id, checkpoint_ns, checkpoint_id"]
+    B --> C{"是否指定了 checkpoint_id?"}
+    C -->|是| D["直接从 storage[thread_id][checkpoint_ns] 中获取"]
+    C -->|否| E["从 storage[thread_id][checkpoint_ns] 中获取最新检查点"]
+    D --> F{"检查点是否存在?"}
+    E --> F
+    F -->|存在| G["封装为 CheckpointTuple 并返回"]
+    F -->|不存在| H["返回 None"]
+</pre>
+
+<p>其他方法如 <code>put_writes</code> 和 <code>list</code> 的操作逻辑类似，均基于内存字典的读写。</p>
+
+<hr>
+
+<h3>3. <code>SqliteSaver</code> / <code>AsyncSqliteSaver</code>：轻量级文件存储</h3>
+
+<div class="tag tag-l4">L4 实现层</div>
+
+<h4>📐 类结构总览</h4>
+
+<p><code>SqliteSaver</code> 和 <code>AsyncSqliteSaver</code> 分别提供了同步和异步两种 API，它们都继承自 <code>BaseCheckpointSaver</code>，并通过 Python 内置的 <code>sqlite3</code> 模块或 <code>aiosqlite</code> 驱动将检查点数据持久化到本地 SQLite 数据库文件中。SQLite 作为轻量级嵌入式数据库，无需独立部署，非常适合本地开发和轻量级单机应用。</p>
+
+<p>在类设计上，<code>SqliteSaver</code> 封装了一个 SQLite 数据库连接（<code>Connection</code> 对象），并通过内部锁机制（<code>threading.Lock</code>）确保多线程环境下的操作安全。而 <code>AsyncSqliteSaver</code> 则使用 <code>aiosqlite</code> 提供的异步连接，适用于异步程序。</p>
+
+<h4>🗂️ 核心数据结构</h4>
+
+<p><code>SqliteSaver</code> 在 SQLite 数据库中主要维护两张核心表，其表结构定义如下：</p>
+
+<pre><code class="language-sql">-- 检查点主表
+CREATE TABLE checkpoints (
+    thread_id     TEXT NOT NULL,
+    checkpoint_ns TEXT NOT NULL DEFAULT '',
+    checkpoint_id TEXT NOT NULL,
+    parent_id     TEXT,
+    type          TEXT,
+    checkpoint    BLOB,                   -- 序列化后的 Checkpoint 对象 (JSON 或 msgpack)
+    metadata      BLOB,                   -- 序列化后的元数据 (JSON 或 msgpack)
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
+);
+
+-- 检查点中间写入表
+CREATE TABLE checkpoint_writes (
+    thread_id     TEXT NOT NULL,
+    checkpoint_ns TEXT NOT NULL DEFAULT '',
+    checkpoint_id TEXT NOT NULL,
+    task_id       TEXT NOT NULL,
+    idx           INTEGER NOT NULL,
+    channel       TEXT,
+    type          TEXT,
+    value         BLOB,
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+);</code></pre>
+
+<h4>⚙️ 核心方法（流程图）</h4>
+
+<p><code>put</code> 方法执行流程（同步与异步逻辑相同）：</p>
+
+<pre class="mermaid">
+graph TD
+    A[开始 put] --> B[序列化 checkpoint 和 metadata 为 BLOB]
+    B --> C[获取数据库连接（同步锁 / 异步锁）]
+    C --> D[执行 INSERT OR REPLACE 语句写入 checkpoints 表]
+    D --> E[提交事务]
+    E --> F[释放连接锁]
+    F --> G[结束]
+</pre>
+
+<p><code>get_tuple</code> 方法执行流程：</p>
+
+<pre class="mermaid">
+graph TD
+    A[开始 get_tuple] --> B[解析 config 获取 thread_id, checkpoint_ns, checkpoint_id]
+    B --> C[获取数据库连接（同步锁 / 异步锁）]
+    C --> D[构建 SELECT 查询语句]
+    D --> E[执行查询]
+    E --> F{查询到结果?}
+    F -->|是| G[反序列化 BLOB 字段恢复 Checkpoint 对象]
+    G --> H[封装为 CheckpointTuple]
+    H --> I[释放连接锁]
+    I --> J[返回 CheckpointTuple]
+    F -->|否| K[释放连接锁]
+    K --> L[返回 None]
+</pre>
+
+<p><code>put_writes</code> 和 <code>list</code> 方法同样遵循“获取连接 → 执行 SQL → 提交/释放”的流程，区别在于具体的 SQL 语句和参数。</p>
+
+<hr>
+
+<h3>4. <code>PostgresSaver</code> / <code>AsyncPostgresSaver</code>：生产级持久化存储</h3>
+
+<div class="tag tag-l4">L4 实现层</div>
+
+<h4>📐 类结构总览</h4>
+
+<p><code>PostgresSaver</code> 与 <code>AsyncPostgresSaver</code> 是为生产环境设计的实现类，分别基于 <code>psycopg2</code>（同步）和 <code>asyncpg</code>（异步）驱动，将检查点数据持久化到 PostgreSQL 数据库中。相较于 SQLite，PostgreSQL 提供了更强大的并发控制、更丰富的数据类型（如 <code>JSONB</code>）以及更完善的连接池管理，能够很好地支撑多进程、多节点部署的高可用场景。</p>
+
+<h4>🗂️ 核心数据结构</h4>
+
+<p><code>PostgresSaver</code> 在 PostgreSQL 中维护的表结构与 SQLite 版本在逻辑上高度一致，但在实现细节上利用了 PostgreSQL 的能力进行了优化：</p>
+
+<pre><code class="language-sql">-- 检查点主表（使用 JSONB 存储序列化数据）
+CREATE TABLE checkpoints (
+    thread_id     TEXT NOT NULL,
+    checkpoint_ns TEXT NOT NULL DEFAULT '',
+    checkpoint_id TEXT NOT NULL,
+    parent_id     TEXT,
+    type          TEXT,
+    checkpoint    JSONB,                  -- 使用 JSONB，支持索引查询
+    metadata      JSONB,
+    created_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
+);
+
+-- 创建索引加速查询
+CREATE INDEX idx_checkpoints_thread_created ON checkpoints (thread_id, created_at DESC);
+
+-- 检查点中间写入表
+CREATE TABLE checkpoint_writes (
+    thread_id     TEXT NOT NULL,
+    checkpoint_ns TEXT NOT NULL DEFAULT '',
+    checkpoint_id TEXT NOT NULL,
+    task_id       TEXT NOT NULL,
+    idx           INTEGER NOT NULL,
+    channel       TEXT,
+    type          TEXT,
+    value         JSONB,
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+);</code></pre>
+
+<h4>⚙️ 核心方法（流程图）</h4>
+
+<p><code>put</code> 方法执行流程（利用 <code>ON CONFLICT</code> 实现 UPSERT）：</p>
+
+<pre class="mermaid">
+graph TD
+    A[开始 put] --> B[将 checkpoint 和 metadata 转换为 JSONB 格式]
+    B --> C[从连接池获取数据库连接]
+    C --> D[执行 INSERT ... ON CONFLICT DO UPDATE 语句]
+    D --> E[提交事务]
+    E --> F[释放连接回连接池]
+    F --> G[结束]
+</pre>
+
+<p><code>get_tuple</code> 方法执行流程：</p>
+
+<pre class="mermaid">
+graph TD
+    A[开始 get_tuple] --> B[解析 config 获取 thread_id, checkpoint_ns, checkpoint_id]
+    B --> C[从连接池获取连接]
+    C --> D[构建 SELECT 查询，利用 JSONB 操作符提取字段]
+    D --> E[执行查询]
+    E --> F{查询到结果?}
+    F -->|是| G[反序列化 JSONB 为 Checkpoint 对象]
+    G --> H[封装为 CheckpointTuple]
+    H --> I[释放连接回连接池]
+    I --> J[返回 CheckpointTuple]
+    F -->|否| K[释放连接回连接池]
+    K --> L[返回 None]
+</pre>
+
+<p>得益于 PostgreSQL 的事务隔离级别和连接池，<code>PostgresSaver</code> 的 <code>put_writes</code> 和 <code>list</code> 方法能够高效地处理并发写入和大量数据的列表查询。</p>
+
+<hr>
+
+<h3>5. 扩展实现与自定义开发</h3>
+
+<p>除了上述官方实现外，社区还提供了针对 <strong>MongoDB</strong>、<strong>Redis</strong>、<strong>Snowflake</strong> 等存储后端的 Checkpointer 扩展包。这些实现同样遵循 <code>BaseCheckpointSaver</code> 接口规范，只是在核心数据结构（如 MongoDB 的 Collection、Redis 的 Hash）和核心方法（利用各数据库特有的原子操作和查询语法）上有所差异。</p>
+
+<p>如果你需要接入自有的存储系统，可以通过继承 <code>BaseCheckpointSaver</code> 并实现以下核心方法来完成自定义开发：</p>
+
+<ul>
+  <li><code>put</code> / <code>aput</code>：存储检查点及其配置和元数据。</li>
+  <li><code>put_writes</code> / <code>aput_writes</code>：存储与检查点关联的中间写入。</li>
+  <li><code>get_tuple</code> / <code>aget_tuple</code>：检索一个检查点及其元数据。</li>
+  <li><code>list</code> / <code>alist</code>：列出符合条件的一系列检查点。</li>
+</ul>
+
+<p>在异步场景下，优先实现 <code>a</code> 前缀的异步方法，可以显著提升 I/O 密集场景下的吞吐性能。</p>
+
+<p style="margin-top: 1.5em; padding: 0.8em 1.2em; background: #f8f9fa; border-left: 4px solid #ea6f5a; border-radius: 4px;">
+<strong>💡 总结</strong>：<code>MemorySaver</code> 适合开发和测试；<code>SqliteSaver</code>/<code>AsyncSqliteSaver</code> 适合本地轻量级持久化；<code>PostgresSaver</code>/<code>AsyncPostgresSaver</code> 则是生产环境的首选。理解和掌握这些实现类的内部结构和方法，是深度定制 LangGraph Checkpointer 机制的基础。
+</p>
+
+<!-- ==================== 新增内容结束 ==================== -->
+
+
+<!-- ==================== 新增：各实现类代码示例 ==================== -->
+
+<h3 style="margin-top: 2em;">💻 各实现类代码示例</h3>
+
+<p>以下示例演示了如何使用不同的 <code>BaseCheckpointSaver</code> 实现类来编译一个带有检查点功能的 LangGraph 图。所有示例均基于一个简单的 <code>StateGraph</code> 构建，但核心差异在于 <code>checkpointer</code> 的实例化方式。</p>
+
+<hr>
+
+<h4>🧪 <code>MemorySaver</code> 代码示例</h4>
+
+<p>适用于开发测试环境，无需任何外部依赖：</p>
+
+<pre><code class="language-python">from langgraph.graph import StateGraph, MessagesState
+from langgraph.checkpoint.memory import MemorySaver
+
+# 1. 构建状态图
+builder = StateGraph(MessagesState)
+# ... 添加节点 (add_node) 和边 (add_edge) ...
+
+# 2. 实例化内存检查点保存器
+checkpointer = MemorySaver()
+
+# 3. 编译图，传入 checkpointer
+graph = builder.compile(checkpointer=checkpointer)
+
+# 4. 调用图时，需在 config 中指定 thread_id
+config = {"configurable": {"thread_id": "test-thread-1"}}
+result = graph.invoke({"messages": [("user", "你好")]}, config=config)
+
+# 可通过不同的 thread_id 实现多会话隔离
+config_2 = {"configurable": {"thread_id": "test-thread-2"}}
+result_2 = graph.invoke({"messages": [("user", "另一个会话")]}, config=config_2)</code></pre>
+
+<hr>
+
+<h4>🗄️ <code>SqliteSaver</code> 代码示例（同步）</h4>
+
+<p>适用于本地轻量级持久化，数据存储在 SQLite 文件中：</p>
+
+<pre><code class="language-python">import sqlite3
+from langgraph.graph import StateGraph, MessagesState
+from langgraph.checkpoint.sqlite import SqliteSaver
+
+# 1. 创建 SQLite 数据库连接
+# check_same_thread=False 配合内部锁机制确保多线程安全
+conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
+
+# 2. 实例化 SqliteSaver
+checkpointer = SqliteSaver(conn)
+
+# 3. 构建并编译图
+builder = StateGraph(MessagesState)
+# ... 添加节点和边 ...
+graph = builder.compile(checkpointer=checkpointer)
+
+# 4. 使用（与 MemorySaver 完全一致）
+config = {"configurable": {"thread_id": "sqlite-thread-1"}}
+result = graph.invoke({"messages": [("user", "持久化存储测试")]}, config=config)
+
+# 注意：程序退出后，数据仍然保留在 checkpoints.db 文件中
+# 重新运行程序并指定相同的 thread_id 可恢复历史状态</code></pre>
+
+<h4>🗄️ <code>AsyncSqliteSaver</code> 代码示例（异步）</h4>
+
+<p>适用于异步应用的轻量级持久化：</p>
+
+<pre><code class="language-python">import asyncio
+from langgraph.graph import StateGraph, MessagesState
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+async def main():
+    # 1. 使用异步上下文管理器创建 AsyncSqliteSaver
+    async with AsyncSqliteSaver.from_conn_string("async_checkpoints.db") as checkpointer:
+        # 2. 构建并编译图
+        builder = StateGraph(MessagesState)
+        # ... 添加节点和边 ...
+        graph = builder.compile(checkpointer=checkpointer)
+
+        # 3. 异步调用（使用 ainvoke）
+        config = {"configurable": {"thread_id": "async-sqlite-thread-1"}}
+        result = await graph.ainvoke({"messages": [("user", "异步 SQLite 测试")]}, config=config)
+        print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())</code></pre>
+
+<hr>
+
+<h4>🐘 <code>PostgresSaver</code> 代码示例（同步）</h4>
+
+<p>适用于生产环境，使用 PostgreSQL 作为后端存储：</p>
+
+<pre><code class="language-python">from langgraph.graph import StateGraph, MessagesState
+from langgraph.checkpoint.postgres import PostgresSaver
+
+# PostgreSQL 连接字符串
+DB_CONN_STRING = "postgresql://username:password@localhost:5432/langgraph_db"
+
+# 1. 使用上下文管理器创建 PostgresSaver
+with PostgresSaver.from_conn_string(DB_CONN_STRING) as checkpointer:
+    # 2. 首次使用需执行 setup() 创建表
+    checkpointer.setup()
+
+    # 3. 构建并编译图
+    builder = StateGraph(MessagesState)
+    # ... 添加节点和边 ...
+    graph = builder.compile(checkpointer=checkpointer)
+
+    # 4. 使用
+    config = {"configurable": {"thread_id": "postgres-thread-1"}}
+    result = graph.invoke({"messages": [("user", "PostgreSQL 生产环境测试")]}, config=config)
+    print(result)
+
+# 注意：程序退出后，连接自动关闭，数据持久化在 PostgreSQL 中</code></pre>
+
+<h4>🐘 <code>AsyncPostgresSaver</code> 代码示例（异步）</h4>
+
+<p>适用于高并发异步生产环境：</p>
+
+<pre><code class="language-python">import asyncio
+from langgraph.graph import StateGraph, MessagesState
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+DB_CONN_STRING = "postgresql://username:password@localhost:5432/langgraph_db"
+
+async def main():
+    # 1. 使用异步上下文管理器创建 AsyncPostgresSaver
+    async with AsyncPostgresSaver.from_conn_string(DB_CONN_STRING) as checkpointer:
+        # 2. 异步执行 setup（创建表）
+        await checkpointer.setup()
+
+        # 3. 构建并编译图
+        builder = StateGraph(MessagesState)
+        # ... 添加节点和边 ...
+        graph = builder.compile(checkpointer=checkpointer)
+
+        # 4. 异步调用
+        config = {"configurable": {"thread_id": "async-postgres-thread-1"}}
+        result = await graph.ainvoke({"messages": [("user", "异步 PostgreSQL 测试")]}, config=config)
+        print(result)
+
+if __name__ == "__main__":
+    asyncio.run(main())</code></pre>
+
+<hr>
+
+<h4>📦 通用使用模式总结</h4>
+
+<p>无论选择哪种 Checkpointer，其使用模式都是统一的：</p>
+
+<pre><code class="language-python"># 1. 实例化 checkpointer（根据场景选择具体实现）
+checkpointer = MemorySaver()  # 或其他实现
+
+# 2. 编译图时传入
+graph = builder.compile(checkpointer=checkpointer)
+
+# 3. 调用时携带 thread_id
+config = {"configurable": {"thread_id": "your-unique-thread-id"}}
+graph.invoke(input, config=config)
+
+# 4. 恢复历史状态（只需使用相同的 thread_id 即可自动恢复）
+graph.invoke(new_input, config=config)  # 自动从上次中断处继续</code></pre>
+
+<!-- ==================== 新增内容结束 ==================== -->
+
 <div class="deep-grill-readiness">
 <h4>本课 Deep-Grill 就绪度</h4>
 <ul>

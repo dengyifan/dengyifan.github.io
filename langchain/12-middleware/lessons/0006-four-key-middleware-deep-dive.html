@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LangChain 四大中间件深度掌握 — PII · HumanInTheLoop · TodoList · ContextEditing</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+  <style>
+    :root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-hover:#ec6149;--accent-blue:#3194d0;--accent-blue-hover:#187cb7;--accent-light:#fef0f0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--green-bg:#e8f5e9;--orange:#f5a623;--orange-bg:#fff8e1;--red:#e74c3c;--red-bg:#fdf2f2;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace;--content-width:1020px;--toc-width:220px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-0.5px}.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}.layout{display:flex;justify-content:center;margin-top:56px;padding:0 16px;min-height:100vh}.toc-sidebar{position:fixed;left:calc(50% - var(--content-width)/2 - var(--toc-width) - 40px);top:96px;width:var(--toc-width);max-height:calc(100vh - 140px);overflow-y:auto;z-index:100;font-family:var(--font-sans);font-size:13px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);padding:16px 0;box-shadow:0 1px 3px rgba(0,0,0,0.04)}.toc-sidebar::-webkit-scrollbar{width:3px}.toc-sidebar::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}.toc-title{padding:0 16px 12px;font-size:13px;font-weight:700;color:var(--text);border-bottom:1px solid var(--border);margin-bottom:8px;letter-spacing:0.5px}.toc-sidebar a{display:block;padding:5px 16px;color:var(--text-muted);text-decoration:none;border-left:2px solid transparent;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.toc-sidebar a:hover{color:var(--accent);background:#fafafa;border-left-color:var(--border-light)}.toc-sidebar a.active{color:var(--accent);font-weight:600;border-left-color:var(--accent);background:var(--accent-light)}.toc-sidebar a.toc-h2{padding-left:16px}.toc-sidebar a.toc-h3{padding-left:28px;font-size:12px}@media(max-width:1200px){.toc-sidebar{display:none}}.content{width:100%;max-width:var(--content-width);padding:32px 0 80px;margin-left:0}.article-header{background:var(--card-bg);border-radius:4px;padding:36px 40px 28px;margin-bottom:16px;border-bottom:1px solid var(--border)}.article-header h1{font-size:30px;font-weight:700;line-height:1.4;color:var(--text);font-family:var(--font-sans);margin-bottom:16px}.article-meta{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:20px;flex-wrap:wrap}.article-body{background:var(--card-bg);border-radius:4px;padding:32px 40px 48px}.article-body h2{font-size:22px;font-weight:700;margin:40px 0 16px;font-family:var(--font-sans);padding-bottom:8px;border-bottom:1px solid var(--border);color:var(--text)}.article-body h2:first-child{margin-top:0}.article-body h3{font-size:18px;font-weight:600;margin:28px 0 12px;font-family:var(--font-sans);color:#333}.article-body p{margin:14px 0;text-align:justify}.article-body a{color:var(--accent);text-decoration:none}.article-body a:hover{text-decoration:underline}.article-body strong{font-weight:700;color:#222}code{font-family:var(--font-mono);font-size:0.88em;background:var(--code-bg);padding:2px 6px;border-radius:3px;color:#c7254e}pre{font-family:var(--font-mono);font-size:13px;background:#282c34;color:#abb2bf;padding:18px 22px;border-radius:6px;overflow-x:auto;margin:18px 0;line-height:1.6}pre code{background:transparent;color:inherit;padding:0;font-size:inherit}blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid var(--accent);background:#fafafa;color:#555;font-size:0.95em}table{border-collapse:collapse;width:100%;margin:18px 0;font-size:14px;font-family:var(--font-sans)}th,td{border:1px solid var(--border);padding:10px 14px;text-align:left}th{background:#fafafa;font-weight:600;color:#333;font-size:13px}tr:hover{background:#fafafa}.note,.warning,.tip,.info{border-left:4px solid;margin:1rem 0;padding:12px 16px;border-radius:0 6px 6px 0;font-size:0.95em}.note{border-color:var(--accent-blue);background:#f0f7fd}.warning{border-color:var(--orange);background:var(--orange-bg)}.tip{border-color:var(--green);background:var(--green-bg)}.note-title,.warning-title,.tip-title{font-weight:700;margin-bottom:0.3rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.note-title{color:var(--accent-blue)}.warning-title{color:var(--orange)}.tip-title{color:var(--green)}.deep-grill-readiness{background:#f5f5f5;border:1px solid var(--border);border-radius:6px;padding:1rem 1.5rem;margin:2rem 0 1rem;font-size:0.95em}.deep-grill-readiness h4{margin-top:0;color:var(--text);font-family:var(--font-sans)}.deep-grill-readiness ul{list-style:none;margin-left:0}.deep-grill-readiness li{padding:0.25rem 0;color:var(--text-muted)}.deep-grill-readiness li.done{color:var(--text)}.deep-grill-readiness li.done::before{content:"☑ ";color:#5cb85c}.deep-grill-readiness li::before{content:"☐ ";color:var(--text-muted)}.mermaid{display:flex;justify-content:center;background:#fafafa;border:1px solid var(--border);border-radius:8px;padding:24px;margin:20px 0;overflow-x:auto}.page-nav{display:flex;justify-content:space-between;margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border);font-size:0.95em}.page-nav a{color:var(--accent)}.back-to-top{position:fixed;bottom:40px;right:40px;width:44px;height:44px;background:#fff;border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--text-muted);box-shadow:0 2px 8px rgba(0,0,0,0.08);transition:all 0.2s;z-index:999;opacity:0;transform:translateY(10px);pointer-events:none}.back-to-top.visible{opacity:1;transform:translateY(0);pointer-events:auto}.back-to-top:hover{color:var(--accent);border-color:var(--accent)}@media(max-width:600px){.article-header{padding:24px 20px 20px}.article-header h1{font-size:22px}.article-body{padding:20px 20px 32px}.article-body h2{font-size:19px}.article-body h3{font-size:16px}body{font-size:16px}}
+
+    /* ============================================ */
+    /* 简书风格 全局变量                              */
+    /* ============================================ */
+    :root {
+      --bg: #f9f9f9;
+      --card-bg: #fff;
+      --text: #2f2f2f;
+      --text-secondary: #666;
+      --text-muted: #999;
+      --accent: #ea6f5a;
+      --accent-hover: #ec6149;
+      --accent-light: #fef0f0;
+      --border: #f0f0f0;
+      --border-light: #e8e8e8;
+      --code-bg: #f7f7f7;
+      --green: #42c02e;
+      --green-bg: #e8f5e9;
+      --orange: #f5a623;
+      --orange-bg: #fff8e1;
+      --red: #e74c3c;
+      --red-bg: #fdf2f2;
+      --font-serif: "Noto Serif SC", "Source Han Serif SC", "STSong", "Songti SC", "SimSun", serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+      --font-mono: "SF Mono", "Fira Code", "Consolas", "Menlo", monospace;
+      --content-width: 1020px;
+      --toc-width: 220px;
+    }
+
+    /* ============================================ */
+    /* 全局重置                                      */
+    /* ============================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-serif);
+      font-size: 17px;
+      line-height: 1.8;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    /* ============================================ */
+    /* 顶部导航栏（简书风格）                          */
+    /* ============================================ */
+    .top-nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      height: 56px;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px;
+    }
+    .top-nav .logo {
+      font-size: 22px; font-weight: 700; color: var(--accent);
+      font-family: var(--font-sans);
+      letter-spacing: -0.5px;
+    }
+    .top-nav .logo span { color: var(--text); font-weight: 400; font-size: 14px; margin-left: 8px; }
+
+    /* ============================================ */
+    /* 主布局：左侧 TOC + 中间内容                     */
+    /* ============================================ */
+    .layout {
+      display: flex; justify-content: center;
+      margin-top: 56px;
+      padding: 0 16px;
+      min-height: 100vh;
+    }
+
+    /* ============================================ */
+    /* 左侧悬浮目录（TOC）                             */
+    /* ============================================ */
+    .toc-sidebar {
+      position: fixed;
+      left: calc(50% - var(--content-width) / 2 - var(--toc-width) - 40px);
+      top: 96px;
+      width: var(--toc-width);
+      max-height: calc(100vh - 140px);
+      overflow-y: auto;
+      z-index: 100;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      background: var(--card-bg);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      padding: 16px 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .toc-sidebar::-webkit-scrollbar { width: 3px; }
+    .toc-sidebar::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+
+    .toc-title {
+      padding: 0 16px 12px;
+      font-size: 13px; font-weight: 700; color: var(--text);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
+    .toc-sidebar a {
+      display: block;
+      padding: 5px 16px;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      transition: all 0.15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .toc-sidebar a:hover {
+      color: var(--accent);
+      background: #fafafa;
+      border-left-color: var(--border-light);
+    }
+    .toc-sidebar a.active {
+      color: var(--accent);
+      font-weight: 600;
+      border-left-color: var(--accent);
+      background: var(--accent-light);
+    }
+    .toc-sidebar a.toc-h2 { padding-left: 16px; }
+    .toc-sidebar a.toc-h3 { padding-left: 28px; font-size: 12px; }
+
+    /* 移动端隐藏 TOC */
+    @media (max-width: 1200px) {
+      .toc-sidebar { display: none; }
+    }
+
+    /* ============================================ */
+    /* 内容主体区域                                   */
+    /* ============================================ */
+    .content {
+      width: 100%;
+      max-width: var(--content-width);
+      padding: 32px 0 80px;
+      margin-left: 0;
+    }
+
+    @media (min-width: 1201px) {
+      .content { margin-left: 0; }
+    }
+
+    /* ============================================ */
+    /* 文章头部（简书风格）                             */
+    /* ============================================ */
+    .article-header {
+      background: var(--card-bg);
+      border-radius: 4px;
+      padding: 36px 40px 28px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .article-header h1 {
+      font-size: 30px;
+      font-weight: 700;
+      line-height: 1.4;
+      color: var(--text);
+      font-family: var(--font-sans);
+      margin-bottom: 16px;
+    }
+    .article-meta {
+      font-size: 13px; color: var(--text-muted);
+      font-family: var(--font-sans);
+      display: flex; gap: 20px; flex-wrap: wrap;
+    }
+    .article-meta span { display: flex; align-items: center; gap: 4px; }
+
+    /* ============================================ */
+    /* 文章主体卡片                                   */
+    /* ============================================ */
+    .article-body {
+      background: var(--card-bg);
+      border-radius: 4px;
+      padding: 32px 40px 48px;
+    }
+
+    /* ============================================ */
+    /* 排版                                          */
+    /* ============================================ */
+    .article-body h2 {
+      font-size: 22px; font-weight: 700; margin: 40px 0 16px;
+      font-family: var(--font-sans);
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    .article-body h2:first-child { margin-top: 0; }
+
+    .article-body h3 {
+      font-size: 18px; font-weight: 600; margin: 28px 0 12px;
+      font-family: var(--font-sans);
+      color: #333;
+    }
+
+    .article-body p { margin: 14px 0; text-align: justify; }
+
+    .article-body a { color: var(--accent); text-decoration: none; }
+    .article-body a:hover { text-decoration: underline; }
+
+    .article-body strong { font-weight: 700; color: #222; }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.88em;
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #c7254e;
+    }
+
+    pre {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      background: #282c34;
+      color: #abb2bf;
+      padding: 18px 22px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 18px 0;
+      line-height: 1.6;
+    }
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      font-size: inherit;
+    }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 12px 18px;
+      border-left: 4px solid var(--accent);
+      background: #fafafa;
+      color: #555;
+      font-size: 0.95em;
+    }
+
+    /* ============================================ */
+    /* 表格                                          */
+    /* ============================================ */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 18px 0;
+      font-size: 14px;
+      font-family: var(--font-sans);
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      text-align: left;
+    }
+    th {
+      background: #fafafa;
+      font-weight: 600;
+      color: #333;
+      font-size: 13px;
+    }
+    tr:hover { background: #fafafa; }
+
+    /* ============================================ */
+    /* 特殊组件                                      */
+    /* ============================================ */
+    .why-chain {
+      margin: 18px 0;
+      font-family: var(--font-sans);
+    }
+    .wc-level {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 6px 6px 0;
+      padding: 12px 16px;
+      margin: 0 0 0 0;
+    }
+    .wc-level:nth-child(1) { margin-left: 0; }
+    .wc-q {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.95em;
+      margin-bottom: 4px;
+    }
+    .wc-a {
+      color: var(--text);
+      font-size: 0.92em;
+      line-height: 1.7;
+    }
+    .wc-arrow {
+      text-align: left;
+      color: var(--text-muted);
+      font-size: 14px;
+      padding: 2px 0 2px 18px;
+      margin: 2px 0;
+      line-height: 1.4;
+    }
+    .wc-root {
+      background: var(--accent-light);
+      border: 1px solid #f5c6c6;
+      border-radius: 6px;
+      padding: 14px 18px;
+      margin-top: 6px;
+      font-size: 0.95em;
+      line-height: 1.8;
+    }
+    .wc-root .wc-root-label {
+      color: #c62828;
+      font-weight: 700;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .misconception {
+      background: var(--red-bg);
+      border: 1px solid #f5c6c6;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 10px 0;
+      font-size: 0.95em;
+    }
+    .misconception strong { color: #c62828; }
+
+    .return-block {
+      background: var(--orange-bg);
+      border: 1px solid #f0e68c;
+      border-radius: 6px;
+      padding: 14px 18px;
+      margin: 16px 0;
+      font-size: 0.95em;
+    }
+
+    .tip {
+      background: var(--green-bg);
+      border: 1px solid #b7e4b0;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 14px 0;
+      font-size: 0.95em;
+    }
+    .tip strong { color: var(--green); }
+
+    .warn {
+      background: var(--orange-bg);
+      border: 1px solid #f5c6a0;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 14px 0;
+      font-size: 0.95em;
+    }
+    .warn strong { color: var(--orange); }
+
+    .flow {
+      background: #f4f6f9;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 18px 22px;
+      margin: 18px 0;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      white-space: pre;
+      line-height: 1.7;
+      overflow-x: auto;
+    }
+
+    /* Mermaid 图表容器 */
+    .mermaid {
+      display: flex;
+      justify-content: center;
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 20px 0;
+      overflow-x: auto;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 18px 0;
+    }
+    .comparison > div {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+    }
+    .comparison h4 { margin-top: 0; font-size: 15px; font-family: var(--font-sans); }
+    @media (max-width: 600px) { .comparison { grid-template-columns: 1fr; } }
+
+    .broad-compare {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+    .broad-compare > div {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      font-size: 0.92em;
+    }
+    .broad-compare h4 { margin-top: 0; font-size: 14px; font-family: var(--font-sans); }
+
+    .interview-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 14px 0; }
+    .interview-item {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-family: var(--font-sans);
+    }
+    .interview-item .role {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 12px;
+      margin-right: 6px;
+    }
+
+    /* ============================================ */
+    /* Quiz 组件                                     */
+    /* ============================================ */
+    .quiz {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px;
+      margin: 20px 0;
+      font-family: var(--font-sans);
+    }
+    .quiz h3 { margin-top: 0; font-size: 16px; }
+    .quiz label {
+      display: block;
+      padding: 8px 12px;
+      margin: 4px 0;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-size: 14px;
+    }
+    .quiz label:hover { background: var(--accent-light); }
+    .quiz input[type="radio"] { margin-right: 8px; }
+    .quiz button {
+      margin-top: 12px;
+      padding: 8px 24px;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.2s;
+      font-family: var(--font-sans);
+    }
+    .quiz button:hover { background: var(--accent-hover); }
+    .quiz .feedback {
+      margin-top: 10px;
+      padding: 10px 14px;
+      border-radius: 4px;
+      font-size: 13px;
+      display: none;
+    }
+    .quiz .feedback.correct { display: block; background: var(--green-bg); color: #2e7d32; }
+    .quiz .feedback.wrong { display: block; background: var(--red-bg); color: #c62828; }
+
+    /* ============================================ */
+    /* details / summary                             */
+    /* ============================================ */
+    details { margin: 14px 0; }
+    details summary {
+      cursor: pointer;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.95em;
+      font-family: var(--font-sans);
+    }
+    details[open] summary { margin-bottom: 10px; }
+    details[open] { background: #fafafa; padding: 12px 16px; border-radius: 6px; border: 1px solid var(--border); }
+
+    /* ============================================ */
+    /* 底部                                          */
+    /* ============================================ */
+    .footer {
+      margin-top: 48px;
+      padding: 24px 0 0;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+    }
+    .footer p { margin: 4px 0; }
+
+    /* ============================================ */
+    /* 回到顶部                                      */
+    /* ============================================ */
+    .back-to-top {
+      position: fixed;
+      bottom: 40px;
+      right: 40px;
+      width: 44px; height: 44px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 20px;
+      color: var(--text-muted);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      transition: all 0.2s;
+      z-index: 999;
+      opacity: 0; transform: translateY(10px);
+      pointer-events: none;
+    }
+    .back-to-top.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .back-to-top:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* ============================================ */
+    /* 响应式                                        */
+    /* ============================================ */
+    @media (max-width: 600px) {
+      .article-header { padding: 24px 20px 20px; }
+      .article-header h1 { font-size: 22px; }
+      .article-body { padding: 20px 20px 32px; }
+      .article-body h2 { font-size: 19px; }
+      .article-body h3 { font-size: 16px; }
+      body { font-size: 16px; }
+      .back-to-top { right: 16px; bottom: 24px; }
+    }
+
+    /* ============================================ */
+    /* 播客播放器（Podcast Player）                    */
+    /* ============================================ */
+    .podcast-player { display: flex; align-items: center; gap: 16px; background: linear-gradient(135deg,#fef6f2,#fff); border: 1px solid #f5d5c8; border-radius: 12px; padding: 18px 22px; margin: 0 0 24px; font-family: var(--font-sans); box-shadow: 0 2px 10px rgba(234,111,90,0.06); }
+    .pp-btn { flex: none; width: 52px; height: 52px; border-radius: 50%; border: none; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s, transform 0.15s; box-shadow: 0 3px 10px rgba(234,111,90,0.35); position: relative; }
+    .pp-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
+    .pp-btn.playing::after { content: ""; position: absolute; width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--accent); animation: pp-pulse 1.6s ease-out infinite; }
+    @keyframes pp-pulse { 0% { transform: scale(1); opacity: 0.7 } 100% { transform: scale(1.45); opacity: 0 } }
+    .pp-main { flex: 1; min-width: 0; }
+    .pp-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pp-badge { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-light); border: 1px solid #f5d5c8; padding: 1px 8px; border-radius: 10px; }
+    .pp-bar-wrap { display: flex; align-items: center; gap: 10px; }
+    .pp-time { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; flex: none; min-width: 38px; }
+    .pp-bar { flex: 1; height: 6px; background: #f0ddd3; border-radius: 3px; cursor: pointer; position: relative; }
+    .pp-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: var(--accent); border-radius: 3px; transition: width 0.1s linear; }
+    .pp-bar-fill::after { content: ""; position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.15s; }
+    .pp-bar:hover .pp-bar-fill::after { opacity: 1; }
+    .pp-error { font-size: 12px; color: var(--red); margin-top: 6px; display: none; }
+    @media (max-width: 600px) {
+      .podcast-player { padding: 14px 16px; gap: 12px; }
+      .pp-btn { width: 44px; height: 44px; }
+      .pp-btn.playing::after { width: 44px; height: 44px; }
+    }
+
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep&#8203;Mastery <span>/ 四大中间件深度掌握</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>LangChain 四大中间件深度掌握</h1>
+      <div class="article-meta"><span>Layer: L3 Source</span><span>阅读时间: 35 min</span><span>Source: langchain 1.3.14</span><span>中文</span></div>
+    </div>
+    <div class="article-body">
+
+<!-- 播客播放器 -->
+<div class="podcast-player">
+  <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+    <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+    <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+  </button>
+  <div class="pp-main">
+    <div class="pp-title">本期播客 · 双人对谈：摘要机制深度解析——"先总结、再替换" <span class="pp-badge">女声 × 男声</span></div>
+    <div class="pp-bar-wrap">
+      <span class="pp-time" id="ppCur">00:00</span>
+      <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+      <span class="pp-time" id="ppDur">--:--</span>
+    </div>
+    <div class="pp-error" id="ppError">音频加载失败，请确认 0005-summarization-middleware-deep-dive.mp3 与本页面在同一目录。</div>
+  </div>
+  <audio id="ppAudio" preload="metadata" src="./0006-four-key-middleware-deep-dive.mp3"></audio>
+</div>
+
+
+<p>目标：源码级原理 + 面试级掌握。四大中间件共享 <code>BaseMiddleware</code> 钩子体系（<code>before_model</code> / <code>after_model</code> / <code>wrap_model_call</code> / <code>wrap_tool_call</code>）。</p>
+
+<h2 id="map">知识地图</h2>
+<div class="mermaid">
+graph LR
+    A["LangChain Middleware"] --> B["安全合规: PII"]
+    A --> C["人机协同: HumanInTheLoop"]
+    A --> D["任务规划: TodoList"]
+    A --> E["上下文管理: ContextEditing"]
+    B --> B1["block/redact/mask/hash"]
+    B --> B2["presidio NER"]
+    C --> C1["interrupt_on"]
+    C --> C2["HumanApproval"]
+    D --> D1["SystemMessage 注入"]
+    E --> E1["Trimming/Summarization/Clear"]
+</div>
+
+<!-- ============ PII ============ -->
+<h2 id="pii">PIIMiddleware — 个人敏感信息处理</h2>
+
+<h3>L1 概念</h3>
+<p>防止敏感信息流出，四策略：<strong>block</strong> 拦截、<strong>redact</strong> 替换、<strong>mask</strong> 掩码、<strong>hash</strong> 哈希。它在 <code>before_model</code> 阶段拦截，识别消息中的 PII 实体（邮箱、信用卡、手机号等），按策略改写后再交给模型。</p>
+
+<h3 id="pii-l2">L2 原理 + 伪代码</h3>
+<pre><code class="language-python">def process_text(text, fields, strategy):
+    results = analyzer.analyze(text, fields)   # presidio NER 识别实体及 span
+    for r in results:
+        if strategy == "block":   return BLOCK_REQUEST           # 直接拦截
+        elif strategy == "redact": text = text.replace(r, "[REDACTED]")
+        elif strategy == "mask":   text = partial_mask(r)        # 保留首尾
+        elif strategy == "hash":   text = sha256(r.text)         # 不可逆哈希
+    return text</code></pre>
+
+<h3 id="pii-l3">L3 源码层</h3>
+<p>核心类位于 <code>langchain/agents/middleware/pii.py</code>，继承 <code>BaseMiddleware</code>，核心在 <code>before_model</code>。完整结构拆解：</p>
+<pre><code class="language-python"># langchain/agents/middleware/pii.py（关键结构）
+from langchain_core.messages import BaseMessage, HumanMessage
+from .base import BaseMiddleware
+
+class PIIMiddleware(BaseMiddleware):
+    def __init__(self, *fields, strategy="block",
+                 pii_types=None, analyzer=None, anonymizer=None):
+        self.fields = fields
+        self.strategy = strategy
+        self.pii_types = pii_types
+        self.analyzer = analyzer or PIIAnalyzer()      # presidio-analyzer
+        self.anonymizer = anonymizer or PIIAnonymizer() # presidio-anonymizer
+
+    def before_model(self, state):
+        messages = state["messages"]
+        return {"messages": [self._process_msg(m) for m in messages]}
+
+    def _process_msg(self, msg):
+        if not hasattr(msg, "content") or not msg.content:
+            return msg
+        processed = self._sanitize(msg.content)
+        return msg.model_copy(update={"content": processed})
+
+    def _sanitize(self, text):
+        entities = self.analyzer.analyze(text, self.pii_types or self.fields)
+        if self.strategy == "block" and entities:
+            raise PIISensitiveDataError("Blocked: PII detected")
+        return self.anonymizer.anonymize(text, entities, self.strategy)</code></pre>
+
+<p>关键要点：<code>block</code> 策略命中即抛异常中断；<code>redact/mask/hash</code> 分别对应 <code>ReplaceEntity</code> / <code>MaskEntity</code> / <code>HashEntity</code> 操作。返回的仍是 <code>HumanMessage</code> 类型，用 <code>model_copy</code> 保持原有类型不破坏下游。</p>
+
+<h3 id="pii-code">完整代码示例</h3>
+<pre><code class="language-python">from langchain.agents import create_agent
+from langchain.agents.middleware import PIIMiddleware
+from langchain_core.tools import tool
+
+@tool
+def send_email(to: str, body: str):
+    """发送邮件（含敏感信息）"""
+    return f"Sending to {to}: {body}"
+
+agent = create_agent(
+    model="gpt-4o",
+    tools=[send_email],
+    middleware=[
+        PIIMiddleware("email", "phone", strategy="redact"),
+    ],
+)
+
+result = agent.invoke({"messages": [{"role": "user",
+    "content": "请把结果发到 test@example.com，我手机 13800138000"}]})
+# 发送工具收到的 body 中的邮箱/手机号已被替换</code></pre>
+
+<h3 id="pii-flow">PII 处理流程图（从左到右）</h3>
+<div class="mermaid">
+graph LR
+    A["用户输入消息"] --> B{"含 PII?"}
+    B -- "否" --> C["原样传给模型"]
+    B -- "是" --> D["presidio 识别实体"]
+    D --> E{"strategy?"}
+    E -- "block" --> F["抛异常中断"]
+    E -- "redact" --> G["替换为 [REDACTED]"]
+    E -- "mask" --> H["部分掩码保留首尾"]
+    E -- "hash" --> I["哈希替换"]
+    G --> J["传给模型"]
+    H --> J
+    I --> J
+    F --> K["请求终止"]
+</div>
+
+<div class="note">
+  <div class="note-title">依赖说明</div>
+  <p>依赖 presidio-analyzer / anonymizer，中文识别准确率需验证；对长文本每轮都跑 NER，token 大时开销明显。</p>
+</div>
+<div class="warning">
+  <div class="warning-title">注意事项</div>
+  <p><code>block</code> 会中断整个请求，需搭配 HumanInTheLoop 才能「先问再放行」。</p>
+</div>
+
+<!-- ============ HumanInTheLoop ============ -->
+<h2 id="hilt">HumanInTheLoopMiddleware — 人工审批</h2>
+
+<h3>L1 概念</h3>
+<p>敏感工具（付款、删库、发邮件）执行前暂停，生成 <code>HumanApproval</code> 中断事件，外部 UI 批准后才继续执行。</p>
+
+<h3 id="hilt-l2">L2 原理 + 伪代码</h3>
+<pre><code class="language-python">def before_tool(model_state, tool_name, interrupt_on):
+    if tool_name in interrupt_on:
+        decision = interrupt(HumanApproval(tool_name, args))
+        if decision.rejected: return skip_tool()
+    return proceed()</code></pre>
+
+<h3 id="hilt-l3">L3 源码层</h3>
+<p>核心类位于 <code>langchain/agents/middleware/human_in_the_loop.py</code>。通过 <code>wrap_tool_call</code> 在工具执行前注入中断；恢复依赖 LangGraph 的 <code>interrupt()</code> 原语与 checkpointer。</p>
+<pre><code class="language-python"># langchain/agents/middleware/human_in_the_loop.py（关键结构）
+from langgraph.types import interrupt
+from langchain_core.messages import ToolMessage
+from .base import BaseMiddleware
+
+class HumanInTheLoopMiddleware(BaseMiddleware):
+    def __init__(self, interrupt_on=None, on_user_approve=None):
+        self.interrupt_on = interrupt_on or set()
+        self.on_user_approve = on_user_approve
+
+    def wrap_tool_call(self, name, func):
+        if name not in self.interrupt_on:
+            return func
+        def wrapper(*args, **kwargs):
+            approval = interrupt(HumanApproval(tool_name=name, args=kwargs))
+            if not approval.approved:
+                return ToolMessage(content="User rejected", tool_call_id=...)
+            result = func(*args, **kwargs)
+            return result
+        return wrapper
+
+    def wrap_model_call(self, func):
+        return func</code></pre>
+
+<p>关键机制：<code>interrupt()</code> 是 LangGraph 的中断原语，它暂停图执行、保存状态，等待外部 <code>Command(resume=...)</code> 恢复。恢复时必须携带 <code>thread_id</code> + checkpointer，否则断点丢失。</p>
+
+<h3 id="hilt-code">完整代码示例</h3>
+<pre><code class="language-python">from langchain.agents import create_agent
+from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langchain_core.tools import tool
+
+@tool
+def delete_user(user_id: str):
+    """删除用户（敏感操作）"""
+    return f"Deleted {user_id}"
+
+agent = create_agent(
+    model="gpt-4o",
+    tools=[delete_user],
+    middleware=[
+        HumanInTheLoopMiddleware(interrupt_on={"delete_user"}),
+    ],
+)
+
+config = {"configurable": {"thread_id": "user-123"}}
+
+for event in agent.stream({"messages": [{"role": "user", "content": "删掉用户 u42"}]}, config):
+    if "interrupt" in event:
+        print("等待人工审批...", event["interrupt"]["value"])
+
+from langgraph.types import Command
+for event in agent.stream(Command(resume={"approved": True}), config):
+    print(event)</code></pre>
+
+<h3 id="hilt-flow">人工审批流程图（从左到右）</h3>
+<div class="mermaid">
+graph LR
+    A["模型产生 tool_calls"] --> B{"tool 在 interrupt_on?"}
+    B -- "否" --> C["直接执行工具"]
+    B -- "是" --> D["interrupt 暂停"]
+    D --> E["外部 UI 展示审批"]
+    E --> F{"用户批准?"}
+    F -- "否" --> G["跳过工具 写拒绝 ToolMessage"]
+    F -- "是" --> H["恢复执行工具"]
+    H --> I["返回结果"]
+    G --> I
+    C --> I
+</div>
+
+<div class="warning">
+  <div class="warning-title">注意事项</div>
+  <p>恢复依赖 <code>thread_id</code> + checkpointer，否则断点丢失；审批卡死会一直挂起，需超时降级。</p>
+</div>
+
+<!-- ============ TodoList ============ -->
+<h2 id="todo">TodoListMiddleware — 任务规划</h2>
+
+<h3>L1 概念</h3>
+<p>在模型前注入待办清单 SystemMessage，维持多步任务规划，让 Agent 不丢失目标。</p>
+
+<h3 id="todo-l2">L2 原理 + 伪代码</h3>
+<pre><code class="language-python">def before_model(state):
+    todos = state.get("todos", [])
+    sys_msg = SystemMessage(render_todo_prompt(todos))
+    return {"messages": [sys_msg] + state["messages"]}</code></pre>
+
+<h3 id="todo-l3">L3 源码层</h3>
+<p>核心类位于 <code>langchain/agents/middleware/todo_list.py</code>。它在每次模型调用前注入 SystemMessage，同时提供工具让模型更新待办。</p>
+<pre><code class="language-python"># langchain/agents/middleware/todo_list.py（关键结构）
+from langchain_core.messages import SystemMessage, ToolMessage
+from .base import BaseMiddleware
+
+TODO_PROMPT = """You are maintaining a TODO list for this task.
+Current todos: {todos}
+Use the update_todos tool to add/complete/remove items as you progress.
+"""
+
+class TodoListMiddleware(BaseMiddleware):
+    def __init__(self):
+        self._todos = []
+
+    def before_model(self, state):
+        todos = state.get("todos", self._todos)
+        message = SystemMessage(content=TODO_PROMPT.format(todos=todos))
+        return {"messages": [message] + state["messages"]}
+
+    def after_model(self, state):
+        return state
+
+    def update_todos(self, todos):
+        self._todos = todos
+        return f"Todos updated: {todos}"</code></pre>
+
+<p>关键点：待办清单以 SystemMessage 注入，系统级优先级高、不占用户可见内容；模型通过工具回调更新清单，形成闭环。</p>
+
+<h3 id="todo-code">完整代码示例</h3>
+<pre><code class="language-python">from langchain.agents import create_agent
+from langchain.agents.middleware import TodoListMiddleware
+from langchain_core.tools import tool
+
+@tool
+def search_docs(query: str):
+    """搜索文档"""
+    return f"results for {query}"
+
+@tool
+def update_todos(todos: list):
+    """更新任务清单"""
+    return f"Todos set to {todos}"
+
+agent = create_agent(
+    model="gpt-4o",
+    tools=[search_docs, update_todos],
+    middleware=[TodoListMiddleware()],
+)
+
+result = agent.invoke({"messages": [{"role": "user",
+    "content": "调研 LangChain 的 5 个特性，并写出报告"}]})
+print(result["messages"][-1].content)</code></pre>
+
+<h3 id="todo-flow">TodoList 流程图（从左到右）</h3>
+<div class="mermaid">
+graph LR
+    A["进入 Agent"] --> B["before_model 注入待办 SystemMessage"]
+    B --> C["模型调用"]
+    C --> D{"模型是否更新待办?"}
+    D -- "是" --> E["update_todos 工具更新清单"]
+    D -- "否" --> F["继续当前待办"]
+    E --> G["下一轮循环"]
+    F --> G
+    G --> H["任务完成"]
+</div>
+
+<!-- ============ ContextEditing ============ -->
+<h2 id="ctx">ContextEditingMiddleware — 上下文修剪</h2>
+
+<h3>L1 概念</h3>
+<p>按 token 预算修剪/摘要/清除消息，防止上下文溢出。常用在 <code>after_model</code> 阶段，工具结果产生后立即处理。</p>
+
+<h3 id="ctx-l2">L2 原理 + 伪代码</h3>
+<pre><code class="language-python">def after_model(state):
+    messages = state["messages"]
+    while token_count(messages) > max_tokens:
+        messages = apply_edit(messages, edits)
+    return {"messages": messages}</code></pre>
+
+<h3 id="ctx-l3">L3 源码层</h3>
+<p>核心类位于 <code>langchain/agents/middleware/context_editing.py</code>。核心是「编辑器」组合：<code>TrimmingEdit</code>（按 token 裁剪）、<code>SummarizationEdit</code>（LLM 摘要）、<code>ClearEdit</code>（清除）。</p>
+<pre><code class="language-python"># langchain/agents/middleware/context_editing.py（关键结构）
+from langchain_core.messages import BaseMessage
+from .base import BaseMiddleware
+
+class ContextEditingMiddleware(BaseMiddleware):
+    def __init__(self, edits=None, token_count_method="disabled",
+                 max_tokens=None):
+        self.edits = edits or []
+        self.token_counter = build_counter(token_count_method)
+        self.max_tokens = max_tokens
+
+    def after_model(self, state):
+        messages = state["messages"]
+        if self._is_over_limit(messages):
+            messages = self._apply_edits(messages)
+        return {"messages": messages}
+
+    def _is_over_limit(self, messages):
+        total = sum(self.token_counter.count(m) for m in messages)
+        return total > self.max_tokens
+
+    def _apply_edits(self, messages):
+        for edit in self.edits:
+            messages = edit.apply(messages)
+        return messages
+
+class TrimmingEdit:
+    def __init__(self, token_count, reserved_tokens=0, max_tokens=None):
+        ...
+    def apply(self, messages):
+        while self._total_tokens(messages) > self.max_tokens:
+            messages.pop(0)
+        return messages
+
+class SummarizationEdit:
+    def __init__(self, model, token_count, trigger, keep):
+        ...
+    def apply(self, messages):
+        return summarized_messages</code></pre>
+
+<p>关键点：<code>token_count_method</code> 可配置 <code>tiktoken</code> / <code>character</code> / <code>disabled</code>，不同计数方式结果不同。修剪会删除旧消息，需保证 <code>tool_call_id</code> 对应关系不断裂。</p>
+
+<h3 id="ctx-code">完整代码示例</h3>
+<pre><code class="language-python">from langchain.agents import create_agent
+from langchain.agents.middleware import ContextEditingMiddleware, TrimmingEdit, SummarizationEdit
+from langchain_core.tools import tool
+
+@tool
+def get_large_data(query: str):
+    """返回大量数据"""
+    return "x" * 10000
+
+edits = [
+    SummarizationEdit(model="gpt-4o-mini", token_count_method="tiktoken",
+                      trigger=("fraction", 0.8), keep=5),
+    TrimmingEdit(token_count_method="tiktoken", max_tokens=6000),
+]
+
+agent = create_agent(
+    model="gpt-4o",
+    tools=[get_large_data],
+    middleware=[
+        ContextEditingMiddleware(edits=edits, token_count_method="tiktoken"),
+    ],
+)
+
+result = agent.invoke({"messages": [{"role": "user", "content": "拉取大数据并总结"}]})
+print(result["messages"][-1].content)</code></pre>
+
+<h3 id="ctx-flow">ContextEditing 流程图（从左到右）</h3>
+<div class="mermaid">
+graph LR
+    A["模型返回/工具结果"] --> B["after_model 计数"]
+    B --> C{"超过 max_tokens?"}
+    C -- "否" --> D["原样返回"]
+    C -- "是" --> E["依次应用编辑策略"]
+    E --> F["SummarizationEdit 摘要旧消息"]
+    F --> G["TrimmingEdit 裁剪最旧消息"]
+    G --> H["ClearEdit 清除冗余"]
+    H --> I["返回修剪后消息"]
+    D --> I
+</div>
+
+<div class="warning">
+  <div class="warning-title">注意事项</div>
+  <p>摘要会丢细节；裁剪不当会让 <code>tool_call_id</code> 匹配断裂；token 计数方式不同结果不同。</p>
+</div>
+
+<!-- ============ 调用链 ============ -->
+<h2 id="chain">核心调用链</h2>
+<div class="mermaid">
+sequenceDiagram
+    participant M as Middleware Stack
+    participant A as Agent
+    participant T as Tool
+    M->>M: PII.before_model(脱敏)
+    M->>M: TodoList.before_model(注入清单)
+    M->>A: 调用模型
+    A-->>M: tool_calls
+    M->>M: HumanInTheLoop 审批
+    M->>T: 执行工具
+    T-->>M: 结果
+    M->>M: ContextEditing.after_model(修剪)
+</div>
+
+<!-- ============ 面试题库 ============ -->
+<h2 id="interview">面试题库</h2>
+
+<h3>PII</h3>
+<ul>
+<li><strong>Q:</strong> 四种策略区别？ <strong>A:</strong> block拦截/redact替换/mask掩码/hash哈希，粒度到字段。</li>
+<li><strong>Q:</strong> 为什么用 presidio？ <strong>A:</strong> 基于 NER 的实体识别，比正则更鲁棒，但中文需校准。</li>
+<li><strong>Q:</strong> block 命中后如何不中断流程？ <strong>A:</strong> 搭配 HumanInTheLoop 先问后放行，或降级为 redact。</li>
+</ul>
+
+<h3>HumanInTheLoop</h3>
+<ul>
+<li><strong>Q:</strong> interrupt 与普通 return 区别？ <strong>A:</strong> interrupt 暂停图执行、保留状态、需外部恢复。</li>
+<li><strong>Q:</strong> 并行工具如何审批？ <strong>A:</strong> 逐个 interrupt_on，或聚合为单次审批。</li>
+<li><strong>Q:</strong> 恢复必须什么？ <strong>A:</strong> thread_id + checkpointer，否则断点丢失。</li>
+</ul>
+
+<h3>TodoList</h3>
+<ul>
+<li><strong>Q:</strong> 为何用 SystemMessage？ <strong>A:</strong> 系统级指令，优先级高且不占用户可见内容。</li>
+<li><strong>Q:</strong> 模型不更新 todo 怎么办？ <strong>A:</strong> 可提供 update_todos 工具强制回调，或定期重注入。</li>
+</ul>
+
+<h3>ContextEditing</h3>
+<ul>
+<li><strong>Q:</strong> 为何 after_model 修剪？ <strong>A:</strong> 工具结果最新产生，届时才能准确计数。</li>
+<li><strong>Q:</strong> token 超限崩溃如何降级？ <strong>A:</strong> 提前触发修剪 + 错误重试 + 设置 budget 上限。</li>
+<li><strong>Q:</strong> 修剪导致 tool_call_id 断裂？ <strong>A:</strong> 需保证被删消息的关联 ToolMessage 也同步处理，或用 Summarization 而非硬删。</li>
+</ul>
+
+<div class="deep-grill-readiness">
+  <h4>Deep-Grill 就绪清单</h4>
+  <ul>
+    <li>能解释 PII 策略设计原因</li>
+    <li>能说出 HumanInTheLoop 与预过滤区别</li>
+    <li>能指出 ContextEditing 的 tool_call_id 断裂</li>
+    <li>能排查 token 超限根因</li>
+    <li>能大白话讲清 TodoList 注入机制</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <span><a href="./0005-summarization-middleware-deep-dive.html">← SummarizationMiddleware Deep Dive</a></span>
+  <span><a href="../index.html">Back to Index →</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SummarizationMiddleware 摘要机制深度解析</title>
+  <style>
+    /* ============================================ */
+    /* 简书风格 全局变量                              */
+    /* ============================================ */
+    :root {
+      --bg: #f9f9f9;
+      --card-bg: #fff;
+      --text: #2f2f2f;
+      --text-secondary: #666;
+      --text-muted: #999;
+      --accent: #ea6f5a;
+      --accent-hover: #ec6149;
+      --accent-light: #fef0f0;
+      --border: #f0f0f0;
+      --border-light: #e8e8e8;
+      --code-bg: #f7f7f7;
+      --green: #42c02e;
+      --green-bg: #e8f5e9;
+      --orange: #f5a623;
+      --orange-bg: #fff8e1;
+      --red: #e74c3c;
+      --red-bg: #fdf2f2;
+      --font-serif: "Noto Serif SC", "Source Han Serif SC", "STSong", "Songti SC", "SimSun", serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+      --font-mono: "SF Mono", "Fira Code", "Consolas", "Menlo", monospace;
+      --content-width: 1020px;
+      --toc-width: 220px;
+    }
+
+    /* ============================================ */
+    /* 全局重置                                      */
+    /* ============================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-serif);
+      font-size: 17px;
+      line-height: 1.8;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    /* ============================================ */
+    /* 顶部导航栏（简书风格）                          */
+    /* ============================================ */
+    .top-nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      height: 56px;
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px;
+    }
+    .top-nav .logo {
+      font-size: 22px; font-weight: 700; color: var(--accent);
+      font-family: var(--font-sans);
+      letter-spacing: -0.5px;
+    }
+    .top-nav .logo span { color: var(--text); font-weight: 400; font-size: 14px; margin-left: 8px; }
+
+    /* ============================================ */
+    /* 主布局：左侧 TOC + 中间内容                     */
+    /* ============================================ */
+    .layout {
+      display: flex; justify-content: center;
+      margin-top: 56px;
+      padding: 0 16px;
+      min-height: 100vh;
+    }
+
+    /* ============================================ */
+    /* 左侧悬浮目录（TOC）                             */
+    /* ============================================ */
+    .toc-sidebar {
+      position: fixed;
+      left: calc(50% - var(--content-width) / 2 - var(--toc-width) - 40px);
+      top: 96px;
+      width: var(--toc-width);
+      max-height: calc(100vh - 140px);
+      overflow-y: auto;
+      z-index: 100;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      background: var(--card-bg);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      padding: 16px 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    .toc-sidebar::-webkit-scrollbar { width: 3px; }
+    .toc-sidebar::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+
+    .toc-title {
+      padding: 0 16px 12px;
+      font-size: 13px; font-weight: 700; color: var(--text);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
+    .toc-sidebar a {
+      display: block;
+      padding: 5px 16px;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-left: 2px solid transparent;
+      transition: all 0.15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .toc-sidebar a:hover {
+      color: var(--accent);
+      background: #fafafa;
+      border-left-color: var(--border-light);
+    }
+    .toc-sidebar a.active {
+      color: var(--accent);
+      font-weight: 600;
+      border-left-color: var(--accent);
+      background: var(--accent-light);
+    }
+    .toc-sidebar a.toc-h2 { padding-left: 16px; }
+    .toc-sidebar a.toc-h3 { padding-left: 28px; font-size: 12px; }
+
+    /* 移动端隐藏 TOC */
+    @media (max-width: 1200px) {
+      .toc-sidebar { display: none; }
+    }
+
+    /* ============================================ */
+    /* 内容主体区域                                   */
+    /* ============================================ */
+    .content {
+      width: 100%;
+      max-width: var(--content-width);
+      padding: 32px 0 80px;
+      margin-left: 0;
+    }
+
+    @media (min-width: 1201px) {
+      .content { margin-left: 0; }
+    }
+
+    /* ============================================ */
+    /* 文章头部（简书风格）                             */
+    /* ============================================ */
+    .article-header {
+      background: var(--card-bg);
+      border-radius: 4px;
+      padding: 36px 40px 28px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .article-header h1 {
+      font-size: 30px;
+      font-weight: 700;
+      line-height: 1.4;
+      color: var(--text);
+      font-family: var(--font-sans);
+      margin-bottom: 16px;
+    }
+    .article-meta {
+      font-size: 13px; color: var(--text-muted);
+      font-family: var(--font-sans);
+      display: flex; gap: 20px; flex-wrap: wrap;
+    }
+    .article-meta span { display: flex; align-items: center; gap: 4px; }
+
+    /* ============================================ */
+    /* 文章主体卡片                                   */
+    /* ============================================ */
+    .article-body {
+      background: var(--card-bg);
+      border-radius: 4px;
+      padding: 32px 40px 48px;
+    }
+
+    /* ============================================ */
+    /* 排版                                          */
+    /* ============================================ */
+    .article-body h2 {
+      font-size: 22px; font-weight: 700; margin: 40px 0 16px;
+      font-family: var(--font-sans);
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    .article-body h2:first-child { margin-top: 0; }
+
+    .article-body h3 {
+      font-size: 18px; font-weight: 600; margin: 28px 0 12px;
+      font-family: var(--font-sans);
+      color: #333;
+    }
+
+    .article-body p { margin: 14px 0; text-align: justify; }
+
+    .article-body a { color: var(--accent); text-decoration: none; }
+    .article-body a:hover { text-decoration: underline; }
+
+    .article-body strong { font-weight: 700; color: #222; }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.88em;
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #c7254e;
+    }
+
+    pre {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      background: #282c34;
+      color: #abb2bf;
+      padding: 18px 22px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 18px 0;
+      line-height: 1.6;
+    }
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      font-size: inherit;
+    }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 12px 18px;
+      border-left: 4px solid var(--accent);
+      background: #fafafa;
+      color: #555;
+      font-size: 0.95em;
+    }
+
+    /* ============================================ */
+    /* 表格                                          */
+    /* ============================================ */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 18px 0;
+      font-size: 14px;
+      font-family: var(--font-sans);
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      text-align: left;
+    }
+    th {
+      background: #fafafa;
+      font-weight: 600;
+      color: #333;
+      font-size: 13px;
+    }
+    tr:hover { background: #fafafa; }
+
+    /* ============================================ */
+    /* 特殊组件                                      */
+    /* ============================================ */
+    .why-chain {
+      margin: 18px 0;
+      font-family: var(--font-sans);
+    }
+    .wc-level {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 6px 6px 0;
+      padding: 12px 16px;
+      margin: 0 0 0 0;
+    }
+    .wc-level:nth-child(1) { margin-left: 0; }
+    .wc-q {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.95em;
+      margin-bottom: 4px;
+    }
+    .wc-a {
+      color: var(--text);
+      font-size: 0.92em;
+      line-height: 1.7;
+    }
+    .wc-arrow {
+      text-align: left;
+      color: var(--text-muted);
+      font-size: 14px;
+      padding: 2px 0 2px 18px;
+      margin: 2px 0;
+      line-height: 1.4;
+    }
+    .wc-root {
+      background: var(--accent-light);
+      border: 1px solid #f5c6c6;
+      border-radius: 6px;
+      padding: 14px 18px;
+      margin-top: 6px;
+      font-size: 0.95em;
+      line-height: 1.8;
+    }
+    .wc-root .wc-root-label {
+      color: #c62828;
+      font-weight: 700;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .misconception {
+      background: var(--red-bg);
+      border: 1px solid #f5c6c6;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 10px 0;
+      font-size: 0.95em;
+    }
+    .misconception strong { color: #c62828; }
+
+    .return-block {
+      background: var(--orange-bg);
+      border: 1px solid #f0e68c;
+      border-radius: 6px;
+      padding: 14px 18px;
+      margin: 16px 0;
+      font-size: 0.95em;
+    }
+
+    .tip {
+      background: var(--green-bg);
+      border: 1px solid #b7e4b0;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 14px 0;
+      font-size: 0.95em;
+    }
+    .tip strong { color: var(--green); }
+
+    .warn {
+      background: var(--orange-bg);
+      border: 1px solid #f5c6a0;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin: 14px 0;
+      font-size: 0.95em;
+    }
+    .warn strong { color: var(--orange); }
+
+    .flow {
+      background: #f4f6f9;
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 18px 22px;
+      margin: 18px 0;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      white-space: pre;
+      line-height: 1.7;
+      overflow-x: auto;
+    }
+
+    /* Mermaid 图表容器 */
+    .mermaid {
+      display: flex;
+      justify-content: center;
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 20px 0;
+      overflow-x: auto;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 18px 0;
+    }
+    .comparison > div {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+    }
+    .comparison h4 { margin-top: 0; font-size: 15px; font-family: var(--font-sans); }
+    @media (max-width: 600px) { .comparison { grid-template-columns: 1fr; } }
+
+    .broad-compare {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 18px 0;
+    }
+    .broad-compare > div {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      font-size: 0.92em;
+    }
+    .broad-compare h4 { margin-top: 0; font-size: 14px; font-family: var(--font-sans); }
+
+    .interview-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 14px 0; }
+    .interview-item {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-family: var(--font-sans);
+    }
+    .interview-item .role {
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 12px;
+      margin-right: 6px;
+    }
+
+    /* ============================================ */
+    /* Quiz 组件                                     */
+    /* ============================================ */
+    .quiz {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px;
+      margin: 20px 0;
+      font-family: var(--font-sans);
+    }
+    .quiz h3 { margin-top: 0; font-size: 16px; }
+    .quiz label {
+      display: block;
+      padding: 8px 12px;
+      margin: 4px 0;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-size: 14px;
+    }
+    .quiz label:hover { background: var(--accent-light); }
+    .quiz input[type="radio"] { margin-right: 8px; }
+    .quiz button {
+      margin-top: 12px;
+      padding: 8px 24px;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.2s;
+      font-family: var(--font-sans);
+    }
+    .quiz button:hover { background: var(--accent-hover); }
+    .quiz .feedback {
+      margin-top: 10px;
+      padding: 10px 14px;
+      border-radius: 4px;
+      font-size: 13px;
+      display: none;
+    }
+    .quiz .feedback.correct { display: block; background: var(--green-bg); color: #2e7d32; }
+    .quiz .feedback.wrong { display: block; background: var(--red-bg); color: #c62828; }
+
+    /* ============================================ */
+    /* details / summary                             */
+    /* ============================================ */
+    details { margin: 14px 0; }
+    details summary {
+      cursor: pointer;
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 0.95em;
+      font-family: var(--font-sans);
+    }
+    details[open] summary { margin-bottom: 10px; }
+    details[open] { background: #fafafa; padding: 12px 16px; border-radius: 6px; border: 1px solid var(--border); }
+
+    /* ============================================ */
+    /* 底部                                          */
+    /* ============================================ */
+    .footer {
+      margin-top: 48px;
+      padding: 24px 0 0;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+    }
+    .footer p { margin: 4px 0; }
+
+    /* ============================================ */
+    /* 回到顶部                                      */
+    /* ============================================ */
+    .back-to-top {
+      position: fixed;
+      bottom: 40px;
+      right: 40px;
+      width: 44px; height: 44px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: 20px;
+      color: var(--text-muted);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      transition: all 0.2s;
+      z-index: 999;
+      opacity: 0; transform: translateY(10px);
+      pointer-events: none;
+    }
+    .back-to-top.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .back-to-top:hover { color: var(--accent); border-color: var(--accent); }
+
+    /* ============================================ */
+    /* 响应式                                        */
+    /* ============================================ */
+    @media (max-width: 600px) {
+      .article-header { padding: 24px 20px 20px; }
+      .article-header h1 { font-size: 22px; }
+      .article-body { padding: 20px 20px 32px; }
+      .article-body h2 { font-size: 19px; }
+      .article-body h3 { font-size: 16px; }
+      body { font-size: 16px; }
+      .back-to-top { right: 16px; bottom: 24px; }
+    }
+
+    /* ============================================ */
+    /* 播客播放器（Podcast Player）                    */
+    /* ============================================ */
+    .podcast-player { display: flex; align-items: center; gap: 16px; background: linear-gradient(135deg,#fef6f2,#fff); border: 1px solid #f5d5c8; border-radius: 12px; padding: 18px 22px; margin: 0 0 24px; font-family: var(--font-sans); box-shadow: 0 2px 10px rgba(234,111,90,0.06); }
+    .pp-btn { flex: none; width: 52px; height: 52px; border-radius: 50%; border: none; background: var(--accent); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s, transform 0.15s; box-shadow: 0 3px 10px rgba(234,111,90,0.35); position: relative; }
+    .pp-btn:hover { background: var(--accent-hover); transform: scale(1.05); }
+    .pp-btn.playing::after { content: ""; position: absolute; width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--accent); animation: pp-pulse 1.6s ease-out infinite; }
+    @keyframes pp-pulse { 0% { transform: scale(1); opacity: 0.7 } 100% { transform: scale(1.45); opacity: 0 } }
+    .pp-main { flex: 1; min-width: 0; }
+    .pp-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .pp-badge { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-light); border: 1px solid #f5d5c8; padding: 1px 8px; border-radius: 10px; }
+    .pp-bar-wrap { display: flex; align-items: center; gap: 10px; }
+    .pp-time { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; flex: none; min-width: 38px; }
+    .pp-bar { flex: 1; height: 6px; background: #f0ddd3; border-radius: 3px; cursor: pointer; position: relative; }
+    .pp-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: var(--accent); border-radius: 3px; transition: width 0.1s linear; }
+    .pp-bar-fill::after { content: ""; position: absolute; right: -6px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.15s; }
+    .pp-bar:hover .pp-bar-fill::after { opacity: 1; }
+    .pp-error { font-size: 12px; color: var(--red); margin-top: 6px; display: none; }
+    @media (max-width: 600px) {
+      .podcast-player { padding: 14px 16px; gap: 12px; }
+      .pp-btn { width: 44px; height: 44px; }
+      .pp-btn.playing::after { width: 44px; height: 44px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<nav class="top-nav">
+  <div class="logo">Deep&#8203;Teach <span>/ LangChain 深度讲授</span></div>
+</nav>
+
+<!-- 主布局 -->
+<div class="layout">
+
+  <!-- 左侧悬浮目录 -->
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">目录</div>
+    <a href="#s0" class="toc-h2">0. 动机引爆</a>
+    <a href="#s05" class="toc-h2">0.5. 前置知识检查</a>
+    <a href="#s1" class="toc-h2">1. 概念层</a>
+    <a href="#s2" class="toc-h2">2. 系统层</a>
+    <a href="#s3" class="toc-h2">3. 质量层</a>
+    <a href="#s35" class="toc-h2">3.5. 变体与伪装</a>
+    <a href="#s4" class="toc-h2">4. 韧性层</a>
+    <a href="#s5" class="toc-h2">5. 费曼讲解</a>
+    <a href="#s6" class="toc-h2">6. 内嵌练习</a>
+    <a href="#s7" class="toc-h2">7. 深度练习</a>
+    <a href="#s8" class="toc-h2">8. 预备拷问</a>
+    <a href="#s9" class="toc-h2">9. 间隔回顾</a>
+    <a href="#s10" class="toc-h2">10. 推荐深度阅读</a>
+  </nav>
+
+  <!-- 内容主体 -->
+  <main class="content">
+
+    <!-- 文章头部 -->
+    <div class="article-header">
+      <h1>SummarizationMiddleware：不是"删除"，而是"先总结、再替换"</h1>
+      <div class="article-meta">
+        <span>📖 Prerequisites: <a href="../09-remove-message-lesson/lessons/0001-remove-message-deep-dive.html">RemoveMessage</a> · <a href="../10-trim-message.md">trim_messages</a></span>
+        <span>⏱ 预计 45 分钟</span>
+        <span>🎯 L3（能讲清楚 + 能讲透彻 + 能应对面试）</span>
+      </div>
+    </div>
+
+    <!-- 文章正文 -->
+    <div class="article-body">
+
+<!-- 播客播放器 -->
+<div class="podcast-player">
+  <button class="pp-btn" id="ppBtn" aria-label="播放播客">
+    <svg id="ppIconPlay" viewBox="0 0 24 24" width="24" height="24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+    <svg id="ppIconPause" viewBox="0 0 24 24" width="24" height="24" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor"/></svg>
+  </button>
+  <div class="pp-main">
+    <div class="pp-title">本期播客 · 双人对谈：摘要机制深度解析——"先总结、再替换" <span class="pp-badge">女声 × 男声</span></div>
+    <div class="pp-bar-wrap">
+      <span class="pp-time" id="ppCur">00:00</span>
+      <div class="pp-bar" id="ppBar"><div class="pp-bar-fill" id="ppFill"></div></div>
+      <span class="pp-time" id="ppDur">--:--</span>
+    </div>
+    <div class="pp-error" id="ppError">音频加载失败，请确认 0005-summarization-middleware-deep-dive.mp3 与本页面在同一目录。</div>
+  </div>
+  <audio id="ppAudio" preload="metadata" src="./0005-summarization-middleware-deep-dive.mp3"></audio>
+</div>
+
+<!-- ============================================ -->
+<!-- Section 0: Motivation Ignition               -->
+<!-- ============================================ -->
+<h2 id="s0">0. 动机引爆</h2>
+
+<h3>反常识现象</h3>
+
+<p>运行同一段 Agent 代码，唯一区别是<strong>有没有加 SummarizationMiddleware</strong>：</p>
+
+<div class="comparison">
+  <div>
+    <h4>❌ 无摘要</h4>
+    <p>对话 100 轮后，token 超出窗口，直接报错</p>
+    <pre><code>agent = create_agent(model, checkpointer=...)</code></pre>
+  </div>
+  <div>
+    <h4>✅ 有摘要</h4>
+    <p>对话 100 轮后仍然正常工作，还能记住早期信息</p>
+    <pre><code>agent = create_agent(model,
+  middleware=[SummarizationMiddleware(...)]
+)</code></pre>
+  </div>
+</div>
+
+<p><strong>反常识之处</strong>：SummarizationMiddleware 明明在内部调用了 <code>RemoveMessage(id=REMOVE_ALL_MESSAGES)</code> 把消息全部删掉了，但 Agent 并没有失忆——它还能记住对话早期的关键信息（用户名字、之前的决策、已完成任务）。</p>
+
+<p>这怎么可能？答案藏在它的核心设计里：<strong>它不是简单删除，而是"先总结、再替换"——在删除之前，先调用 LLM 把旧消息压缩成摘要。</strong></p>
+
+<h3>最简可行场景</h3>
+
+<pre><code>from langgraph.checkpoint.memory import InMemorySaver
+from langchain.agents import create_agent
+from langchain.agents.middleware import SummarizationMiddleware
+from langchain_openai import ChatOpenAI
+
+model = ChatOpenAI(model="deepseek-v4-pro")
+
+agent = create_agent(
+    model,
+    checkpointer=InMemorySaver(),
+    middleware=[
+        SummarizationMiddleware(
+            model=model,              # 用于摘要的模型
+            trigger=("tokens", 4000), # 总 token 超 4000 时触发
+            keep=("messages", 20),    # 摘要后保留最近 20 条消息
+        )
+    ],
+)
+
+config = {"configurable": {"thread_id": "1"}}
+agent.invoke({"messages": "hi, my name is bob"}, config)
+agent.invoke({"messages": "write a short poem about cats"}, config)
+agent.invoke({"messages": "now do the same but for dogs"}, config)
+final_response = agent.invoke({"messages": "what's my name?"}, config)
+# 即使前面三轮对话被摘要了，Agent 仍能回答 "Your name is Bob!"</code></pre>
+
+<!-- ============================================ -->
+<!-- Section 0.5: Prerequisite Check              -->
+<!-- ============================================ -->
+<h2 id="s05">0.5. 前置知识检查</h2>
+
+<p>开始之前，确认你理解以下概念：</p>
+
+<ol>
+  <li><strong>RemoveMessage</strong> — 它不是"聊天消息"，而是发给 <code>add_messages</code> reducer 的删除指令。如果记不清了，<a href="../09-remove-message-lesson/lessons/0001-remove-message-deep-dive.html">点这里回顾</a>。</li>
+  <li><strong>trim_messages</strong> — 在调用模型前临时裁剪上下文，不修改 state。如果记不清了，<a href="../10-trim-message.md">点这里回顾</a>。</li>
+  <li><strong>checkpointer</strong> — 负责持久化 Agent state，使对话历史跨轮次保持。如果记不清了，<a href="../04-langchain-checkpointer-timing.md">点这里回顾</a>。</li>
+</ol>
+
+<!-- ============================================ -->
+<!-- Section 1: Concept Layer                     -->
+<!-- ============================================ -->
+<h2 id="s1">1. 概念层</h2>
+
+<h3>精确定义</h3>
+
+<blockquote>
+  <strong>SummarizationMiddleware</strong> 是 LangChain 内置的 Agent 中间件，挂载在 <code>before_model</code> 生命周期钩子上。它监控消息列表的 token 数量，当达到触发阈值时，自动调用一个 LLM 把较早的对话压缩成摘要文本，用摘要替换旧消息，同时保留最近的消息，并确保 AI/Tool 消息对不被切断。它是 LangChain 短期记忆管理三种策略（修剪、删除、摘要）中唯一保留语义信息的方案。<br>
+  <cite>— 基于 <a href="https://langchain-doc.cn/v1/python/langchain/short-term-memory.html">LangChain 官方文档</a></cite>
+</blockquote>
+
+<h3>Why Chain</h3>
+
+<div class="why-chain">
+  <div class="wc-level">
+    <div class="wc-q">Q: 为什么需要 SummarizationMiddleware？</div>
+    <div class="wc-a">A: 因为 Agent 对话历史会无限增长，迟早超出模型上下文窗口。</div>
+  </div>
+  <div class="wc-arrow">↓ 追问</div>
+  <div class="wc-level">
+    <div class="wc-q">Q: 为什么对话历史会无限增长？</div>
+    <div class="wc-a">A: 因为 checkpointer 每轮都持久化，add_messages reducer 只追加不删除。</div>
+  </div>
+  <div class="wc-arrow">↓ 追问</div>
+  <div class="wc-level">
+    <div class="wc-q">Q: 为什么不能直接用 RemoveMessage 删旧消息？</div>
+    <div class="wc-a">A: 因为直接删除会永久丢失信息——用户名字、关键决策、已完成任务都没了。</div>
+  </div>
+  <div class="wc-arrow">↓ 追问</div>
+  <div class="wc-level">
+    <div class="wc-q">Q: 为什么丢失信息会导致问题？</div>
+    <div class="wc-a">A: 因为 Agent 任务跨多轮，早期上下文是后续推理的必要输入。</div>
+  </div>
+  <div class="wc-arrow">↓ 追问到根因</div>
+  <div class="wc-root">
+    <span class="wc-root-label">根因</span>
+    <strong>有限上下文窗口 vs 无限增长记忆</strong>，两者之间存在根本矛盾。<br>
+    SummarizationMiddleware 用"语义压缩"来解这个矛盾：<strong>牺牲细节精度，换取信息保留 + 空间释放。</strong>
+  </div>
+</div>
+
+<h3>常见误解</h3>
+
+<div class="misconception">
+  <strong>误解 1：摘要会把所有消息都替换掉，Agent 就失忆了</strong><br>
+  <em>看似合理</em>：代码里明明有 <code>RemoveMessage(id=REMOVE_ALL_MESSAGES)</code>。<br>
+  <em>真相</em>：删掉所有消息后，<strong>立即</strong>追加摘要 + 保留的最近消息。最终 state 是"摘要 + 最近消息"，不是空的。
+</div>
+
+<div class="misconception">
+  <strong>误解 2：摘要是免费的、无损的</strong><br>
+  <em>看似合理</em>："总结"听起来比"删除"高级。<br>
+  <em>真相</em>：摘要有<strong>信息损耗</strong>——精确数字、工具调用参数、微妙语气可能在压缩中丢失。它是"有损压缩"，不是"无损保存"。<strong>每次摘要是额外一次 LLM 调用，有成本和延迟开销。</strong>
+</div>
+
+<div class="misconception">
+  <strong>误解 3：trigger 和 keep 是同一个东西</strong><br>
+  <em>看似合理</em>：两个参数都接受 <code>("tokens", N)</code> 这种 tuple。<br>
+  <em>真相</em>：<code>trigger</code> 决定<strong>何时</strong>触发摘要，<code>keep</code> 决定触发后<strong>保留多少</strong>最近消息。是两个完全独立的概念。当 keep 用 tokens 且值接近 trigger 时，摘要空间极小，几乎没价值。
+</div>
+
+<h3>同类对比：LangChain 三种短期记忆策略</h3>
+
+<table>
+  <tr><th>维度</th><th>SummarizationMiddleware</th><th>RemoveMessage</th><th>trim_messages</th></tr>
+  <tr><td>核心目的</td><td>语义压缩旧消息，保住信息</td><td>按 id 删除指定消息</td><td>临时裁剪上下文长度</td></tr>
+  <tr><td>是否改 state</td><td>✅ 是</td><td>✅ 是</td><td>❌ 否</td></tr>
+  <tr><td>信息损失</td><td>有损压缩（丢细节）</td><td>完全丢失被删消息</td><td>完全丢失被裁剪消息</td></tr>
+  <tr><td>是否调 LLM</td><td>✅ 是</td><td>❌ 否</td><td>❌ 否</td></tr>
+  <tr><td>触发时机</td><td>自动（达阈值）</td><td>手动（节点 return）</td><td>手动（调用前）</td></tr>
+  <tr><td>典型场景</td><td>长期对话记忆管理</td><td>精确删除敏感/无用消息</td><td>单次调用前裁剪输入</td></tr>
+</table>
+
+<!-- ============================================ -->
+<!-- Section 2: System Layer                      -->
+<!-- ============================================ -->
+<h2 id="s2">2. 系统层</h2>
+
+<h3>上游依赖</h3>
+
+<ul>
+  <li><strong>create_agent + AgentMiddleware 机制</strong>：SummarizationMiddleware 继承自 <code>AgentMiddleware</code>，通过 <code>before_model</code> 钩子注入。</li>
+  <li><strong>add_messages reducer</strong>：return 中的 <code>RemoveMessage(id=REMOVE_ALL_MESSAGES)</code> 依赖 state 的 messages 字段使用 reducer。</li>
+  <li><strong>一个用于摘要的 LLM</strong>：<code>model</code> 参数，可以是独立的模型（推荐用更便宜的小模型），也可以和 Agent 主模型是同一个。</li>
+  <li><strong>trim_messages 工具</strong>：<code>_trim_messages_for_summary</code> 内部调用它，防止待摘要消息超过摘要模型的窗口。</li>
+</ul>
+
+<h3>下游消费者</h3>
+
+<ul>
+  <li><strong>Agent 的模型推理</strong>：摘要后的新消息列表（摘要 + 保留消息）作为模型输入。</li>
+  <li><strong>checkpointer</strong>：摘要后的新 state 被持久化，后续用 <code>thread_id</code> 恢复时看到的是摘要后的状态。</li>
+</ul>
+
+<h3>系统架构图</h3>
+
+<pre class="mermaid">
+flowchart TD
+    A["Agent 调用 invoke()"] --> B["before_model 钩子<br/>SummarizationMiddleware 在此注入"]
+
+    B --> C["① ensure_message_ids<br/>补 id"]
+    C --> D["② token_counter<br/>统计 token"]
+    D --> E["③ _should_summarize<br/>判断阈值"]
+    E -->|"未达阈值 → return None"| END1["直接放行到模型"]
+    E -->|"达到阈值"| F["④ _determine_cutoff<br/>找切割点"]
+    F --> G["⑤ _partition_messages<br/>切成两段"]
+    G --> H["⑥ _create_summary<br/>调 LLM 摘要"]
+    H --> I["⑦ _build_new_messages<br/>包装摘要"]
+    I --> J["⑧ return<br/>RemoveMessage ALL + 摘要 + 保留消息"]
+
+    J --> K["add_messages reducer<br/>消费 RemoveMessage"]
+    K --> L["模型推理<br/>摘要 + 最近消息"]
+</pre>
+
+<h3>可替换性</h3>
+
+<ul>
+  <li><strong>什么情况下换掉它？</strong>：当任务需要精确记忆（法律、金融领域的精确数字），摘要的有损压缩不可接受时，应改用外部向量记忆 + RAG 检索。</li>
+  <li><strong>迁移路径</strong>：自定义 <code>AgentMiddleware</code> 子类，重写 <code>before_model</code>，做"摘要 + 检索 + 压缩"组合。</li>
+  <li><strong>设计模式</strong>：<strong>模板方法模式</strong>（AgentMiddleware 定义 before_model 钩子，SummarizationMiddleware 重写它）+ <strong>装饰器模式</strong>（不改动 Agent 核心图结构，在模型调用前装饰一层摘要逻辑）。</li>
+</ul>
+
+<h3>跨生态对比：各框架的记忆管理方案</h3>
+
+<div class="broad-compare">
+  <div>
+    <h4>LangChain</h4>
+    <p><strong>SummarizationMiddleware</strong></p>
+    <p>自动触发，LLM 摘要，状态替换。三种策略（trim/remove/summarize）统一在 middleware 层。</p>
+  </div>
+  <div>
+    <h4>LlamaIndex</h4>
+    <p><strong>ChatMemoryBuffer</strong></p>
+    <p>基于 token_limit 裁剪，无自动摘要。需手动实现 summary 节点。更偏 RAG 生态。</p>
+  </div>
+  <div>
+    <h4>OpenAI Assistants</h4>
+    <p><strong>自动上下文管理</strong></p>
+    <p>平台全托管，无显式控制。开发者无法干预摘要策略和触发时机。</p>
+  </div>
+  <div>
+    <h4>Anthropic (Claude)</h4>
+    <p><strong>Prompt Caching</strong></p>
+    <p>缓存重复前缀降低成本，但不解决窗口超限问题。需自行实现摘要逻辑。</p>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- Section 3: Quality Layer                     -->
+<!-- ============================================ -->
+<h2 id="s3">3. 质量层</h2>
+
+<h3>边界条件清单</h3>
+
+<table>
+  <tr><th>#</th><th>输入 / 条件</th><th>预期行为</th><th>忽略后果</th></tr>
+  <tr><td>1</td><td>cutoff_index ≤ 0（消息数 ≤ keep）</td><td>return None，不触发摘要</td><td>误删本应保留的最近消息</td></tr>
+  <tr><td>2</td><td>cutoff 点落在 ToolMessage 上</td><td>回溯找到对应 AIMessage，前移 cutoff</td><td>孤立的 ToolMessage 导致模型 API 报错</td></tr>
+  <tr><td>3</td><td>消息没有 id</td><td>_ensure_message_ids 自动补 uuid4</td><td>reducer 无法按 id 正确去重</td></tr>
+  <tr><td>4</td><td>摘要 LLM 调用抛异常</td><td>捕获异常，返回 "Error generating summary: {e}"</td><td>整个 Agent 调用中断</td></tr>
+  <tr><td>5</td><td>fraction 触发但模型无 profile</td><td>__init__ 抛出 ValueError</td><td>运行期才发现，fraction 阈值无法计算</td></tr>
+  <tr><td>6</td><td>待摘要消息超长</td><td>先 trim_messages 裁剪再摘要</td><td>摘要模型输入超窗口，摘要生成失败</td></tr>
+  <tr><td>7</td><td>bit 计数溢出（极长对话）</td><td>binary search 的 max_iterations 限迭代次数</td><td>无限循环</td></tr>
+</table>
+
+<h3>参数完整说明</h3>
+
+<table>
+  <tr><th>参数</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+  <tr><td><code>model</code></td><td>str | BaseChatModel</td><td>必填</td><td>用于生成摘要的模型。可以是独立的便宜模型，节省成本</td></tr>
+  <tr><td><code>trigger</code></td><td>ContextSize | TriggerClause | list</td><td>None</td><td>触发阈值。tuple 是单条件，dict 是 AND，list 是 OR</td></tr>
+  <tr><td><code>keep</code></td><td>ContextSize</td><td>("messages", 20)</td><td>摘要后保留多少最近消息。不支持 list</td></tr>
+  <tr><td><code>token_counter</code></td><td>TokenCounter</td><td>count_tokens_approximately</td><td>自定义 token 计数函数。默认用近似计数，Anthropic 模型自动调参</td></tr>
+  <tr><td><code>summary_prompt</code></td><td>str</td><td>DEFAULT_SUMMARY_PROMPT</td><td>摘要 prompt 模板。必须保留 &lt;messages&gt; 和 {messages} 占位符</td></tr>
+  <tr><td><code>trim_tokens_to_summarize</code></td><td>int | None</td><td>4000</td><td>摘要前先裁剪，防止待摘要消息超长。传 None 跳过裁剪</td></tr>
+</table>
+
+<h3>反模式警告</h3>
+
+<div class="comparison">
+  <div>
+    <h4>❌ 错误：keep 用 tokens 且值接近 trigger</h4>
+    <pre><code>SummarizationMiddleware(
+    model=model,
+    trigger=("tokens", 4000),
+    keep=("tokens", 3500),
+)</code></pre>
+    <p><strong>为什么错</strong>：真正被摘要的只有 500 token，摘要空间太小，几乎没价值，却额外消耗一次 LLM 调用。</p>
+  </div>
+  <div>
+    <h4>✅ 正确：trigger 用 token，keep 用消息条数</h4>
+    <pre><code>SummarizationMiddleware(
+    model=model,
+    trigger=("tokens", 4000),
+    keep=("messages", 20),
+)</code></pre>
+    <p><strong>为什么对</strong>：摘要空间充足，摘要质量有保障。trigger 和 keep 的语义各自独立。</p>
+  </div>
+</div>
+
+<h3>可维护性陷阱</h3>
+
+<ul>
+  <li><strong>摘要 prompt 的隐式契约</strong>：<code>DEFAULT_SUMMARY_PROMPT</code> 中的 <code>&lt;messages&gt;</code> 标记和 <code>{messages}</code> 占位符是下游（如 deep agents）的"公开契约"。自定义 prompt 时如果删掉这两个标记，会破坏下游消费者。预防：自定义时保留这些结构。</li>
+  <li><strong>token 计数器不准确</strong>：默认使用 <code>count_tokens_approximately</code>（基于字符数估算），中文、代码、特殊 token 可能偏差大。Anthropic 模型自动调整到 3.3 chars/token 的近似值。生产环境建议用模型真实 tokenizer。</li>
+</ul>
+
+<!-- ============================================ -->
+<!-- Section 3.5: Variation & Disguise            -->
+<!-- ============================================ -->
+<h2 id="s35">3.5. 变体与伪装</h2>
+
+<h3>跨生态等价概念</h3>
+
+<table>
+  <tr><th>生态</th><th>名称 / 模式</th><th>关键差异</th></tr>
+  <tr><td>LangChain</td><td>SummarizationMiddleware</td><td>内置中间件，自动触发，源码约 870 行</td></tr>
+  <tr><td>LangGraph</td><td>自定义 summarize 节点</td><td>手动在图中插入节点，控制更细，但需自己实现</td></tr>
+  <tr><td>LlamaIndex</td><td>ChatMemoryBuffer + SummaryIndex</td><td>需手动组合，无自动摘要中间件</td></tr>
+  <tr><td>OpenAI Assistants</td><td>自动上下文管理</td><td>平台托管，无开发者控制权</td></tr>
+  <tr><td>通用模式</td><td>"Conversation Summarization"</td><td>设计模式：达到阈值 → LLM 摘要 → 替换旧消息</td></tr>
+</table>
+
+<h3>误导类比警示</h3>
+
+<p><strong>流行类比</strong>："摘要就像给对话拍照存档，把照片收进相册，腾出桌面空间。"</p>
+
+<p><strong>为什么吸引人</strong>：它暗示"信息没丢，只是换了种形式存起来"，符合直觉。</p>
+
+<p><strong>哪里不准确</strong>：</p>
+<ol>
+  <li>拍照是<strong>无损</strong>的（像素级完整），但摘要是<strong>有损压缩</strong>——精确数字、微妙语气会丢失。</li>
+  <li>照片可以"原样恢复"，但摘要<strong>无法还原</strong>原始对话——它是单向的、不可逆的压缩。</li>
+</ol>
+
+<p><strong>更好的类比</strong>："摘要更像是<strong>榨汁</strong>——把一堆对话（水果）压成一杯浓缩汁（摘要）。你保住了营养（关键信息），但失去了果肉纤维（细节和原始结构），而且榨完就回不去了。"</p>
+
+<!-- ============================================ -->
+<!-- Section 4: Resilience Layer                  -->
+<!-- ============================================ -->
+<h2 id="s4">4. 韧性层</h2>
+
+<h3>失败场景 1：摘要后 Agent 仍然"失忆"</h3>
+
+<table>
+  <tr><th>触发</th><td>摘要把关键信息（如精确数字、完整列表）压缩时丢失了，或摘要质量太差</td></tr>
+  <tr><th>症状</th><td>用户问"我之前的预算是多少？"Agent 答错；Agent 重复已完成的任务</td></tr>
+  <tr><th>诊断</th><td><ol><li>检查触发后的 state 摘要文本内容</li><li>确认默认 prompt 的四个 section（SESSION INTENT / SUMMARY / ARTIFACTS / NEXT STEPS）是否覆盖了所需信息</li></ol></td></tr>
+  <tr><th>根因</th><td>默认 prompt 提取"目标、结论、产物、下一步"，但<strong>不提取精确数字、完整列表等细节</strong></td></tr>
+  <tr><th>缓解</th><td>自定义 <code>summary_prompt</code> 要求保留特定类型信息；或调大 <code>keep</code> 保留更多原始消息；或对关键信息做额外持久化</td></tr>
+</table>
+
+<h3>失败场景 2：摘要触发太频繁，成本暴涨</h3>
+
+<table>
+  <tr><th>触发</th><td>trigger 阈值太低，或 keep 用 tokens 且值接近 trigger</td></tr>
+  <tr><th>症状</th><td>每次对话都触发一次摘要 LLM 调用，延迟增加、成本上升</td></tr>
+  <tr><th>诊断</th><td><ol><li>观察日志中 <code>lc_source="summarization"</code> 的调用频率</li><li>计算 trigger 与 keep 的差值</li></ol></td></tr>
+  <tr><th>根因</th><td>摘要空间太小（trigger - keep 差值小），导致稍微累积就触发</td></tr>
+  <tr><th>缓解</th><td>调高 trigger；或改用 <code>keep=("messages", N)</code> 保证摘要空间</td></tr>
+</table>
+
+<h3>失败场景 3：摘要模型调用失败导致 Agent 中断</h3>
+
+<table>
+  <tr><th>触发</th><td>摘要 LLM 不可用、超时、或返回格式异常</td></tr>
+  <tr><th>症状</th><td>Agent 调用被中断，或摘要内容为 "Error generating summary: ..."</td></tr>
+  <tr><th>诊断</th><td><ol><li>检查摘要消息的 content 是否以 "Error" 开头</li><li>确认摘要模型 API 可用性</li></ol></td></tr>
+  <tr><th>根因</th><td>_create_summary 捕获异常后返回错误字符串而非抛出，设计上是为了"降级"而非中断</td></tr>
+  <tr><th>缓解</th><td>监控摘要异常率；考虑为摘要模型设置独立的超时和重试策略</td></tr>
+</table>
+
+<h3>监控信号</h3>
+
+<table>
+  <tr><th>信号</th><th>关注什么</th><th>阈值</th><th>动作</th></tr>
+  <tr><td>摘要触发频率</td><td><code>lc_source="summarization"</code> 消息数</td><td>每轮对话 > 1 次</td><td>检查 trigger/keep 配置</td></tr>
+  <tr><td>摘要后 token 数</td><td>摘要后的 total_tokens</td><td>仍 > 模型窗口 80%</td><td>调小 keep 或换更大窗口模型</td></tr>
+  <tr><td>摘要生成异常</td><td>content 以 "Error" 开头</td><td>出现即告警</td><td>检查摘要模型可用性</td></tr>
+  <tr><td>摘要内容质量</td><td>用户追问早期细节时 Agent 答错</td><td>关键信息遗漏</td><td>自定义 summary_prompt</td></tr>
+</table>
+
+<!-- ============================================ -->
+<!-- Section 5: Feynman Explanation               -->
+<!-- ============================================ -->
+<h2 id="s5">5. 费曼讲解</h2>
+
+<h3>对 5 岁小孩</h3>
+
+<blockquote>
+  就像你有一个小本子，上面记满了你和朋友说的话。本子写满了写不下新的话了，这时候你拿出一个聪明的小帮手，让他把前面的话变成一句话的总结写在本子上，然后把前面的话擦掉。这样本子就有新的地方写了，而且你还记得前面说了什么重要的事。
+</blockquote>
+
+<h3>更准确的类比</h3>
+
+<blockquote>
+  摘要不是"拍照存档"（拍照是像素级无损），而是<strong>"榨汁"</strong>：把一堆对话水果压成一杯浓缩汁。营养（关键信息）保住了，但果肉纤维（细节和原始结构）没了，而且榨完就回不去了。
+</blockquote>
+
+<h3>对非技术同事</h3>
+
+<blockquote>
+  SummarizationMiddleware 是 LangChain 内置的记忆管理工具。当 Agent 的对话历史太长、超出模型的处理上限时，它会自动调用一个 AI 把旧对话压缩成一段总结，然后用这段总结替换掉旧消息，同时保留最近的消息。这样既控制了对话长度，又不会完全丢失之前的信息。代价是总结会丢失一些细节，而且每次总结需要额外调用一次 AI，有成本。
+</blockquote>
+
+<!-- ============================================ -->
+<!-- Section 6: Embedded Quizzes                  -->
+<!-- ============================================ -->
+<h2 id="s6">6. 内嵌练习</h2>
+
+<div class="quiz">
+  <h3>练习 1：理解 return 的三段结构</h3>
+  <p><code>SummarizationMiddleware.before_model</code> 返回的 <code>messages</code> 列表，按顺序由哪三部分组成？</p>
+  <form id="quiz1">
+    <label><input type="radio" name="q1" value="a"> RemoveMessage(ALL) → 摘要消息 → 保留的最近消息</label>
+    <label><input type="radio" name="q1" value="b"> 摘要消息 → 保留的最近消息 → RemoveMessage(ALL)</label>
+    <label><input type="radio" name="q1" value="c"> 保留的最近消息 → 摘要消息 → RemoveMessage(ALL)</label>
+    <button type="button" onclick="checkQuiz1()">提交</button>
+    <div id="feedback1" class="feedback"></div>
+  </form>
+</div>
+
+<div class="quiz">
+  <h3>练习 2：判断对错</h3>
+  <p>判断：<em>"<code>RemoveMessage(id=REMOVE_ALL_MESSAGES)</code> 会把所有消息删掉，所以摘要触发后 Agent 彻底失忆了。"</em></p>
+  <form id="quiz2">
+    <label><input type="radio" name="q2" value="true"> 正确</label>
+    <label><input type="radio" name="q2" value="false"> 错误</label>
+    <button type="button" onclick="checkQuiz2()">提交</button>
+    <div id="feedback2" class="feedback"></div>
+  </form>
+</div>
+
+<div class="quiz">
+  <h3>练习 3：场景诊断</h3>
+  <p>你配置了 <code>trigger=("tokens", 4000), keep=("tokens", 3500)</code>。摘要几乎每次都触发，且内容很短、几乎没价值。根因是什么？</p>
+  <form id="quiz3">
+    <label><input type="radio" name="q3" value="a"> trigger 阈值设得太高</label>
+    <label><input type="radio" name="q3" value="b"> keep 用 tokens 且值接近 trigger，摘要空间太小</label>
+    <label><input type="radio" name="q3" value="c"> 摘要模型的 token 计数器有 bug</label>
+    <button type="button" onclick="checkQuiz3()">提交</button>
+    <div id="feedback3" class="feedback"></div>
+  </form>
+</div>
+
+<div class="quiz">
+  <h3>练习 4：trigger 语义</h3>
+  <p>以下配置的含义是什么？</p>
+  <pre><code>trigger=[
+    {"tokens": 5000, "messages": 3},
+    {"tokens": 3000, "messages": 6},
+]</code></pre>
+  <form id="quiz4">
+    <label><input type="radio" name="q4" value="a"> 两个条件都要满足才触发（AND）</label>
+    <label><input type="radio" name="q4" value="b"> 任一组条件满足就触发，组内需同时满足（OR of AND）</label>
+    <label><input type="radio" name="q4" value="c"> 只要 token 超 5000 或消息超 6 条就触发</label>
+    <button type="button" onclick="checkQuiz4()">提交</button>
+    <div id="feedback4" class="feedback"></div>
+  </form>
+</div>
+
+<div class="quiz">
+  <h3>练习 5：跨生态对比</h3>
+  <p>与 LangChain 的 SummarizationMiddleware 不同，LlamaIndex 的 ChatMemoryBuffer 主要依赖什么来控制记忆？</p>
+  <form id="quiz5">
+    <label><input type="radio" name="q5" value="a"> 自动 LLM 摘要</label>
+    <label><input type="radio" name="q5" value="b"> token_limit 裁剪，无自动摘要</label>
+    <label><input type="radio" name="q5" value="c"> 向量数据库检索</label>
+    <button type="button" onclick="checkQuiz5()">提交</button>
+    <div id="feedback5" class="feedback"></div>
+  </form>
+</div>
+
+<!-- ============================================ -->
+<!-- Section 7: Deep Practice                     -->
+<!-- ============================================ -->
+<h2 id="s7">7. 深度练习</h2>
+
+<h3>练习 1：故障模拟</h3>
+
+<p>场景：你部署了一个使用 <code>trigger=("tokens", 8000), keep=("messages", 5)</code> 的客服 Agent。上线后发现用户投诉"Agent 忘记了我前面说的需求"。请一步步排查：可能的原因有哪些？先查什么？怎么验证？</p>
+
+<details>
+  <summary>参考思路</summary>
+  <ol>
+    <li><strong>先查摘要文本内容</strong>：打印 state 中 <code>lc_source="summarization"</code> 的消息，看摘要是否遗漏了关键信息</li>
+    <li><strong>检查 keep 值</strong>：keep=5 意味着只保留最近 5 条消息，如果用户需求在第 6 条之前说的，且摘要没覆盖到，就会丢失</li>
+    <li><strong>检查默认 prompt</strong>：默认 prompt 提取"目标/结论/产物/下一步"，但不会提取精确需求细节。如果用户需求是"预算 5000 元内的产品"，这个数字可能被摘要丢失</li>
+    <li><strong>缓解方案</strong>：调大 keep 到 20-30；自定义 summary_prompt 要求保留"用户的具体需求参数"；对关键信息做额外持久化到 state 的自定义字段</li>
+  </ol>
+</details>
+
+<h3>练习 2：对比分析</h3>
+
+<p>对比三种记忆管理方案。针对以下场景，分别选哪个？为什么？</p>
+<ol>
+  <li>一个需要精确记录金额的财务 Agent</li>
+  <li>一个闲聊型客服 Agent（不关心历史细节）</li>
+  <li>一个需要删除用户敏感信息的合规 Agent</li>
+</ol>
+
+<details>
+  <summary>参考思路</summary>
+  <ol>
+    <li><strong>财务 Agent</strong>：不适合 SummarizationMiddleware（有损压缩会丢精确数字）。推荐自定义 state 字段持久化金额 + trim_messages 控制对话长度，或外部数据库存储关键数据。</li>
+    <li><strong>闲聊客服</strong>：最适合 SummarizationMiddleware。不关心精确细节，摘要保留"对话意图"即可。</li>
+    <li><strong>合规 Agent</strong>：用 RemoveMessage 精确删除敏感消息。摘要是不可逆压缩，敏感信息可能残留在摘要中，不合规。</li>
+  </ol>
+</details>
+
+<h3>练习 3：你是面试官</h3>
+
+<p>假设你要面试一个使用过 LangChain 的候选人。请为"SummarizationMiddleware"这个主题设计 3 个面试题，要求从不同角度考察候选人的理解深度。</p>
+
+<details>
+  <summary>参考思路</summary>
+  <ol>
+    <li><strong>基础题</strong>："SummarizationMiddleware 的 trigger 和 keep 有什么区别？各支持哪些单位？"</li>
+    <li><strong>深度题</strong>："SummarizationMiddleware 为什么在 return 里用 RemoveMessage(ALL) 而不是逐个删除旧消息？"</li>
+    <li><strong>实战题</strong>："如果你发现摘要触发后 Agent 重复已完成的任务，怎么排查？可能的原因有哪些？"</li>
+  </ol>
+</details>
+
+<!-- ============================================ -->
+<!-- Section 8: Pre-Grill Briefing                -->
+<!-- ============================================ -->
+<h2 id="s8">8. 预备拷问</h2>
+
+<p>以下是 deep-grill 可能从 5 个视角提出的面试题，学完后自检：</p>
+
+<h3>面试官视角</h3>
+<div class="interview-grid">
+  <div class="interview-item"><span class="role">面试官</span> SummarizationMiddleware 的 trigger 支持哪几种形态？tuple、dict、list 分别代表什么语义？</div>
+  <div class="interview-item"><span class="role">面试官</span> 为什么摘要后要用 RemoveMessage(ALL) 而不是只删旧消息？</div>
+  <div class="interview-item"><span class="role">面试官</span> keep 和 trigger 的本质区别是什么？如果 keep 用 tokens 会有问题吗？</div>
+</div>
+
+<h3>架构师视角</h3>
+<div class="interview-grid">
+  <div class="interview-item"><span class="role">架构师</span> SummarizationMiddleware 为什么继承 AgentMiddleware 并重写 before_model，而不是改 create_agent 的核心图？</div>
+  <div class="interview-item"><span class="role">架构师</span> 如果摘要模型和主模型不是同一个，系统架构上有什么需要注意的？</div>
+  <div class="interview-item"><span class="role">架构师</span> 与 LlamaIndex 或 OpenAI Assistants 的记忆管理相比，LangChain 的方案有什么优势和局限？</div>
+</div>
+
+<h3>代码审查者视角</h3>
+<div class="interview-grid">
+  <div class="interview-item"><span class="role">代码审查者</span> _find_safe_cutoff_point 为什么要回溯找 AIMessage？不找会怎样？</div>
+  <div class="interview-item"><span class="role">代码审查者</span> _create_summary 捕获异常后返回错误字符串而不是抛出，利弊是什么？</div>
+  <div class="interview-item"><span class="role">代码审查者</span> 自定义 summary_prompt 时有哪些必须保留的"公开契约"？</div>
+</div>
+
+<h3>故障排查视角</h3>
+<div class="interview-grid">
+  <div class="interview-item"><span class="role">故障排查</span> 摘要后 Agent 重复已完成的任务，怎么排查？</div>
+  <div class="interview-item"><span class="role">故障排查</span> 摘要触发太频繁导致成本暴涨，根因可能是什么？</div>
+  <div class="interview-item"><span class="role">故障排查</span> 摘要模型调用失败时，Agent 会怎样？如何设计降级策略？</div>
+</div>
+
+<h3>讲师视角</h3>
+<div class="interview-grid">
+  <div class="interview-item"><span class="role">讲师</span> 怎么向一个非技术人员解释"摘要有损但能保住关键信息"？</div>
+  <div class="interview-item"><span class="role">讲师</span> 用一个生活比喻解释 AI/Tool 消息对为什么不能被切断。</div>
+  <div class="interview-item"><span class="role">讲师</span> 如果让你用一句话总结 SummarizationMiddleware 的核心设计思想，你会怎么说？</div>
+</div>
+
+<!-- ============================================ -->
+<!-- Section 9: Spaced Review                     -->
+<!-- ============================================ -->
+<h2 id="s9">9. 间隔回顾</h2>
+
+<h3>跨概念连接</h3>
+
+<ul>
+  <li><strong>RemoveMessage 从 Lesson 0001</strong>：SummarizationMiddleware 的 return 里直接用了 <code>RemoveMessage(id=REMOVE_ALL_MESSAGES)</code> 来清空消息。今天的摘要机制本质上是"先清空，再填充"——借用了 RemoveMessage 的 reducer 机制。</li>
+  <li><strong>trim_messages 从之前课程</strong>：<code>_trim_messages_for_summary</code> 内部调用 <code>trim_messages(strategy="last", allow_partial=True, include_system=True)</code> 来防止摘要输入超长。这是 trim_messages 在摘要流程中的实际应用。</li>
+  <li><strong>checkpointer 从之前课程</strong>：摘要后的新 state 被 checkpointer 持久化，后续用相同的 thread_id 恢复时看到的是摘要后的状态。这意味着摘要是<strong>不可逆</strong>的——一旦持久化，原始消息就永久丢失了。</li>
+</ul>
+
+<h3>跨课问题</h3>
+
+<p>如果同时使用 SummarizationMiddleware 和自定义的 RemoveMessage 中间件，它们的执行顺序会怎样影响最终 state？<code>create_agent(middleware=[...])</code> 中的 middleware 列表是按什么顺序执行的？</p>
+
+<p>⏰ 3 天后重新做本课的练习。</p>
+
+<!-- ============================================ -->
+<!-- Section 10: Recommended Deep Reading         -->
+<!-- ============================================ -->
+<h2 id="s10">10. 推荐深度阅读</h2>
+
+<ul>
+  <li><strong><a href="https://github.com/langchain-ai/langchain/blob/master/libs/langchain/langchain/agents/middleware/summarization.py">SummarizationMiddleware 源码</a></strong> — 源码深度解析<br>
+  完整 870 行实现。重点看 <code>before_model</code>、<code>_should_summarize</code>、<code>_determine_cutoff_index</code>、<code>_find_safe_cutoff_point</code> 四个方法。</li>
+
+  <li><strong><a href="https://langchain-doc.cn/v1/python/langchain/short-term-memory.html">LangChain 官方文档：短期记忆</a></strong> — 官方文档<br>
+  三种策略（trim/remove/summarize）的完整说明和代码示例。</li>
+
+  <li><strong><a href="https://docs.langchain.com/oss/python/langchain/agents/middleware">LangChain Agents Middleware 文档</a></strong> — 官方文档<br>
+  AgentMiddleware 生命周期钩子的完整说明。</li>
+
+  <li><strong><a href="../08-RemoveMessage.md">本地文档：RemoveMessage 删除机制详解</a></strong> — 本课 return 中 RemoveMessage(ALL) 的底层原理</li>
+
+  <li><strong><a href="../10-trim-message.md">本地文档：trim_messages 执行路径</a></strong> — 摘要前裁剪用到的机制</li>
+
+  <li><strong><a href="../07-agent失忆排查思路.md">本地文档：Agent 失忆排查思路</a></strong> — 摘要丢失信息时的排查方法</li>
+</ul>
+
+<div class="footer">
+  <p><strong>Next lesson</strong>：待定（本课是 SummarizationMiddleware 系列的第一课）</p>
+  <p>如果你对 SummarizationMiddleware 有任何疑问，可以随时在对话中追问——我会帮你排查和解答。</p>
+</div>
+
+    </div><!-- /article-body -->
+  </main>
+</div><!-- /layout -->
+
+<!-- 回到顶部 -->
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<!-- Mermaid -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#fef0f0',
+      primaryBorderColor: '#ea6f5a',
+      lineColor: '#999',
+      fontSize: '14px'
+    }
+  });
+</script>
+
+<script>
+// ============================================
+// Quiz 逻辑
+// ============================================
+function checkQuiz1() {
+  var fb = document.getElementById('feedback1');
+  var s = document.querySelector('input[name="q1"]:checked');
+  if (!s) { fb.className = 'feedback wrong'; fb.textContent = '请先选择一个答案。'; return; }
+  if (s.value === 'a') {
+    fb.className = 'feedback correct';
+    fb.textContent = '正确！顺序是 RemoveMessage(ALL) → 摘要消息 → 保留的最近消息。';
+  } else {
+    fb.className = 'feedback wrong';
+    fb.textContent = '再想想。RemoveMessage(ALL) 必须排在最前面，先清空，再放入新内容。';
+  }
+}
+function checkQuiz2() {
+  var fb = document.getElementById('feedback2');
+  var s = document.querySelector('input[name="q2"]:checked');
+  if (!s) { fb.className = 'feedback wrong'; fb.textContent = '请先选择一个答案。'; return; }
+  if (s.value === 'false') {
+    fb.className = 'feedback correct';
+    fb.textContent = '正确！删掉后立即追加摘要 + 保留消息，Agent 并没有失忆。';
+  } else {
+    fb.className = 'feedback wrong';
+    fb.textContent = '再想想。删掉之后紧接着又追加了摘要和保留消息。';
+  }
+}
+function checkQuiz3() {
+  var fb = document.getElementById('feedback3');
+  var s = document.querySelector('input[name="q3"]:checked');
+  if (!s) { fb.className = 'feedback wrong'; fb.textContent = '请先选择一个答案。'; return; }
+  if (s.value === 'b') {
+    fb.className = 'feedback correct';
+    fb.textContent = '正确！keep 和 trigger 差值只有 500 token，摘要空间太小。';
+  } else {
+    fb.className = 'feedback wrong';
+    fb.textContent = '再想想。问题在于 keep 和 trigger 的差值太小。';
+  }
+}
+function checkQuiz4() {
+  var fb = document.getElementById('feedback4');
+  var s = document.querySelector('input[name="q4"]:checked');
+  if (!s) { fb.className = 'feedback wrong'; fb.textContent = '请先选择一个答案。'; return; }
+  if (s.value === 'b') {
+    fb.className = 'feedback correct';
+    fb.textContent = '正确！dict 内是 AND，list 间是 OR。这是 OR of AND。';
+  } else {
+    fb.className = 'feedback wrong';
+    fb.textContent = '再想想。dict 内是 AND，list 间是 OR。';
+  }
+}
+function checkQuiz5() {
+  var fb = document.getElementById('feedback5');
+  var s = document.querySelector('input[name="q5"]:checked');
+  if (!s) { fb.className = 'feedback wrong'; fb.textContent = '请先选择一个答案。'; return; }
+  if (s.value === 'b') {
+    fb.className = 'feedback correct';
+    fb.textContent = '正确！LlamaIndex 的 ChatMemoryBuffer 基于 token_limit 裁剪，无自动摘要。';
+  } else {
+    fb.className = 'feedback wrong';
+    fb.textContent = '再想想。LlamaIndex 没有内置的自动摘要中间件。';
+  }
+}
+
+// ============================================
+// 回到顶部按钮
+// ============================================
+(function() {
+  var btn = document.getElementById('backToTop');
+  window.addEventListener('scroll', function() {
+    if (window.scrollY > 400) {
+      btn.classList.add('visible');
+    } else {
+      btn.classList.remove('visible');
+    }
+  });
+})();
+
+// ============================================
+// TOC 高亮当前章节
+// ============================================
+(function() {
+  var tocLinks = document.querySelectorAll('.toc-sidebar a');
+  var headings = [];
+  tocLinks.forEach(function(link) {
+    var id = link.getAttribute('href').replace('#', '');
+    var el = document.getElementById(id);
+    if (el) headings.push({ el: el, link: link });
+  });
+
+  window.addEventListener('scroll', function() {
+    var scrollY = window.scrollY + 120;
+    var current = null;
+    headings.forEach(function(item) {
+      if (item.el.offsetTop <= scrollY) current = item;
+    });
+    tocLinks.forEach(function(link) { link.classList.remove('active'); });
+    if (current) current.link.classList.add('active');
+  });
+})();
+
+// ============================================
+// 播客播放器控制
+// ============================================
+(function() {
+  var au = document.getElementById('ppAudio');
+  var btn = document.getElementById('ppBtn');
+  var ip = document.getElementById('ppIconPlay');
+  var pa = document.getElementById('ppIconPause');
+  var cur = document.getElementById('ppCur');
+  var dur = document.getElementById('ppDur');
+  var bar = document.getElementById('ppBar');
+  var fill = document.getElementById('ppFill');
+  var err = document.getElementById('ppError');
+  if (!au) return;
+  function fmt(s) {
+    if (!isFinite(s)) return '--:--';
+    s = Math.floor(s);
+    var m = Math.floor(s / 60), x = s % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (x < 10 ? '0' : '') + x;
+  }
+  function sync() {
+    ip.style.display = au.paused ? '' : 'none';
+    pa.style.display = au.paused ? 'none' : '';
+    btn.classList.toggle('playing', !au.paused);
+    btn.setAttribute('aria-label', au.paused ? '播放播客' : '暂停播客');
+  }
+  btn.addEventListener('click', function() {
+    if (au.paused) { au.play(); } else { au.pause(); }
+  });
+  au.addEventListener('loadedmetadata', function() { dur.textContent = fmt(au.duration); });
+  au.addEventListener('timeupdate', function() {
+    if (isFinite(au.duration) && au.duration > 0) { fill.style.width = (au.currentTime / au.duration * 100) + '%'; }
+    cur.textContent = fmt(au.currentTime);
+  });
+  au.addEventListener('play', sync);
+  au.addEventListener('pause', sync);
+  au.addEventListener('ended', function() { sync(); au.currentTime = 0; fill.style.width = '0%'; });
+  au.addEventListener('error', function() { err.style.display = 'block'; });
+  bar.addEventListener('click', function(e) {
+    var r = bar.getBoundingClientRect();
+    var p = (e.clientX - r.left) / r.width;
+    if (isFinite(au.duration)) { au.currentTime = p * au.duration; }
+  });
+})();
+</script>
+
+</body>
+</html>

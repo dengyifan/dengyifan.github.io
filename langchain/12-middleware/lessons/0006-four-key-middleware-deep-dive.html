@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LangChain 四大中间件深度掌握 — PII · HumanInTheLoop · TodoList · ContextEditing</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+  <style>
+    :root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-hover:#ec6149;--accent-blue:#3194d0;--accent-blue-hover:#187cb7;--accent-light:#fef0f0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--green-bg:#e8f5e9;--orange:#f5a623;--orange-bg:#fff8e1;--red:#e74c3c;--red-bg:#fdf2f2;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace;--content-width:1020px;--toc-width:220px}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-0.5px}.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}.layout{display:flex;justify-content:center;margin-top:56px;padding:0 16px;min-height:100vh}.toc-sidebar{position:fixed;left:calc(50% - var(--content-width)/2 - var(--toc-width) - 40px);top:96px;width:var(--toc-width);max-height:calc(100vh - 140px);overflow-y:auto;z-index:100;font-family:var(--font-sans);font-size:13px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);padding:16px 0;box-shadow:0 1px 3px rgba(0,0,0,0.04)}.toc-sidebar::-webkit-scrollbar{width:3px}.toc-sidebar::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}.toc-title{padding:0 16px 12px;font-size:13px;font-weight:700;color:var(--text);border-bottom:1px solid var(--border);margin-bottom:8px;letter-spacing:0.5px}.toc-sidebar a{display:block;padding:5px 16px;color:var(--text-muted);text-decoration:none;border-left:2px solid transparent;transition:all 0.15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.toc-sidebar a:hover{color:var(--accent);background:#fafafa;border-left-color:var(--border-light)}.toc-sidebar a.active{color:var(--accent);font-weight:600;border-left-color:var(--accent);background:var(--accent-light)}.toc-sidebar a.toc-h2{padding-left:16px}.toc-sidebar a.toc-h3{padding-left:28px;font-size:12px}@media(max-width:1200px){.toc-sidebar{display:none}}.content{width:100%;max-width:var(--content-width);padding:32px 0 80px;margin-left:0}.article-header{background:var(--card-bg);border-radius:4px;padding:36px 40px 28px;margin-bottom:16px;border-bottom:1px solid var(--border)}.article-header h1{font-size:30px;font-weight:700;line-height:1.4;color:var(--text);font-family:var(--font-sans);margin-bottom:16px}.article-meta{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:20px;flex-wrap:wrap}.article-body{background:var(--card-bg);border-radius:4px;padding:32px 40px 48px}.article-body h2{font-size:22px;font-weight:700;margin:40px 0 16px;font-family:var(--font-sans);padding-bottom:8px;border-bottom:1px solid var(--border);color:var(--text)}.article-body h2:first-child{margin-top:0}.article-body h3{font-size:18px;font-weight:600;margin:28px 0 12px;font-family:var(--font-sans);color:#333}.article-body p{margin:14px 0;text-align:justify}.article-body a{color:var(--accent);text-decoration:none}.article-body a:hover{text-decoration:underline}.article-body strong{font-weight:700;color:#222}code{font-family:var(--font-mono);font-size:0.88em;background:var(--code-bg);padding:2px 6px;border-radius:3px;color:#c7254e}pre{font-family:var(--font-mono);font-size:13px;background:#282c34;color:#abb2bf;padding:18px 22px;border-radius:6px;overflow-x:auto;margin:18px 0;line-height:1.6}pre code{background:transparent;color:inherit;padding:0;font-size:inherit}blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid var(--accent);background:#fafafa;color:#555;font-size:0.95em}table{border-collapse:collapse;width:100%;margin:18px 0;font-size:14px;font-family:var(--font-sans)}th,td{border:1px solid var(--border);padding:10px 14px;text-align:left}th{background:#fafafa;font-weight:600;color:#333;font-size:13px}tr:hover{background:#fafafa}.note,.warning,.tip,.info{border-left:4px solid;margin:1rem 0;padding:12px 16px;border-radius:0 6px 6px 0;font-size:0.95em}.note{border-color:var(--accent-blue);background:#f0f7fd}.warning{border-color:var(--orange);background:var(--orange-bg)}.tip{border-color:var(--green);background:var(--green-bg)}.note-title,.warning-title,.tip-title{font-weight:700;margin-bottom:0.3rem;display:flex;align-items:center;gap:0.4rem;font-family:var(--font-sans)}.note-title{color:var(--accent-blue)}.warning-title{color:var(--orange)}.tip-title{color:var(--green)}.deep-grill-readiness{background:#f5f5f5;border:1px solid var(--border);border-radius:6px;padding:1rem 1.5rem;margin:2rem 0 1rem;font-size:0.95em}.deep-grill-readiness h4{margin-top:0;color:var(--text);font-family:var(--font-sans)}.deep-grill-readiness ul{list-style:none;margin-left:0}.deep-grill-readiness li{padding:0.25rem 0;color:var(--text-muted)}.deep-grill-readiness li.done{color:var(--text)}.deep-grill-readiness li.done::before{content:"☑ ";color:#5cb85c}.deep-grill-readiness li::before{content:"☐ ";color:var(--text-muted)}.mermaid{display:flex;justify-content:center;background:#fafafa;border:1px solid var(--border);border-radius:8px;padding:24px;margin:20px 0;overflow-x:auto}.page-nav{display:flex;justify-content:space-between;margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border);font-size:0.95em}.page-nav a{color:var(--accent)}.back-to-top{position:fixed;bottom:40px;right:40px;width:44px;height:44px;background:#fff;border:1px solid var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--text-muted);box-shadow:0 2px 8px rgba(0,0,0,0.08);transition:all 0.2s;z-index:999;opacity:0;transform:translateY(10px);pointer-events:none}.back-to-top.visible{opacity:1;transform:translateY(0);pointer-events:auto}.back-to-top:hover{color:var(--accent);border-color:var(--accent)}@media(max-width:600px){.article-header{padding:24px 20px 20px}.article-header h1{font-size:22px}.article-body{padding:20px 20px 32px}.article-body h2{font-size:19px}.article-body h3{font-size:16px}body{font-size:16px}}
+  </style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep&#8203;Mastery <span>/ 四大中间件深度掌握</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>LangChain 四大中间件深度掌握</h1>
+      <div class="article-meta"><span>Layer: L3 Source</span><span>阅读时间: 25 min</span><span>Source: langchain 1.3.14</span><span>中文</span></div>
+    </div>
+    <div class="article-body">
+
+<p>目标：源码级原理 + 面试级掌握。四大中间件共享 <code>BaseMiddleware</code> 钩子体系。</p>
+
+<h2 id="map">知识地图</h2>
+<div class="mermaid">
+graph TD
+    A[LangChain Middleware] --> B[安全合规: PII]
+    A --> C[人机协同: HumanInTheLoop]
+    A --> D[任务规划: TodoList]
+    A --> E[上下文管理: ContextEditing]
+    B --> B1[block/redact/mask/hash]
+    B --> B2[presidio]
+    C --> C1[interrupt_on]
+    C --> C2[HumanApproval]
+    D --> D1[SystemMessage 注入]
+    E --> E1[Trimming/Summarization/Clear]
+</div>
+
+<h2 id="pii">PIIMiddleware — 个人敏感信息处理</h2>
+<p>拦截模型消息，用 presidio 识别 PII，按策略处理。</p>
+
+<h3>L1 概念</h3>
+<p>防止敏感信息流出，四策略：<strong>block</strong> 拦截、<strong>redact</strong> 替换、<strong>mask</strong> 掩码、<strong>hash</strong> 哈希。</p>
+
+<h3>L2 原理 + 伪代码</h3>
+<pre><code class="language-python">def process_text(text, fields, strategy):
+    results = analyzer.analyze(text, fields)
+    for r in results:
+        if strategy == "block": return BLOCK_REQUEST
+        elif strategy == "redact": text = text.replace(r, "[REDACTED]")
+        elif strategy == "mask": text = partial_mask(r)
+        elif strategy == "hash": text = sha256(r.text)
+    return text</code></pre>
+
+<h3 id="pii-l3">L3 源码层</h3>
+<pre><code class="language-python"># langchain/agents/middleware/pii.py
+class PIIMiddleware(BaseMiddleware):
+    def __init__(self, *fields, strategy="block", pii_types=None):
+        self.fields = fields
+        self.strategy = strategy
+    def before_model(self, state):
+        messages = state["messages"]
+        return {"messages": [self._process_msg(m) for m in messages]}</code></pre>
+
+<div class="note">
+  <div class="note-title">依赖说明</div>
+  <p>依赖 presidio-analyzer / anonymizer，中文识别准确率需验证。</p>
+</div>
+
+<div class="warning">
+  <div class="warning-title">注意事项</div>
+  <p><code>block</code> 会中断整个请求，需搭配 HumanInTheLoop 才能「先问再放行」。</p>
+</div>
+
+<h2 id="hilt">HumanInTheLoopMiddleware — 人工审批</h2>
+
+<h3>L1 概念</h3>
+<p>敏感工具执行前暂停，生成 HumanApproval 中断，外部批准后恢复。</p>
+
+<h3>L2 原理 + 伪代码</h3>
+<pre><code class="language-python">def before_tool(model_state, tool_name, interrupt_on):
+    if tool_name in interrupt_on:
+        decision = interrupt(HumanApproval(tool_name, args))
+        if decision.rejected: return skip_tool()
+    return proceed()</code></pre>
+
+<h3 id="hilt-l3">L3 源码层</h3>
+<pre><code class="language-python"># langchain/agents/middleware/human_in_the_loop.py
+class HumanInTheLoopMiddleware(BaseMiddleware):
+    def __init__(self, interrupt_on=None):
+        self.interrupt_on = interrupt_on or set()
+    def wrap_tool_call(self, name, func):
+        if name in self.interrupt_on:
+            def wrapper(*args, **kwargs):
+                approval = interrupt(HumanApproval(name, kwargs))
+                if not approval.approved: raise UserRejected(name)
+                return func(*args, **kwargs)
+            return wrapper
+        return func</code></pre>
+
+<div class="warning">
+  <div class="warning-title">注意事项</div>
+  <p>恢复依赖 <code>thread_id</code> + checkpointer，否则断点丢失。</p>
+</div>
+
+<h2 id="todo">TodoListMiddleware — 任务规划</h2>
+
+<h3>L1 概念</h3>
+<p>在模型前注入待办清单 SystemMessage，维持多步任务规划。</p>
+
+<h3>L2 原理 + 伪代码</h3>
+<pre><code class="language-python">def before_model(state):
+    todos = state.get("todos", [])
+    sys_msg = SystemMessage(render_todo_prompt(todos))
+    return {"messages": [sys_msg] + state["messages"]}</code></pre>
+
+<h3 id="todo-l3">L3 源码层</h3>
+<pre><code class="language-python"># langchain/agents/middleware/todo_list.py
+class TodoListMiddleware(BaseMiddleware):
+    def before_model(self, state):
+        todos = state.get("todos", [])
+        message = SystemMessage(content=TODO_PROMPT.format(todos=todos))
+        return {"messages": [message] + state["messages"]}</code></pre>
+
+<h2 id="ctx">ContextEditingMiddleware — 上下文修剪</h2>
+
+<h3>L1 概念</h3>
+<p>按 token 预算修剪/摘要/清除消息，防止溢出。</p>
+
+<h3>L2 原理 + 伪代码</h3>
+<pre><code class="language-python">def after_model(state):
+    messages = state["messages"]
+    while token_count(messages) > max_tokens:
+        messages = apply_edit(messages, edits)
+    return {"messages": messages}</code></pre>
+
+<h3 id="ctx-l3">L3 源码层</h3>
+<pre><code class="language-python"># langchain/agents/middleware/context_editing.py
+class ContextEditingMiddleware(BaseMiddleware):
+    def __init__(self, edits=None, token_count_method="disabled"):
+        self.edits = edits or []
+        self.token_counter = build_counter(token_count_method)
+    def after_model(self, state):
+        messages = state["messages"]
+        if self._is_over_limit(messages):
+            messages = self._apply_edits(messages)
+        return {"messages": messages}</code></pre>
+
+<div class="warning">
+  <div class="warning-title">注意事项</div>
+  <p>摘要会丢细节；裁剪不当会让 <code>tool_call_id</code> 匹配断裂。</p>
+</div>
+
+<h2 id="chain">核心调用链</h2>
+<div class="mermaid">
+sequenceDiagram
+    participant M as Middleware Stack
+    participant A as Agent
+    participant T as Tool
+    M->>M: PII.before_model
+    M->>M: TodoList.before_model
+    M->>A: 调用模型
+    A-->>M: tool_calls
+    M->>M: HumanInTheLoop 审批
+    M->>T: 执行工具
+    T-->>M: 结果
+    M->>M: ContextEditing.after_model
+</div>
+
+<h2 id="interview">面试题库</h2>
+
+<h3>PII</h3>
+<ul>
+<li><strong>Q:</strong> 四种策略区别？ <strong>A:</strong> block拦截/redact替换/mask掩码/hash哈希，粒度到字段。</li>
+<li><strong>Q:</strong> 为什么用 presidio？ <strong>A:</strong> 基于 NER 的实体识别，比正则更鲁棒，但中文需校准。</li>
+</ul>
+
+<h3>HumanInTheLoop</h3>
+<ul>
+<li><strong>Q:</strong> interrupt 与普通 return 区别？ <strong>A:</strong> interrupt 暂停图执行、保留状态、需外部恢复。</li>
+<li><strong>Q:</strong> 并行工具如何审批？ <strong>A:</strong> 逐个 interrupt_on，或聚合为单次审批。</li>
+</ul>
+
+<h3>TodoList</h3>
+<ul>
+<li><strong>Q:</strong> 为何用 SystemMessage？ <strong>A:</strong> 系统级指令，优先级高且不占用户可见内容。</li>
+</ul>
+
+<h3>ContextEditing</h3>
+<ul>
+<li><strong>Q:</strong> 为何 after_model 修剪？ <strong>A:</strong> 工具结果最新产生，届时才能准确计数。</li>
+<li><strong>Q:</strong> token 超限崩溃如何降级？ <strong>A:</strong> 提前触发修剪 + 错误重试 + 设置 budget 上限。</li>
+</ul>
+
+<div class="deep-grill-readiness">
+  <h4>Deep-Grill 就绪清单</h4>
+  <ul>
+    <li>能解释 PII 策略设计原因</li>
+    <li>能说出 HumanInTheLoop 与预过滤区别</li>
+    <li>能指出 ContextEditing 的 tool_call_id 断裂</li>
+    <li>能排查 token 超限根因</li>
+    <li>能大白话讲清 TodoList 注入机制</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <span><a href="./0005-summarization-middleware-deep-dive.html">← SummarizationMiddleware Deep Dive</a></span>
+  <span><a href="../index.html">Back to Index →</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+</body>
+</html>

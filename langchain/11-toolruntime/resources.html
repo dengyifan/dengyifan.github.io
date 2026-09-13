@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RESOURCES — 权威资源 · ToolRuntime</title>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="index.html" style="text-decoration:none">Deep​Mastery <span>/ ToolRuntime RESOURCES</span></a>
+</nav>
+
+<div class="container">
+
+  <div class="card">
+    <h1>ToolRuntime 深度掌握 — 资源</h1>
+
+    <h2>Knowledge</h2>
+    <ul>
+      <li><a href="https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/langgraph/prebuilt/tool_node.py">源码: ToolRuntime 类定义 — langgraph prebuilt/tool_node.py L1663-1742</a><br>langgraph 1.2.5，ToolRuntime 的核心定义。使用：理解 ToolRuntime 的所有字段和方法签名。</li>
+      <li><a href="https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/langgraph/prebuilt/tool_node.py">源码: ToolNode._func — langgraph prebuilt/tool_node.py L793-826</a><br>ToolRuntime 实例的构造时机和方式。使用：理解自动注入机制。</li>
+      <li><a href="https://github.com/langchain-ai/langgraph/blob/main/libs/langgraph/langgraph/prebuilt/tool_node.py">源码: _inject_tool_args — langgraph prebuilt/tool_node.py L1315-1353</a><br>工具参数注入的核心逻辑。使用：理解 ToolRuntime 如何被注入到工具函数调用中。</li>
+      <li><a href="https://langchain-doc.cn/v1/python/langchain/short-term-memory.html">官方文档: LangChain Short-term Memory — 在工具中读写短期记忆</a><br>中文官方文档，包含 ToolRuntime 的基础用法示例。使用：快速参考 API 用法。</li>
+      <li><a href="https://langchain-ai.github.io/langgraph/reference/prebuilt/#langgraph.prebuilt.tool_node.ToolNode">官方文档: LangGraph ToolNode</a><br>英文官方 API 文档。使用：ToolNode 的构造参数和完整 API。</li>
+    </ul>
+
+    <h2>Wisdom (Communities)</h2>
+    <ul>
+      <li><a href="https://discord.gg/langchain">LangChain Discord</a><br>官方社区，tool_node 相关讨论。使用：疑难问题咨询。</li>
+    </ul>
+
+    <h2>Gaps</h2>
+    <ul>
+      <li><code>emit_output_delta</code> 的 ContextVar 实现细节（当前只看了类定义，未深入 StreamToolCallHandler 的 ContextVar 机制）</li>
+      <li>ToolRuntime 在多工具并行调用时的行为（<code>executor.map</code> 中的并发安全性）</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    <p>Built with Deep Mastery · <code>langgraph==1.2.5</code></p>
+  </div>
+
+</div>
+
+</body>
+</html>

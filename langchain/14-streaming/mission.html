@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MISSION — 学习使命 · Streaming</title>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="./index.html" style="text-decoration:none">Deep​Mastery <span>/ Streaming MISSION</span></a>
+</nav>
+
+<div class="container">
+
+  <div class="card">
+    <h1>Mission: 吃透 LangGraph Agent Streaming 的四种流式模式</h1>
+
+    <h2>Why</h2>
+    <p>在实际开发中，Agent 的流式输出直接影响用户体验——从"等 5 秒出结果"到"打字机效果逐字显示"。LangGraph 提供了 4 种 <code>stream_mode</code>，每种有不同的粒度和适用场景。理解其底层机制——superstep 如何触发事件、<code>get_stream_writer()</code> 如何工作、多模式组合如何消费——是构建生产级 Agent 应用的基础能力。</p>
+
+    <h2>Success looks like</h2>
+    <ul>
+      <li>能解释 4 种 <code>stream_mode</code>（updates / messages / custom / values / debug）的区别和适用场景</li>
+      <li>能独立编写所有 4 种模式的流式代码，并组合使用</li>
+      <li>能画 Agent 执行流程中 stream 事件触发的时序图</li>
+      <li>能理解 <code>get_stream_writer()</code> 的上下文机制和线程安全</li>
+      <li>能解释 <code>metadata["langgraph_node"]</code> 的来源和作用</li>
+      <li>能回答面试中关于流式输出的深度追问</li>
+    </ul>
+
+    <h2>Constraints</h2>
+    <ul>
+      <li>基于 LangChain 1.0+ / LangGraph 0.2+ 生态</li>
+      <li>学习时间：单次会话完成</li>
+      <li>源码分析基于 LangGraph 开源仓库</li>
+    </ul>
+
+    <h2>Out of scope</h2>
+    <ul>
+      <li>LangGraph 底层图状态机的完整源码实现（StateGraph 内部细节）</li>
+      <li>自定义 streaming 协议开发</li>
+      <li>前后端流式传输协议（SSE / WebSocket 实现细节）</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    <p>Built with Deep Mastery · <code>langgraph &gt;= 0.2.0</code></p>
+  </div>
+
+</div>
+
+</body>
+</html>

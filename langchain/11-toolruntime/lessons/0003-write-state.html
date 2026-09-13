@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第3课：写入记忆 — Command + update 机制</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep​Mastery <span>/ 第3课：写入记忆</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">Table of Contents</div>
+  </nav>
+  <main class="content">
+
+    <div class="article-header">
+      <h1>第3课：写入记忆 — Command + update 机制</h1>
+      <div class="article-meta">
+        <span>📖 前置：<a href="0002-read-state.html">第2课 读取记忆</a></span>
+        <span>⏱ 预计 35 分钟</span>
+        <span>🎯 L2+L3</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+<p>前两课讲了 ToolRuntime 的注入和读取。本课讲最核心的操作：<strong>工具如何修改 state？</strong>这是面试中最容易出追问链的地方。</p>
+
+<h2 id="the-problem">3.1 为什么不能直接修改 state？</h2>
+
+<p>看一个「错误示范」：</p>
+
+<pre><code>@tool
+def bad_tool(runtime: ToolRuntime) -> str:
+    # ❌ 错误：直接修改 runtime.state 不会生效
+    runtime.state["user_name"] = "John"
+    return "done"</code></pre>
+
+<p>为什么不行？三个原因：</p>
+
+<div class="note"><strong>1. state 是不可变快照</strong>：ToolRuntime 构造时（第 1 课的 <code>ToolNode._func</code>），<code>state</code> 是从当前图状态<strong>拷贝</strong>出来的快照，修改它不会影响图的实际状态。</div>
+
+<div class="note"><strong>2. 并发安全</strong>：多个工具可能并行执行（<code>executor.map</code>），如果都直接修改同一个 state 对象，会导致竞态条件。</div>
+
+<div class="note"><strong>3. 溯源</strong>：Graph 框架通过检查每个节点/Tool 的<strong>返回值</strong>来确定状态变更，而不是通过副作用检测。这保证了状态变更的可追溯性。</div>
+
+<h2 id="command">3.2 正确的写入方式：Command + update</h2>
+
+<pre><code>from langgraph.types import Command
+from langchain.messages import ToolMessage
+
+class CustomState(AgentState):
+    user_name: str
+
+@tool
+def update_user_info(runtime: ToolRuntime[CustomContext, CustomState]) -> Command:
+    """look up and update user info."""
+    user_id = runtime.context.user_id
+    user_name = "John Smith" if user_id == "user_123" else "Unknown"
+
+    return Command(update={
+        "user_name": user_name,      # 更新自定义状态字段
+        "messages": [                # 必须附带 ToolMessage
+            ToolMessage(
+                "Successfully looked up user information",
+                tool_call_id=runtime.tool_call_id
+            )
+        ]
+    })</code></pre>
+
+<p>关键点：</p>
+<ul>
+  <li><strong>返回 <code>Command</code> 对象</strong>，而不是直接返回字符串</li>
+  <li><code>update</code> 字典里指定要修改的 state 字段</li>
+  <li><strong>必须附带 <code>ToolMessage</code></strong>——这是 LangGraph 的硬约束：每次工具调用必须有对应的 ToolMessage 作为执行记录</li>
+  <li><code>tool_call_id</code> 必须与当前工具调用匹配，否则系统无法关联</li>
+</ul>
+
+<h2 id="flow">3.3 写入的完整流程</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Tool as 工具函数
+    participant TN as ToolNode._normalize_tool_response
+    participant Graph as Graph 引擎
+    participant State as 图状态
+
+    Tool->>TN: return Command(update={"user_name": "John", "messages": [...]})
+    TN->>TN: 验证 Command + ToolMessage 合法性
+    TN->>Graph: 返回 Command
+    Graph->>State: 应用 update 到状态
+    State-->>Tool: 后续工具可见新状态
+</div>
+
+<h3>关键源码：_normalize_tool_response</h3>
+
+<pre><code># tool_node.py L1432-1453
+def _normalize_tool_response(self, response, tool_call, input_type):
+    if isinstance(response, Command):
+        return self._validate_tool_command(response, tool_call, input_type)
+    if isinstance(response, ToolMessage):
+        response.content = msg_content_output(response.content)
+        return response
+    if isinstance(response, list):
+        if all(isinstance(r, (Command, ToolMessage)) for r in response):
+            return self._validate_tool_command_list(response, tool_call, input_type)
+    raise TypeError(...)</code></pre>
+
+<p>这个函数是工具返回值的「安检门」。合法的返回值只有三种：<code>Command</code>、<code>ToolMessage</code>、或它们的列表。任何其他类型直接抛异常。</p>
+
+<h2 id="read-after-write">3.4 写入后立即读取：工具间协作的核心</h2>
+
+<p>同一个 agent 中，前一个工具写入的状态，后一个工具可以立即读取：</p>
+
+<pre><code>@tool
+def update_user_info(runtime: ToolRuntime[CustomContext, CustomState]) -> Command:
+    user_name = "John Smith" if runtime.context.user_id == "user_123" else "Unknown"
+    return Command(update={
+        "user_name": user_name,
+        "messages": [ToolMessage("Successfully looked up", tool_call_id=runtime.tool_call_id)]
+    })
+
+@tool
+def greet(runtime: ToolRuntime[CustomContext, CustomState]) -> str:
+    user_name = runtime.state["user_name"]   # 读取 update_user_info 写入的字段
+    return f"Hello, {user_name}"</code></pre>
+
+<p>这正是「工具间通过 state 通信」的完整演示。注意：<code>greet</code> 工具不需要返回 Command——它只是<strong>读取</strong> state，不修改它。</p>
+
+<h2 id="return-type">3.5 三种返回值对比</h2>
+
+<table>
+<tr><th>返回值类型</th><th>用途</th><th>何时用</th><th>示例</th></tr>
+<tr><td><code>str</code></td><td>只返回文本给模型</td><td>纯查询工具，不修改状态</td><td><code>return "The weather is sunny"</code></td></tr>
+<tr><td><code>ToolMessage</code></td><td>结构化消息，通常含 tool_call_id</td><td>需要精确控制消息格式</td><td><code>ToolMessage("done", tool_call_id=...)</code></td></tr>
+<tr><td><code>Command(update={...})</code></td><td>修改 state + 返回消息</td><td>需要写入状态字段</td><td><code>Command(update={"user_name": "John", "messages": [...]})</code></td></tr>
+</table>
+
+<div class="warning"><strong>常见陷阱</strong>：如果工具返回 <code>Command</code> 但 <code>update</code> 里忘了加 <code>messages</code>，系统会报错。因为 <code>ToolMessage</code> 是 LangGraph 追踪工具执行的必要记录，缺少它会导致消息链断裂。</div>
+
+<h2 id="parallel">3.6 并行执行的写入冲突</h2>
+
+<div class="production-note">
+<div class="header">生产环境要点</div>
+<p>当模型一次返回多个 ToolCall 时，<code>ToolNode</code> 会用 <code>executor.map</code> <strong>并行执行</strong>它们。如果两个工具<strong>同时修改同一个 state 字段</strong>，谁先谁后是不确定的。</p>
+<p><strong>解决方式</strong>：</p>
+<ol>
+<li><strong>避免冲突</strong>：让每个工具只写自己负责的字段，不交叉。</li>
+<li><strong>使用 reducer</strong>：在 state 定义时声明字段的合并策略（如 <code>operator.add</code> 用于 list 追加），由框架自动合并。</li>
+<li><strong>顺序执行</strong>：如果确实有依赖，通过图结构设计让工具串行执行，而不是让模型一次性返回所有 ToolCall。</li>
+</ol>
+</div>
+
+<h2 id="java">3.7 从 Java 视角看</h2>
+
+<div class="java-comparison">
+<div class="header">Java 视角对照</div>
+<p><strong>Command.update ↔ 类似 Spring 的 <code>ModelAndView</code></strong>：既返回数据（ToolMessage），又指定状态变更（update）。但关键区别是：Spring 的 ModelAndView 是表示层概念，修改的只是当前请求的 Model；而 LangGraph 的 Command.update 是<strong>图状态变更</strong>，会被持久化到 Checkpointer，影响后续所有节点。</p>
+<p><strong>不可变快照 ↔ 类似 Java 的 <code>Collections.unmodifiableMap()</code></strong>：给你一个只读视图，但 LangGraph 更进一步——它直接拷贝一份，完全隔离。</p>
+<p><strong>ToolMessage 必须附带 ↔ 类似数据库事务的 WAL</strong>：每次工具调用必须留下记录（ToolMessage），就像数据库的 Write-Ahead Log 保证可恢复性。</p>
+</div>
+
+<h2 id="summary">3.8 本课小结</h2>
+
+<table>
+<tr><th>问题</th><th>答案</th></tr>
+<tr><td>为什么不能直接改 runtime.state</td><td>state 是不可变快照 + 并发安全 + 框架需要检查返回值</td></tr>
+<tr><td>正确写法</td><td><code>return Command(update={"field": value, "messages": [ToolMessage(...)]})</code></td></tr>
+<tr><td>有哪些合法返回值</td><td>str / ToolMessage / Command / 它们的列表</td></tr>
+<tr><td>并行写入冲突怎么解决</td><td>字段隔离 / reducer / 串行执行</td></tr>
+</table>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能解释为什么不能直接修改 runtime.state（三个原因）</li>
+<li class="done">能写出用 Command(update={...}) 从工具写入状态的完整代码</li>
+<li class="done">能画出写入的完整流程（工具 → normalize → 图引擎 → 状态）</li>
+<li class="done">能说出三种返回值的区别和适用场景</li>
+<li class="done">能解释并行执行的写入冲突和三种解决方式</li>
+</ul>
+</div>
+
+<div class="page-nav">
+  <span><a href="0002-read-state.html">← 上一课：读取记忆</a></span>
+  <span><a href="0004-runtime-vs-toolruntime.html">下一课：ToolRuntime vs Runtime →</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

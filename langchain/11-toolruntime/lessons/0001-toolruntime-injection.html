@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第1课：ToolRuntime 是什么 + 自动注入机制</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep​Mastery <span>/ 第1课：ToolRuntime 注入机制</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">Table of Contents</div>
+  </nav>
+  <main class="content">
+
+    <div class="article-header">
+      <h1>第1课：ToolRuntime 是什么 + 自动注入机制</h1>
+      <div class="article-meta">
+        <span>📖 本课回答三个问题</span>
+        <span>⏱ 预计 30 分钟</span>
+        <span>🎯 L1+L2</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+<p>本课回答三个问题：<strong>ToolRuntime 是什么？它为什么对模型"隐藏"？它是怎么被自动注入到工具里的？</strong>这是理解后续「读写记忆」的基础。</p>
+
+<h2 id="what">1.1 ToolRuntime 是什么</h2>
+
+<p><code>ToolRuntime</code> 是 LangGraph 在<strong>工具执行时</strong>自动注入到工具函数里的一个<strong>运行时上下文对象</strong>。它让你在工具内部访问到 Agent 运行时的各种信息，而不需要显式地通过函数参数层层传递。</p>
+
+<p>先看一个最小例子：</p>
+
+<pre><code>from langchain.tools import tool, ToolRuntime
+
+@tool
+def get_user_info(runtime: ToolRuntime) -> str:
+    """look up user info"""
+    user_id = runtime.state["user_id"]   # 读取状态
+    return "User is John Smith" if user_id == "user_123" else "User is unknown"</code></pre>
+
+<p>注意关键点：<strong>工具函数只声明了 <code>runtime: ToolRuntime</code> 一个参数</strong>，但调用时你并没有手动传这个参数——是系统在背后帮你填进去的。这就是"自动注入"。</p>
+
+<h3>ToolRuntime 里装了什么</h3>
+
+<table>
+<tr><th>字段</th><th>类型</th><th>作用</th></tr>
+<tr><td><code>state</code></td><td><code>StateT</code></td><td>当前图的状态对象（含 <code>messages</code> 等运行数据）</td></tr>
+<tr><td><code>context</code></td><td><code>ContextT</code></td><td>运行时上下文（由 <code>context_schema</code> 定义）</td></tr>
+<tr><td><code>config</code></td><td><code>RunnableConfig</code></td><td>当前执行配置（<code>run_id</code>、<code>thread_id</code> 等）</td></tr>
+<tr><td><code>tool_call_id</code></td><td><code>str | None</code></td><td>当前工具调用的唯一 ID</td></tr>
+<tr><td><code>store</code></td><td><code>BaseStore | None</code></td><td>跨会话持久化存储</td></tr>
+<tr><td><code>stream_writer</code></td><td><code>StreamWriter</code></td><td>流式输出写入器</td></tr>
+<tr><td><code>tools</code></td><td><code>list[BaseTool]</code></td><td>当前 Agent 可用的所有工具</td></tr>
+<tr><td><code>execution_info</code></td><td><code>ExecutionInfo | None</code></td><td>执行元信息（执行器类型、节点名）</td></tr>
+<tr><td><code>server_info</code></td><td><code>ServerInfo | None</code></td><td>部署服务器信息</td></tr>
+</table>
+
+<h2 id="why-hidden">1.2 为什么对模型"隐藏"？</h2>
+
+<p>这是 ToolRuntime 最核心的设计动机。工具函数签名里声明了 <code>runtime</code> 参数，但<strong>模型（LLM）看不到这个参数</strong>——它只看到工具真正需要模型提供的参数。</p>
+
+<pre><code># 模型的视角：只看到 x 这个参数
+@tool
+def my_tool(x: int, runtime: ToolRuntime) -> str:
+    """Tool that accesses runtime context."""
+    ...
+</code></pre>
+
+<p>为什么必须隐藏？三个原因：</p>
+
+<div class="note"><strong>1. 防止模型伪造注入参数（安全）</strong>：如果 <code>runtime</code> 暴露给模型，恶意或错误的模型可能在 <code>ToolCall.args</code> 里塞一个假的 <code>runtime</code> 值，污染状态或越权访问。隐藏后，系统会<strong>强制剥离</strong>模型提供的注入参数，只保留系统注入的受信任值。</div>
+
+<div class="note"><strong>2. 职责分离（设计）</strong>：<code>state</code>、<code>store</code>、<code>context</code> 这些是<strong>框架内部状态</strong>，不该由模型控制。模型只该负责"业务参数"（比如查谁的信息），框架负责"上下文注入"。</div>
+
+<div class="note"><strong>3. 简化模型决策（效率）</strong>：模型不需要理解"当前有哪些上下文可以拿"，它只需要按工具文档（docstring）声明业务参数即可。降低了模型的认知负担和出错率。</div>
+
+<h2 id="injection">1.3 自动注入机制（源码级）</h2>
+
+<p>注入机制的核心在 <code>langgraph/prebuilt/tool_node.py</code>（langgraph 1.2.5）。完整调用链如下：</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Model as LLM 模型
+    participant TN as ToolNode._func
+    participant R1 as _run_one
+    participant Inj as _inject_tool_args
+    participant Tool as 工具函数
+
+    Model->>TN: 返回 ToolCall(含 name/args/id)
+    TN->>TN: 构造 ToolRuntime(state, context, ...)
+    TN->>R1: 传入 tool_call + tool_runtime
+    R1->>Inj: 注入参数
+    Inj->>Inj: 剥离模型提供的注入键
+    Inj->>Inj: 填入受信任的 runtime/state/store
+    Inj->>Tool: 调用工具(带注入参数)
+    Tool-->>TN: 返回结果
+</div>
+
+<h3>关键源码片段 1：构造 ToolRuntime</h3>
+
+<p>每次工具调用前，<code>ToolNode._func</code> 会为每个 tool call 构造一个独立的 <code>ToolRuntime</code> 实例：</p>
+
+<pre><code># tool_node.py L806-816
+tool_runtime = ToolRuntime(
+    state=state,                          # 从当前图状态提取
+    tool_call_id=call["id"],              # 当前调用的 ID
+    config=cfg,                           # 当前执行的 RunnableConfig
+    context=runtime.context,              # 继承自外层 Runtime
+    store=runtime.store,                  # 继承自外层 Runtime
+    stream_writer=runtime.stream_writer,  # 继承自外层 Runtime
+    tools=list(self.tools_by_name.values()),
+    execution_info=runtime.execution_info,
+    server_info=runtime.server_info,
+)</code></pre>
+
+<p><strong>关键洞察</strong>：<code>ToolRuntime</code> 的 <code>context</code>、<code>store</code>、<code>stream_writer</code> 三个字段<strong>直接继承自外层 <code>Runtime</code></strong>（图节点级别的运行时）。而 <code>state</code>、<code>tool_call_id</code>、<code>tools</code> 是工具特有的新字段。这正是第 4 课要讲的「ToolRuntime vs Runtime」的区别来源。</p>
+
+<h3>关键源码片段 2：剥离伪造参数</h3>
+
+<p>注入参数时，系统会<strong>先剥离模型提供的所有注入键</strong>，再填回受信任的值。这是「防伪造」的落地实现：</p>
+
+<pre><code># tool_node.py L1421-1429
+# Strip any caller-supplied values for injected args, then add
+# back only trusted values. This prevents an LLM from forging
+# hidden InjectedToolArg fields via ToolCall.args.
+stripped_args = {
+    k: v
+    for k, v in tool_call_copy["args"].items()
+    if k not in injected.all_injected_keys     # 剥离所有注入键
+}
+tool_call_copy["args"] = {**stripped_args, **injected_args}  # 填回受信任值
+return tool_call_copy</code></pre>
+
+<p>这段注释直接点明了设计意图：<code>prevents an LLM from forging hidden InjectedToolArg fields</code>——防止 LLM 通过 <code>ToolCall.args</code> 伪造隐藏的注入字段。</p>
+
+<h3>关键源码片段 3：识别注入参数</h3>
+
+<p>系统怎么知道一个参数需要注入？<code>_get_all_injected_args</code> 在 ToolNode 初始化时扫描工具签名，识别出三类注入参数：</p>
+
+<pre><code># tool_node.py L1997-2021（简化）
+for name, type_ in all_annotations.items():
+    # 1. 参数名为 "runtime" → 注入 ToolRuntime
+    if name == "runtime":
+        runtime_arg = name
+    # 2. 标注了 InjectedState → 注入 state
+    if state_inj := _get_injection_from_type(type_, InjectedState):
+        state_args[name] = state_inj.field
+    # 3. 标注了 InjectedStore → 注入 store
+    if _get_injection_from_type(type_, InjectedStore):
+        store_arg = name
+    # 4. 标注了 ToolRuntime → 注入 ToolRuntime
+    if _get_injection_from_type(type_, ToolRuntime):
+        ...</code></pre>
+
+<div class="tip"><strong>重点</strong>：识别注入参数靠的是<strong>类型标注（type annotation）</strong>，而不是参数位置或命名约定（除了 <code>runtime</code> 这个特殊名字）。这就是为什么你必须写 <code>runtime: ToolRuntime</code> 而不能只写 <code>runtime</code>。</div>
+
+<h2 id="java">1.4 从 Java 视角看</h2>
+
+<div class="java-comparison">
+<div class="header">Java 视角对照</div>
+<p>这个「自动注入」机制，Java 开发者最熟悉的对应物是 <strong>Spring 的依赖注入（DI）+ 框架的「隐藏参数」</strong>：</p>
+<ul>
+<li><strong>类比 Spring DI</strong>：<code>ToolRuntime</code> 类似 Spring 容器自动注入的 <code>ApplicationContext</code> 或 <code>HttpServletRequest</code>。你声明了类型，框架帮你填值，不需要手动 new。</li>
+<li><strong>关键差异</strong>：Spring 的 DI 是<strong>对象图组装期</strong>注入的（应用启动时），而 ToolRuntime 是<strong>每次工具调用时</strong>动态构造的，因为 state/context 每次调用都不同。</li>
+<li><strong>防伪造</strong>：Java 里类似「不让调用方伪造注入参数」的机制是 <code>final</code> 字段 + 构造器私有化，或者 Servlet 容器的 <code>HttpServletRequest</code> 无法由客户端直接构造。LangGraph 用「剥离 + 填回」的方式实现同一目的。</li>
+</ul>
+</div>
+
+<h2 id="production">1.5 生产环境视角</h2>
+
+<div class="production-note">
+<div class="header">生产环境要点</div>
+<p><strong>并发安全</strong>：注意 <code>_func</code> 里用了 <code>executor.map(self._run_one, ...)</code> 并行执行多个 tool call，<strong>每个 tool call 有独立的 ToolRuntime 实例</strong>，所以多个工具并行读写状态时互不串扰。但如果多个工具<strong>同时写同一个 state 字段</strong>，合并顺序是不确定的——这正是第 3 课「写入记忆」要展开的陷阱。</p>
+</div>
+
+<h2 id="summary">1.6 本课小结</h2>
+
+<table>
+<tr><th>问题</th><th>答案</th></tr>
+<tr><td>ToolRuntime 是什么</td><td>工具执行时自动注入的运行时上下文，承载 state/context/store/config 等</td></tr>
+<tr><td>为什么对模型隐藏</td><td>安全（防伪造）+ 职责分离 + 简化模型决策</td></tr>
+<tr><td>怎么注入的</td><td>ToolNode._func 构造实例 → _inject_tool_args 剥离伪造键 + 填回受信任值</td></tr>
+<tr><td>靠什么识别注入参数</td><td>类型标注（InjectedState/InjectedStore/ToolRuntime）+ 特殊名字 runtime</td></tr>
+</table>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能解释 ToolRuntime 是什么、为什么工具参数对模型隐藏</li>
+<li class="done">能画出自动注入的调用链（ToolNode._func → _run_one → _inject_tool_args）</li>
+<li class="done">能说出「剥离伪造参数」的具体实现和设计意图</li>
+<li class="done">能说清注入参数靠类型标注识别，而不是参数名</li>
+</ul>
+</div>
+
+<div class="page-nav">
+  <span></span>
+  <span><a href="0002-read-state.html">下一课：读取记忆（state vs context）→</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第4课：ToolRuntime vs Runtime + emit_output_delta</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep​Mastery <span>/ 第4课：ToolRuntime vs Runtime</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">Table of Contents</div>
+  </nav>
+  <main class="content">
+
+    <div class="article-header">
+      <h1>第4课：ToolRuntime vs Runtime + emit_output_delta</h1>
+      <div class="article-meta">
+        <span>📖 前置：<a href="0003-write-state.html">第3课 写入记忆</a></span>
+        <span>⏱ 预计 25 分钟</span>
+        <span>🎯 L3+L4</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+<p>上一课讲了写入记忆。本课厘清一个容易混淆的概念：<strong>ToolRuntime 和 Runtime 到底有什么区别？</strong>以及 ToolRuntime 独有的 <code>emit_output_delta</code> 方法。</p>
+
+<h2 id="two-runtimes">4.1 两个 Runtime：各自的定位</h2>
+
+<div class="mermaid">
+flowchart TB
+    subgraph Node["图节点（Node）"]
+        M["Middleware"]
+        RT["Runtime（langgraph.runtime）"]
+    end
+    subgraph Tool["工具执行（ToolNode）"]
+        TT["ToolRuntime"]
+    end
+    RT -->|"继承 context/store/stream_writer"| TT
+    TT -->|"新增 state/tool_call_id/config/tools"| TT
+</div>
+
+<p>源码中的关键注释（<code>tool_node.py</code> L1663-1684）：</p>
+<blockquote>
+This is distinct from <code>Runtime</code> (from <code>langgraph.runtime</code>), which is injected into graph nodes and middleware. <code>ToolRuntime</code> includes additional tool-specific attributes like <code>config</code>, <code>state</code>, and <code>tool_call_id</code> that <code>Runtime</code> does not have.
+</blockquote>
+
+<h3>字段对比</h3>
+
+<table>
+<tr><th>字段</th><th>Runtime</th><th>ToolRuntime</th><th>说明</th></tr>
+<tr><td><code>context</code></td><td>✅</td><td>✅</td><td>继承自 Runtime</td></tr>
+<tr><td><code>store</code></td><td>✅</td><td>✅</td><td>继承自 Runtime</td></tr>
+<tr><td><code>stream_writer</code></td><td>✅</td><td>✅</td><td>继承自 Runtime</td></tr>
+<tr><td><code>execution_info</code></td><td>✅</td><td>✅</td><td>继承自 Runtime</td></tr>
+<tr><td><code>server_info</code></td><td>✅</td><td>✅</td><td>继承自 Runtime</td></tr>
+<tr><td><strong><code>state</code></strong></td><td>❌</td><td><strong>✅</strong></td><td>工具特有：当前图状态</td></tr>
+<tr><td><strong><code>tool_call_id</code></strong></td><td>❌</td><td><strong>✅</strong></td><td>工具特有：当前调用 ID</td></tr>
+<tr><td><strong><code>config</code></strong></td><td>❌</td><td><strong>✅</strong></td><td>工具特有：RunnableConfig</td></tr>
+<tr><td><strong><code>tools</code></strong></td><td>❌</td><td><strong>✅</strong></td><td>工具特有：所有可用工具列表</td></tr>
+</table>
+
+<div class="tip"><strong>记忆口诀</strong>：Runtime 是「图节点级别」的上下文，ToolRuntime 是「工具调用级别」的上下文。ToolRuntime 继承了 Runtime，外加三个特有字段：<strong>state（当前状态）、tool_call_id（调用 ID）、config（执行配置）</strong>。</div>
+
+<h2 id="why-separate">4.2 为什么区分两个 Runtime？</h2>
+
+<div class="note"><strong>1. 职责不同</strong>：图节点（Middleware）不需要知道「当前是哪个工具调用」，它关心的是「整个图执行到哪了」。工具则相反——它需要精确知道当前调用的 <code>tool_call_id</code> 和 <code>state</code>。</div>
+
+<div class="note"><strong>2. 注入时机不同</strong>：Runtime 在<strong>图节点启动时</strong>注入（一次），ToolRuntime 在<strong>每次工具调用时</strong>构造（多次）。一个节点可能触发多次工具调用，每次都需要独立的 ToolRuntime。</div>
+
+<div class="note"><strong>3. 类型安全</strong>：用独立的类区分，避免图节点误用工具专属字段（如 <code>tool_call_id</code>），编译期即可发现类型错误。</div>
+
+<h2 id="emit-output-delta">4.3 emit_output_delta：流式工具输出</h2>
+
+<p>这是 ToolRuntime 独有的方法，<code>Runtime</code> 没有。源码（<code>tool_node.py</code> L1732-1742）：</p>
+
+<pre><code>def emit_output_delta(self, delta: Any) -> None:
+    """Stream a partial output chunk on the `tools` stream channel.
+
+    Reads the per-tool-call writer that `StreamToolCallHandler`
+    installs on a ContextVar at `on_tool_start` and forwards `delta`
+    through it. Silent no-op when the graph was not run with
+    `"tools"` in `stream_mode` (no writer is set), so tool authors
+    can leave `emit_output_delta` calls in place without gating
+    them on stream mode.
+    """</code></pre>
+
+<h3>使用示例</h3>
+
+<pre><code>@tool
+def long_running_tool(runtime: ToolRuntime) -> str:
+    """A tool that does multiple steps."""
+    runtime.emit_output_delta({"progress": "查询中..."})   # 流式推送中间状态
+    result = do_step1()
+    runtime.emit_output_delta({"progress": "处理中..."})   # 继续推送
+    result = do_step2(result)
+    return result</code></pre>
+
+<h3>底层机制</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Graph as Graph 引擎
+    participant Handler as StreamToolCallHandler
+    participant CV as ContextVar
+    participant Tool as 工具函数
+
+    Graph->>Handler: on_tool_start(tool_call)
+    Handler->>CV: 安装 writer 到 ContextVar
+    Tool->>Tool: emit_output_delta(delta)
+    Tool->>CV: 读取 writer
+    Tool->>Handler: 通过 writer 推送 delta
+    Handler->>Graph: 流式输出到 tools channel
+    Tool->>Handler: on_tool_end(tool_call)
+    Handler->>CV: 清理 writer
+</div>
+
+<div class="note"><strong>设计巧妙之处</strong>：<code>emit_output_delta</code> 通过 <strong>ContextVar</strong> 共享 writer，而不是作为参数传入。这样工具作者不需要关心流式模式是否开启——如果没开启 stream_mode="tools"，ContextVar 里没有 writer，方法静默无操作（no-op），不会报错。</div>
+
+<div class="warning"><strong>注意</strong>：<code>emit_output_delta</code> 推送的是 <strong>部分结果</strong>，不是最终返回。最终返回值（<code>str</code> / <code>ToolMessage</code> / <code>Command</code>）仍然需要通过正常 <code>return</code> 返回。这个方法是「带外通道」，走的是 <code>tools</code> 流通道，与主返回值走不同的管道。</div>
+
+<h2 id="java">4.4 从 Java 视角看</h2>
+
+<div class="java-comparison">
+<div class="header">Java 视角对照</div>
+<p><strong>Runtime vs ToolRuntime ↔ 类似 Servlet 的 <code>ServletContext</code> vs <code>HttpServletRequest</code></strong>：ServletContext 是应用级（类似 Runtime 注入到整个图节点），HttpServletRequest 是请求级（类似 ToolRuntime 每次工具调用构造）。</p>
+<p><strong>ContextVar ↔ 类似 Java 的 <code>ThreadLocal</code></strong>：在异步/协程环境中安全地共享上下文，而不需要显式传参。但 Python 的 ContextVar 比 ThreadLocal 更现代——它支持 <code>asyncio</code> 的协程隔离，不会出现 ThreadLocal 在协程复用线程时的串扰问题。</p>
+</div>
+
+<h2 id="summary">4.5 本课小结</h2>
+
+<table>
+<tr><th>问题</th><th>答案</th></tr>
+<tr><td>ToolRuntime vs Runtime</td><td>ToolRuntime 继承 Runtime，新增 state / tool_call_id / config / tools</td></tr>
+<tr><td>为什么分两个</td><td>职责不同、注入时机不同、类型安全</td></tr>
+<tr><td>emit_output_delta</td><td>流式推送部分结果，基于 ContextVar，未开启 stream_mode 时静默无操作</td></tr>
+</table>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能说清 ToolRuntime 和 Runtime 的区别（一表四字段）</li>
+<li class="done">能解释为什么区分两个 Runtime（三点理由）</li>
+<li class="done">能解释 emit_output_delta 的 ContextVar 机制和设计意图</li>
+<li class="done">能说出 emit_output_delta 和 return 的区别（带外通道 vs 主返回值）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+  <span><a href="0003-write-state.html">← 上一课：写入记忆</a></span>
+  <span><a href="0005-interview.html">下一课：面试题库 →</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

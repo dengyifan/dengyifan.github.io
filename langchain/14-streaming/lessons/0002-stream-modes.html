@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>四种 stream_mode 详解</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../../../index.html" style="text-decoration:none">Deep​Mastery <span>/ Streaming</span></a>
+</nav>
+
+<div class="layout">
+
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">目录</div>
+  </nav>
+
+  <main class="content">
+
+    <div class="article-header">
+      
+      <h1>四种 stream_mode 详解</h1>
+      <div class="article-meta">
+        <span>L2 原理层 + L3 源码层</span>
+        <span>2026-08-24</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+
+  <video controls preload="metadata" src="./0002-stream-modes-canvas-video.mp4"></video>
+</div>
+
+<h2>1. 总览：四种模式的对比</h2>
+
+<p>LangGraph 的 <code>agent.stream()</code> 通过 <code>stream_mode</code> 参数控制输出粒度。本课深入讲解最常用的四种模式。</p>
+
+<div class="mermaid">
+flowchart LR
+    A["updates"] -->|"粗"| B["superstep 级别"]
+    C["messages"] -->|"细"| D["token 级别"]
+    E["custom"] -->|"自定义"| F["工具内部"]
+    G["values"] -->|"粗"| H["state 快照"]
+    classDef red fill:#fef0f0,stroke:#ea6f5a
+    classDef blue fill:#f0f7fd,stroke:#3194d0
+    classDef green fill:#e8f5e9,stroke:#42c02e
+    class A,C red
+    class E blue
+    class G green
+</div>
+
+<table>
+  <thead>
+    <tr><th>模式</th><th>粒度</th><th>数据结构</th><th>是否实时</th><th>典型场景</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>updates</code></td><td>superstep</td><td><code>dict[node_name, state_update]</code></td><td>否（步骤完成后）</td><td>显示步骤进度</td></tr>
+    <tr><td><code>messages</code></td><td>token</td><td><code>(chunk, metadata)</code> 元组</td><td>是（逐 token）</td><td>打字机效果</td></tr>
+    <tr><td><code>custom</code></td><td>自定义</td><td>任意（由 writer 决定）</td><td>是（工具内实时）</td><td>进度提示</td></tr>
+    <tr><td><code>values</code></td><td>superstep</td><td>完整 state</td><td>否（步骤完成后）</td><td>状态监控</td></tr>
+  </tbody>
+</table>
+
+<h2>2. updates 模式：按步骤流式输出</h2>
+
+<h3>2.1 原理</h3>
+
+<p><code>updates</code> 是最常用的模式。每个 superstep 完成后，它发出一个事件，内容是<strong>该步骤对 state 的更新</strong>。</p>
+
+<p>关键点：每次迭代返回一个 <strong>字典</strong>，键是节点名称（如 <code>"model"</code> 或 <code>"tools"</code>），值是该节点对 state 的更新内容。</p>
+
+<h3>2.2 示例代码</h3>
+
+<pre><code class="language-python"># stream_mode="updates" — 按步骤流式输出
+import os
+from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
+
+def get_weather(city: str) -> str:
+    """Get the weather for a city."""
+    return f"The weather in {city} is sunny."
+
+model = ChatOpenAI(
+    base_url=os.getenv("LOCAL_AI_API_URL"),
+    api_key=os.getenv("LOCAL_AI_API_KEY"),
+    temperature=0.0,
+    model="deepseek-v4-pro",
+)
+
+agent = create_agent(model, tools=[get_weather])
+
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "What is the weather in SF?"}]},
+    stream_mode="updates"
+):
+    for step, data in chunk.items():
+        print(f"Step {step}")
+        print(f"content: {data['messages'][-1].content}")
+</code></pre>
+
+<h3>2.3 输出结构分析</h3>
+
+<p>每个 <code>chunk</code> 的结构是：</p>
+
+<pre><code class="language-python"># chunk 是 dict，键为节点名
+{
+    "model": {
+        "messages": [AIMessage(...)]  # 模型新增的消息
+    }
+}
+# 或
+{
+    "tools": {
+        "messages": [ToolMessage(...)]  # 工具新增的消息
+    }
+}
+</code></pre>
+
+<div class="note">
+  <div class="note-title">关键点</div>
+  <p><code>chunk.items()</code> 遍历的是节点名，<code>data['messages'][-1]</code> 取的是该节点新增的最后一条消息。因为一个 superstep 中，节点的输出会通过 <code>add_messages</code> reducer 追加到 state。</p>
+</div>
+
+<h3>2.4 两种 content 取法：content vs content_blocks</h3>
+
+<p>在示例代码中，你可能会看到两种取内容的方式：</p>
+
+<pre><code class="language-python"># 方式一：直接取 content（字符串）
+print(f"content: {data['messages'][-1].content}")
+
+# 方式二：取 content_blocks（结构化列表）
+print(f"content: {data['messages'][-1].content_blocks}")
+</code></pre>
+
+<p>它们的区别：</p>
+
+<table>
+  <thead>
+    <tr><th>属性</th><th>类型</th><th>内容</th><th>适用场景</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>.content</code></td><td>str</td><td>纯文本内容</td><td>只需要文本时</td></tr>
+    <tr><td><code>.content_blocks</code></td><td>list</td><td>结构化块（文本块 + 工具调用块）</td><td>需要区分文本和工具调用时</td></tr>
+  </tbody>
+</table>
+
+<h3>2.5 为什么 tool_call 时 content 返回空字符串？</h3>
+
+<p>这是一个经常被追问的设计细节。当消息包含 <code>tool_call</code> 时：</p>
+
+<pre><code class="language-python"># content_blocks 包含结构化信息
+[
+    {"type": "tool_call", "name": "get_weather", "args": {"city": "SF"}, "id": "call_xxx"}
+]
+
+# content 返回空字符串 ""
+""</code></pre>
+
+<p><strong>原因</strong>：<code>content</code> 是消息的<strong>纯文本部分</strong>，而 <code>tool_call</code> 不是文本——它是结构化的函数调用指令。两者在语义上互斥：</p>
+
+<ul>
+  <li><strong>content</strong> = 模型想"说"的文本（自然语言）</li>
+  <li><strong>tool_calls</strong> = 模型想"做"的动作（函数调用）</li>
+</ul>
+
+<p>当模型决定调用工具时，它不会同时生成文本——所以 <code>content</code> 为空。这就是为什么在 <code>ex-stream-6-1-agent-process.py</code> 中，用 <code>.content</code> 取 model 节点的输出时，step:model 打印为空——因为此时模型返回的是 tool_call，不是文本。</p>
+
+<div class="note">
+  <div class="note-title">与 deep-grill 的对照</div>
+  <p>在 deep-grill 追问中，学习者能复述 content_blocks 的内容结构，但被问"content 会返回什么"时，回答的是 content_blocks 的内容而非 content 的值。关键是理解 content 和 tool_calls 是互斥的——一条消息要么有文本内容，要么有工具调用，不会同时有。</p>
+</div>
+
+<h2>3. messages 模式：按 Token 流式输出</h2>
+
+<h3>3.1 原理</h3>
+
+<p><code>messages</code> 模式实现了<strong>打字机效果</strong>——在 LLM 逐 token 生成时实时输出。这是流式体验最强的模式。</p>
+
+<p>关键点：每次迭代返回一个 <code>(token, metadata)</code> 元组。token 是 <code>AIMessageChunk</code> 或 <code>ToolMessageChunk</code>，metadata 包含 <code>langgraph_node</code> 等字段。</p>
+
+<h3>3.2 示例代码</h3>
+
+<pre><code class="language-python"># stream_mode="messages" — 按 Token 流式输出
+import os
+from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
+
+def get_weather(city: str) -> str:
+    """Get the weather for a city."""
+    return f"The weather in {city} is sunny."
+
+model = ChatOpenAI(
+    base_url=os.getenv("LOCAL_AI_API_URL"),
+    api_key=os.getenv("LOCAL_AI_API_KEY"),
+    temperature=0.0,
+    model="deepseek-v4-pro",
+)
+
+agent = create_agent(model, tools=[get_weather])
+
+for token, metadata in agent.stream(
+    {"messages": [{"role": "user", "content": "What is the weather in SF?"}]},
+    stream_mode="messages"
+):
+    print(f"node: {metadata['langgraph_node']}")
+    print(f"content: {token.content_blocks}")
+    print("\n")
+</code></pre>
+
+<h3>3.3 metadata["langgraph_node"] 的来源</h3>
+
+<p><code>langgraph_node</code> 是 LangGraph 在发出每个 token 事件时自动附加的元数据，用于标识当前 token 来自哪个节点。</p>
+
+<table>
+  <thead>
+    <tr><th>langgraph_node 值</th><th>含义</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>"model"</code></td><td>来自 LLM 模型节点的 token</td></tr>
+    <tr><td><code>"tools"</code></td><td>来自工具执行节点的 token</td></tr>
+  </tbody>
+</table>
+
+<p>这个字段的<strong>核心价值</strong>：在多节点 Agent 中，你需要知道每个 token 是模型生成的，还是工具返回的。例如，在 UI 上，模型生成的 token 显示在对话框左侧，工具返回的内容显示在右侧。</p>
+
+<div class="note">
+  <div class="note-title">源码位置</div>
+  <p><code>metadata["langgraph_node"]</code> 由 LangGraph 的 <code>Pregel</code> 执行引擎在 <code>_emit</code> 或类似方法中注入。具体在 <code>langgraph/pregel/main.py</code> 中，当 stream_mode 包含 "messages" 时，节点执行过程中产生的每个 chunk 都会被包装并附加上节点名。</p>
+</div>
+
+<h3>3.4 tools 节点在 messages 模式中的输出</h3>
+
+<p>一个常见误区是认为"tools 节点不出现在 messages 模式流中"。<strong>实际上 tools 节点会出现</strong>，但输出形式不同：</p>
+
+<table>
+  <thead>
+    <tr><th>节点</th><th>输出形式</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>model</code></td><td>逐 token 流（AIMessageChunk）</td><td>打字机效果，每次输出一个 token 增量</td></tr>
+    <tr><td><code>tools</code></td><td>一次性完整 ToolMessage</td><td>工具执行完后，整个结果作为一条完整消息发出</td></tr>
+  </tbody>
+</table>
+
+<p>messages 模式流的是状态中 messages 通道的<strong>所有增量</strong>，包含 LLM 消息和工具消息。区别在于：model 节点内部是流式生成（逐 token），tools 节点是执行完成后一次性输出。</p>
+
+<h4>updates 与 messages 在工具节点输出上的本质区别</h4>
+
+<table>
+  <thead>
+    <tr><th>维度</th><th>updates</th><th>messages</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>tools 节点是否出现</td><td>✅ 是</td><td>✅ 是</td></tr>
+    <tr><td>工具结果切分粒度</td><td>整个节点更新（dict 结构）</td><td>一条完整 ToolMessage</td></tr>
+    <tr><td>返回结构</td><td><code>{节点名: {messages:[...]}}</code></td><td><code>(消息对象, metadata)</code> 元组</td></tr>
+    <tr><td>model 节点输出</td><td>整步文本（一次性）</td><td>逐 token</td></tr>
+  </tbody>
+</table>
+
+<p>简单说：updates 把整个 superstep 的输出打包成一个 dict，messages 把每条消息（包括工具消息）都单独拆出来流式输出。</p>
+
+<h3>3.5 从 messages 流中判断消息边界</h3>
+
+<p>messages 模式输出的是 token 碎块，如何判断一条消息何时结束？有以下三种方式：</p>
+
+<table>
+  <thead>
+    <tr><th>方式</th><th>依据</th><th>可靠性</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>AIMessageChunk.id</strong>（message_id）</td><td>同一轮 LLM 调用拆出的所有 token 碎块共享同一个 id，id 变化说明新消息开始</td><td>⭐ 最可靠</td></tr>
+    <tr><td><strong>metadata["langgraph_node"]</strong> 变化</td><td>model→tools→model 的节点切换标志消息边界</td><td>⭐⭐ 辅助判断</td></tr>
+    <tr><td><strong>finish_reason</strong> 标记</td><td>LLM 流式最后 chunk 的 response_metadata 含 finish_reason</td><td>⭐⭐ 补充验证</td></tr>
+  </tbody>
+</table>
+
+<pre><code class="language-python"># 通过 message_id 变化判断消息边界
+current_msg_id = None
+full_message = ""
+
+for token, metadata in agent.stream(input, stream_mode="messages"):
+    if metadata["langgraph_node"] != "model":
+        continue  # 只处理 model 节点的输出
+
+    msg_id = token.id  # 同一条消息的所有 token 共享同一个 id
+    if msg_id != current_msg_id:
+        if current_msg_id is not None:
+            print(f"【完整消息】{full_message}")
+        current_msg_id = msg_id
+        full_message = ""
+
+    full_message += token.content  # 拼接 token</code></pre>
+
+<div class="note">
+  <div class="note-title">与 deep-grill 的对照</div>
+  <p>在 deep-grill 追问中，学习者不清楚如何从 token 碎块中判断消息边界。关键是理解 AIMessageChunk.id 是 message_id——同一条消息的所有 token 碎块共享同一个 id，id 变化=新消息开始。推荐方式 1（message_id）+ 方式 3（finish_reason）结合使用。</p>
+</div>
+
+<h2>4. custom 模式：自定义流式输出</h2>
+
+<h3>4.1 原理</h3>
+
+<p><code>custom</code> 模式允许你在<strong>工具函数内部</strong>通过 <code>get_stream_writer()</code> 获取一个 writer，手动往流中写入任意内容。这适合输出进度提示、中间状态等工具执行过程中的信息。</p>
+
+<p>关键点：<code>get_stream_writer()</code> 返回的是一个<strong>可调用对象</strong>，你直接调用它就能写入流。</p>
+
+<h3>4.2 示例代码</h3>
+
+<pre><code class="language-python"># stream_mode="custom" — 自定义流式输出
+import os
+from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
+from langgraph.config import get_stream_writer
+
+def get_weather(city: str) -> str:
+    """Get the weather for a city."""
+    writer = get_stream_writer()
+    writer(f"Looking up data for city: {city}")
+    writer(f"Acquired data for city: {city}")
+    return f"It's always sunny in {city}."
+
+model = ChatOpenAI(
+    base_url=os.getenv("LOCAL_AI_API_URL"),
+    api_key=os.getenv("LOCAL_AI_API_KEY"),
+    temperature=0.0,
+    model="deepseek-v4-pro",
+)
+
+agent = create_agent(model, tools=[get_weather])
+
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "what is the weather in SF?"}]},
+    stream_mode="custom"
+):
+    print(chunk)
+</code></pre>
+
+<h3>4.3 get_stream_writer() 的工作机制</h3>
+
+<p><code>get_stream_writer()</code> 是理解 custom 模式的核心。它的工作方式：</p>
+
+<ol>
+  <li>工具函数在执行时，LangGraph 会在当前上下文中设置一个 <strong>StreamWriter</strong></li>
+  <li><code>get_stream_writer()</code> 从这个上下文中取出 writer</li>
+  <li>调用 <code>writer(content)</code> 时，内容被写入 custom 流</li>
+  <li>消费者通过 <code>stream_mode="custom"</code> 收到这些内容</li>
+</ol>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Consumer
+    participant Agent
+    participant Tool
+    participant Context
+
+    Consumer->>Agent: stream 请求
+    Agent->>Context: 设置 StreamWriter
+    Agent->>Tool: 执行工具函数
+    Tool->>Context: get_stream_writer
+    Context-->>Tool: 返回 writer
+    Tool->>Agent: 写入进度提示
+    Agent-->>Consumer: custom 事件
+    Tool->>Agent: 写入中间状态
+    Agent-->>Consumer: custom 事件
+    Tool-->>Agent: 返回工具结果
+</div>
+
+<div class="note">
+  <div class="note-title">线程安全</div>
+  <p><code>get_stream_writer()</code> 基于 Python 的 <code>contextvars</code> 实现，这意味着它是<strong>线程安全</strong>和<strong>异步安全的</strong>。即使多个工具并行执行，每个工具拿到的 writer 也指向正确的流。这是 Python 中处理"隐式上下文"的标准方案。</p>
+</div>
+
+<h3>4.4 writer 与 return 的职责分离（关键设计原则）</h3>
+
+<p>这是 custom 模式最容易混淆的核心概念。<code>writer(...)</code> 和 <code>return</code> 是两条<strong>完全不同的通道</strong>，职责不能混用：</p>
+
+<table>
+  <thead>
+    <tr><th>内容</th><th>去向</th><th>是否进 messages</th><th>是否被 LLM 看到</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>writer("...")</code></td><td>custom 流通道 → 用户</td><td>❌ 否</td><td>❌ 否</td></tr>
+    <tr><td><code>return</code> 返回值</td><td>包装成 ToolMessage → messages</td><td>✅ 是</td><td>✅ 是</td></tr>
+  </tbody>
+</table>
+
+<p><strong>核心理解</strong>：</p>
+
+<ul>
+  <li><code>writer(...)</code> 写入的是<strong>流式输出通道</strong>，直接作为 <code>stream_mode="custom"</code> 的 chunk 实时推送给用户。它<strong>不会进状态、不会进 messages、不会被 LLM 看到</strong>。它的唯一目的是让用户了解执行进度。</li>
+  <li><code>return</code> 返回值才被<strong>包装成 ToolMessage</strong> 添加到 messages 列表，回传给 LLM 用于后续推理。</li>
+</ul>
+
+<div class="warning">
+  <div class="warning-title">两个方向的错误后果</div>
+  <p><strong>错误方向 1（把 writer 当 return）</strong>：如果只 <code>writer("结果")</code> 而不 <code>return</code>，LLM 就收不到工具返回信息，无法进行后续推理，Agent 会退化。</p>
+  <p><strong>错误方向 2（把 return 当 writer）</strong>：如果只 <code>return</code> 不 <code>writer</code>，用户看不到进度提示，但功能正常。</p>
+  <p><strong>正确做法</strong>：两者各司其职——writer 通知进度，return 传递数据。</p>
+</div>
+
+<div class="note">
+  <div class="note-title">为什么设计者要让 writer 不进状态？</div>
+  <p>这是"关注点分离"设计原则的体现（CQRS 变体——写操作与通知操作走不同通道）：</p>
+  <ul>
+    <li><strong>避免污染状态</strong>：进度提示与推理无关，进状态会污染推理上下文</li>
+    <li><strong>控制成本</strong>：进 messages 会增加上下文窗口长度 → token 成本增加</li>
+    <li><strong>保证输出质量</strong>：无关信息可能误导 LLM → 输出质量下降</li>
+  </ul>
+  <p>类似的架构模式：Redux/Vuex 的 action dispatch vs devtools 监听；Kafka 的消息写入 vs webhook 推送；数据库 trigger 的数据变更 vs 审计日志。</p>
+</div>
+
+<div class="java-comparison">
+  <div class="header">从 Java 视角看</div>
+  <p><code>get_stream_writer()</code> 的机制类似于 Java 的 <code>ThreadLocal</code>，但更优雅：</p>
+  <ul>
+    <li><strong>Java ThreadLocal</strong>：线程级隔离，但异步场景（CompletableFuture、虚拟线程）容易串</li>
+    <li><strong>Python contextvars</strong>：上下文级隔离，自动在 async/await 和线程间正确传递</li>
+  </ul>
+  <p>这是 Python 生态在处理"隐式上下文传递"上的一个优势——Java 中要做到同样效果，通常需要显式传参或使用 <code>Reactor Context</code>（WebFlux）这样的机制。</p>
+</div>
+
+<h2>5. values 模式：整个状态快照</h2>
+
+<h3>5.1 原理</h3>
+
+<p><code>values</code> 模式在每个 superstep 后，输出<strong>完整的 state 快照</strong>，而不是仅输出增量。</p>
+
+<p>与 <code>updates</code> 的区别：</p>
+<ul>
+  <li><code>updates</code>：只输出<strong>本次变更</strong>（增量）</li>
+  <li><code>values</code>：输出<strong>完整状态</strong>（全量）</li>
+</ul>
+
+<pre><code class="language-python"># values 模式
+for state in agent.stream(
+    {"messages": [...]},
+    stream_mode="values"
+):
+    # state 是完整的消息列表快照
+    print(state["messages"])
+</code></pre>
+
+<div class="warning">
+  <div class="warning-title">注意</div>
+  <p><code>values</code> 模式输出全量状态，在消息历史很长时会<strong>显著增加传输量</strong>。生产环境通常用 <code>updates</code> 代替，除非确实需要监控完整状态。</p>
+</div>
+
+<h2>6. debug 模式：完整执行追踪</h2>
+
+<p><code>debug</code> 模式输出最细粒度的执行信息，包括每个任务的开始、结束、状态变化等。它主要用于<strong>开发调试</strong>，因为输出量大且格式不稳定。</p>
+
+<pre><code class="language-python"># debug 模式（开发调试用）
+for event in agent.stream(
+    {"messages": [...]},
+    stream_mode="debug"
+):
+    print(event)
+</code></pre>
+
+<h2>7. 流式中的异常处理</h2>
+
+<h3>7.1 tools 节点异常：handle_tool_errors</h3>
+
+<p>如果 tools 节点执行过程中抛出异常，默认行为是：<strong>异常向上传播，Agent 流程中断</strong>。但 LangGraph 提供了两级容错机制：</p>
+
+<table>
+  <thead>
+    <tr><th>策略</th><th>行为</th><th>适用场景</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>默认</td><td>抛异常，流程中断</td><td>快速失败</td></tr>
+    <tr><td><code>handle_tool_errors=True</code></td><td>捕获异常 → 包装成 ToolMessage → 回传给 LLM 恢复</td><td>LLM 感知并处理失败</td></tr>
+    <tr><td><code>retry_policy</code></td><td>节点级自动重试 N 次</td><td>网络抖动等临时故障</td></tr>
+  </tbody>
+</table>
+
+<h4>handle_tool_errors=True 的精确行为</h4>
+
+<p>当工具抛出异常时，异常信息会被包装成以下格式的 ToolMessage：</p>
+
+<pre><code class="language-python">ToolMessage(
+    content="Error: ValueError('city not found')",
+    tool_call_id="call_xxx",  # 与原始 tool_call.id 匹配
+    name="get_weather"
+)</code></pre>
+
+<p>关键点：</p>
+<ul>
+  <li><code>tool_call_id</code> 与原始 tool_call.id 匹配，让 LLM 知道对应哪个工具调用</li>
+  <li><code>content</code> 是完整错误信息</li>
+  <li>LLM 看到错误后可以尝试重试、换参数、或向用户道歉</li>
+</ul>
+
+<h3>7.2 静默失败：空字符串的风险</h3>
+
+<p>如果工具内 API 调用没有抛异常，但返回了空字符串 <code>""</code>，LLM 看到 <code>ToolMessage(content="")</code> 是一个模糊信号：</p>
+
+<ul>
+  <li>高概率：LLM 可能<strong>编造</strong>结果（幻觉）</li>
+  <li>中概率：LLM 说"信息暂时不可用"</li>
+  <li>低概率：LLM 说"获取失败"</li>
+</ul>
+
+<p>这是<strong>静默失败</strong>的典型场景。正确设计：工具返回空时显式返回 <code>"ERROR: 天气数据查询失败"</code>，让 LLM 明确知道是失败。</p>
+
+<div class="note">
+  <div class="note-title">与 deep-grill 的对照</div>
+  <p>在 deep-grill 追问中，学习者对 handle_tool_errors 的具体格式和静默失败的风险有认识缺口。关键补充：tool_call_id 匹配是让 LLM 理解"哪个工具失败了"的核心机制；空字符串返回是"静默失败"的典型场景，需要显式标记错误。</p>
+</div>
+
+<h2>8. 设计原理追问</h2>
+
+<h3>8.1 为什么要有 5 种模式，而不是一种万能模式？</h3>
+
+<p>因为<strong>不同消费者需要不同粒度的数据</strong>：</p>
+<ul>
+  <li>UI 打字机效果需要 token 级（messages）</li>
+  <li>步骤进度条需要 superstep 级（updates）</li>
+  <li>工具内部进度需要自定义（custom）</li>
+  <li>调试需要完整追踪（debug）</li>
+</ul>
+
+<p>如果只有一种万能模式（如全部输出 token 级），那么步骤进度条消费者就必须自己聚合 token，增加复杂度。分离粒度是<strong>关注点分离</strong>原则的体现。</p>
+
+<h3>8.2 这个设计有什么代价？</h3>
+
+<p>代价是<strong>学习成本</strong>和<strong>模式选择困惑</strong>。新手容易选错模式。但 LangGraph 通过<strong>多模式组合</strong>（下一步讲解）部分缓解了这个问题——你可以同时订阅多种模式，按需消费。</p>
+
+<h3>8.3 如果是你，会怎么改进？</h3>
+
+<p>一个可能的改进是提供<strong>声明式的模式组合</strong>——例如用 <code>StreamSpec</code> 对象代替字符串，支持更细粒度的过滤（如只订阅某个节点的 messages）。目前 LangGraph 已经支持列表形式的组合，但过滤能力还需要消费者自己处理。</p>
+
+<h2>9. 费曼自检</h2>
+
+<blockquote>
+  <p>用大白话说四种模式：</p>
+  <ul>
+    <li><strong>updates</strong>：厨师每做完一道菜，把这道菜端出来给你看</li>
+    <li><strong>messages</strong>：直播厨师切菜，每一刀都能看到</li>
+    <li><strong>custom</strong>：厨师自己拿对讲机，想说什么说什么</li>
+    <li><strong>values</strong>：每做完一道菜，把整桌菜都拍张照发给你</li>
+  </ul>
+</blockquote>
+
+<div class="deep-grill-readiness">
+  <h4>本课 Deep-Grill 就绪度</h4>
+  <ul>
+    <li class="done">能说出 4 种 stream_mode 的粒度和数据结构区别（对应 interviewer 角度）</li>
+    <li class="done">能解释为什么需要多种模式而非一种（对应 architect 角度）</li>
+    <li class="done">能解释 content 和 content_blocks 的区别，以及 tool_call 时 content 为何返回空字符串（对应 interviewer 角度）</li>
+    <li class="done">能说明 tools 节点在 messages 模式中的输出形式（一次性 ToolMessage vs 逐 token）</li>
+    <li class="done">能通过 message_id 变化和 finish_reason 判断消息边界（对应 architect 角度）</li>
+    <li class="done">能解释 writer 和 return 的职责分离："通知通道"与"数据通道"不可混用（对应 architect 角度）</li>
+    <li class="done">能指出 values 模式在生产环境的性能问题（对应 code reviewer 角度）</li>
+    <li class="done">能解释 get_stream_writer() 的线程安全机制（对应 architect 角度）</li>
+    <li class="done">能用大白话讲清四种模式（对应 instructor 角度）</li>
+    <li>能组合多种模式并正确消费（下一课覆盖）</li>
+  </ul>
+</div>
+
+    <div class="page-nav">
+      <span><a href="0001-agent-execution-flow.html">← 上一课：Agent 执行流程</a></span>
+      <span><a href="0003-multi-mode.html">下一课：多模式组合 →</a></span>
+    </div>
+
+    </div>
+  </main>
+
+</div>
+
+
+
+
+
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

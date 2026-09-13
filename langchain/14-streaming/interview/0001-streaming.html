@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>面试题库：LangGraph Agent Streaming</title>
+  <link rel="stylesheet" href="../../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../../../index.html" style="text-decoration:none">Deep​Mastery <span>/ Streaming</span></a>
+</nav>
+
+<div class="layout">
+
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">目录</div>
+  </nav>
+
+  <main class="content">
+
+    <div class="article-header">
+      
+      <h1>面试题库：LangGraph Agent Streaming</h1>
+      <div class="article-meta">
+        <span>L5 面试层</span>
+        <span>2026-08-24</span>
+        <span>共 15 题</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+<h2>面试官角度（概念定义 + 原理追问）</h2>
+
+<div class="qa-block">
+  <div class="question">Q1: LangGraph 的 agent.stream() 支持哪几种 stream_mode？它们的区别是什么？</div>
+  <div class="answer">
+    <p>支持 5 种模式：<code>updates</code>、<code>messages</code>、<code>custom</code>、<code>values</code>、<code>debug</code>。</p>
+    <p><strong>粒度对比</strong>：</p>
+    <ul>
+      <li><code>updates</code>：superstep 级别，输出每个步骤对 state 的增量更新</li>
+      <li><code>messages</code>：token 级别，逐 token 输出 LLM 生成的内容，带 metadata</li>
+      <li><code>custom</code>：自定义级别，工具内部通过 get_stream_writer() 写入任意内容</li>
+      <li><code>values</code>：superstep 级别，输出每个步骤后的完整 state 快照</li>
+      <li><code>debug</code>：最细粒度，输出完整执行追踪，用于开发调试</li>
+    </ul>
+    <p>核心区别在于<strong>粒度</strong>和<strong>数据格式</strong>。updates 是生产环境最常用的，messages 用于打字机效果，custom 用于工具内进度提示。</p>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：面试官最想听到"粒度"这个关键词，以及 updates 和 messages 的本质区别——一个是步骤级，一个是 token 级。</div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q2: 追问：为什么 updates 是 superstep 粒度而不是更细？</div>
+  <div class="answer">
+    <p>因为 superstep 是 LangGraph 中 <strong>state 变更的最小单位</strong>。一个 superstep 执行完毕后，state 才通过 reducer 更新。在 superstep 执行过程中，state 没有变化，所以更细粒度的输出（如每次函数调用）没有意义——输出的还是旧 state。</p>
+    <p>如果需要更细粒度的输出（如 token 级），应该使用 <code>messages</code> 模式，它在 token 级别做补充，但 token 不直接对应 state 变更。</p>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能说出"superstep 是 state 变更的最小单位"说明理解了底层设计。</div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q3: 追问：get_stream_writer() 为什么在工具外调用会报 RuntimeError？</div>
+  <div class="answer">
+    <p>因为 <code>get_stream_writer()</code> 基于 Python 的 <code>contextvars</code> 实现。StreamWriter 只在 <code>agent.stream()</code> 执行期间被设置到当前上下文中。</p>
+    <p>在工具外调用时，上下文中没有 StreamWriter，所以返回 None，函数抛出 RuntimeError。这是一个<strong>防御性设计</strong>——明确告诉开发者"你用错了"，而不是静默失败。</p>
+    <p>如果需要全局可用的 writer，应该通过函数参数传递，而不是依赖 contextvars。</p>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能说出 contextvars 和防御性设计，说明理解了实现原理。</div>
+</div>
+
+<h2>架构师角度（系统设计 + 选型对比）</h2>
+
+<div class="qa-block">
+  <div class="question">Q4: 设计一个需要展示 Agent 执行步骤和工具进度的 UI，你会选择哪种 stream_mode 组合？为什么？</div>
+  <div class="answer">
+    <p>选择 <code>stream_mode=["updates", "custom"]</code>。</p>
+    <p><strong>理由</strong>：</p>
+    <ul>
+      <li><code>updates</code> 提供步骤级别的结构化输出：每个 superstep 完成时告诉前端"现在到了哪一步"，用于渲染步骤进度条</li>
+      <li><code>custom</code> 提供工具内部的实时进度：工具执行过程中通过 writer 输出"正在查找数据..."、"数据已获取"，用于更新 loading 动画</li>
+    </ul>
+    <p><strong>为什么不用 messages</strong>：messages 虽然能提供打字机效果，但会显著增加前端事件量（每个 token 一个事件），且与步骤进度展示的需求重叠不大。</p>
+    <p><strong>为什么不用单一模式</strong>：单一模式无法同时满足"步骤进度"和"工具进度"两个需求。</p>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能说出"两个需求 → 两种模式"的映射关系，以及不选 messages 的理由。</div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q5: 多模式组合时，chunk 的输出顺序是固定的吗？如果用户想先看到所有 updates 再看到 custom，可以实现吗？</div>
+  <div class="answer">
+    <p>chunk 按<strong>事件发生的时间顺序</strong>输出，不是固定的。custom 事件可以在 updates 之间任意位置出现。</p>
+    <p>如果用户想先看到所有 updates，有两种方案：</p>
+    <ol>
+      <li><strong>消费端缓存</strong>：在消费端缓存所有 custom 事件，等所有 updates 接收完后再处理（但失去了实时性）</li>
+      <li><strong>分两次调用</strong>：先 <code>stream_mode="updates"</code> 获取步骤信息，再 <code>stream_mode="custom"</code> 获取进度（但 Agent 会执行两次，浪费资源）</li>
+    </ol>
+    <p><strong>推荐方案</strong>：接受时间顺序，在前端用不同 UI 区域同时展示，而不是强求顺序。</p>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能说出"时间顺序"这个核心原因，以及两种 workaround 的代价。</div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q6: LangGraph 的 stream 和 Python 的 asyncio 流式处理有什么异同？</div>
+  <div class="answer">
+    <p><strong>相同点</strong>：</p>
+    <ul>
+      <li>都基于生成器（generator）模式：Python 的 <code>yield</code> 和 <code>async yield</code></li>
+      <li>都支持异步版本：<code>agent.astream()</code> 返回 <code>AsyncGenerator</code></li>
+    </ul>
+    <p><strong>不同点</strong>：</p>
+    <ul>
+      <li>LangGraph stream 有<strong>多模式</strong>概念：同一个生成器可以产出不同类型的事件（通过 mode 标签区分）</li>
+      <li>LangGraph stream 有<strong>隐式上下文</strong>：custom 模式通过 contextvars 在工具内部注入 writer，这是 asyncio 原生不提供的</li>
+      <li>LangGraph stream 的粒度由<strong>superstep</strong> 决定，不是由开发者手动控制</li>
+    </ul>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能对比出"多模式"和"隐式上下文"这两个 LangGraph 的独特设计。</div>
+</div>
+
+<h2>代码审查者角度（边界条件 + 异常处理）</h2>
+
+<div class="qa-block">
+  <div class="question">Q7: 以下代码有什么问题？</div>
+  <pre><code class="language-python">def get_weather(city: str) -> str:
+    writer = get_stream_writer()
+    writer(f"Looking up data for city: {city}")
+    # 模拟网络请求
+    import time
+    time.sleep(5)
+    return f"The weather in {city} is sunny."
+
+for chunk in agent.stream(
+    {"messages": [...]},
+    stream_mode="updates"  # 注意这里
+):
+    print(chunk)</code></pre>
+  <div class="answer">
+    <p><strong>问题</strong>：工具内调用了 <code>get_stream_writer()</code> 和 <code>writer()</code>，但 <code>stream_mode</code> 只设置了 <code>"updates"</code>，没有包含 <code>"custom"</code>。</p>
+    <p><strong>后果</strong>：<code>writer()</code> 调用不会报错，但写入的内容永远不会被消费者收到——相当于静默丢弃。</p>
+    <p><strong>修复</strong>：</p>
+    <pre><code class="language-python"># 改为
+for chunk in agent.stream(
+    {"messages": [...]},
+    stream_mode=["updates", "custom"]
+):
+    print(chunk)</code></pre>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能识别出"静默丢弃"这个最隐蔽的 bug——没有报错但功能不正常。</div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q8: 以下多模式消费代码有什么问题？</div>
+  <pre><code class="language-python">for stream_mode, chunk in agent.stream(
+    input,
+    stream_mode=["updates", "custom"]
+):
+    print(chunk["messages"][-1].content)</code></pre>
+  <div class="answer">
+    <p><strong>问题</strong>：没有区分 <code>stream_mode</code>，直接对所有 chunk 做了 <code>chunk["messages"]</code> 操作。</p>
+    <p><strong>后果</strong>：当 <code>stream_mode == "custom"</code> 时，chunk 是字符串或任意类型，不是 dict，访问 <code>chunk["messages"]</code> 会抛出 <code>TypeError</code>。</p>
+    <p><strong>修复</strong>：</p>
+    <pre><code class="language-python">for stream_mode, chunk in agent.stream(
+    input, stream_mode=["updates", "custom"]
+):
+    if stream_mode == "updates":
+        print(chunk["messages"][-1].content)
+    elif stream_mode == "custom":
+        print(chunk)</code></pre>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能识别出"类型不匹配"和"未按模式分发"这两个新手常见错误。</div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q9: 在生产环境中使用 stream_mode="values" 有什么风险？</div>
+  <div class="answer">
+    <p><strong>风险</strong>：</p>
+    <ol>
+      <li><strong>内存膨胀</strong>：values 输出完整 state 快照，每个 superstep 后都输出一次。如果消息历史很长（如 1000+ 条消息），每次输出都包含全部历史</li>
+      <li><strong>网络传输量</strong>：在前后端分离架构中，通过 SSE 传输完整 state 快照会导致巨大的网络开销</li>
+      <li><strong>序列化开销</strong>：完整 state 需要序列化（可能包含 Pydantic 对象、ToolMessage 等），序列化成本随消息数量线性增长</li>
+    </ol>
+    <p><strong>替代方案</strong>：使用 <code>updates</code> 代替——它只输出增量，而不是全量。</p>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能说出"全量 vs 增量"的性能差异，以及具体的风险场景。</div>
+</div>
+
+<h2>故障排查者角度（出问题怎么查）</h2>
+
+<div class="qa-block">
+  <div class="question">Q10: 生产环境出现"工具内部的 writer 调用没有输出"的问题，怎么排查？</div>
+  <div class="answer">
+    <p><strong>排查步骤</strong>：</p>
+    <ol>
+      <li><strong>检查 stream_mode</strong>：确认是否包含 <code>"custom"</code>。这是最常见的原因——stream_mode 没包含 custom。</li>
+      <li><strong>检查 Writer 是否被调用</strong>：在 writer 调用前后加日志，确认工具确实执行到了 writer 那行代码</li>
+      <li><strong>检查消费端分发</strong>：确认消费端正确区分了 stream_mode，没有丢弃 custom 事件</li>
+      <li><strong>检查中间件</strong>：如果使用了 SummarizationMiddleware 等中间件，确认它们没有拦截或修改 custom 流</li>
+      <li><strong>检查 contextvars 泄漏</strong>：如果使用了自定义的多线程/多协程逻辑，确认 contextvars 没有被意外重置</li>
+    </ol>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能给出有层次感的排查路径（从最常见到最复杂），而不是只给一个答案。</div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q11: messages 模式下，metadata["langgraph_node"] 有时为 None，是什么原因？</div>
+  <div class="answer">
+    <p><strong>可能原因</strong>：</p>
+    <ol>
+      <li><strong>版本问题</strong>：较旧版本的 LangGraph 可能不会在所有 chunk 上附加 langgraph_node</li>
+      <li><strong>系统消息</strong>：某些系统内部产生的消息（如 checkpoint 恢复时的状态消息）可能没有 langgraph_node</li>
+      <li><strong>工具消息</strong>：某些工具返回的消息 chunk 可能不包含 langgraph_node</li>
+    </ol>
+    <p><strong>防御性写法</strong>：</p>
+    <pre><code class="language-python">node = metadata.get("langgraph_node", "unknown")
+</code></pre>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能说出"版本差异"和"系统消息"这两个非代码层面的原因。</div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q12: Agent 在 streaming 过程中卡住，长时间无输出，怎么排查？</div>
+  <div class="answer">
+    <p><strong>排查步骤</strong>：</p>
+    <ol>
+      <li><strong>确认是哪个节点卡住</strong>：切换到 <code>updates</code> 模式，看最后一次输出是哪个节点（model 还是 tools）</li>
+      <li><strong>如果是 model 节点卡住</strong>：检查 LLM API 调用是否超时、模型是否返回了异常长的内容</li>
+      <li><strong>如果是 tools 节点卡住</strong>：检查工具函数是否有死循环、网络请求是否超时</li>
+      <li><strong>检查 checkpointer</strong>：如果使用了 PostgresSaver 等远程 checkpointer，确认数据库连接正常</li>
+      <li><strong>设置超时</strong>：在前端消费端设置 30 秒超时，超时后显示"处理中..."提示</li>
+    </ol>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能先用 updates 模式定位问题节点，再针对性排查。</div>
+</div>
+
+<h2>技术讲师角度（费曼讲解）</h2>
+
+<div class="qa-block">
+  <div class="question">Q13: 请用大白话向一个新人解释 LangGraph 的 4 种流式模式</div>
+  <div class="answer">
+    <p>想象一个餐厅厨房：</p>
+    <ul>
+      <li><strong>updates</strong>：厨师每做完一道菜喊一声"好了！"——你知道进度但看不到细节</li>
+      <li><strong>messages</strong>：直播厨师切菜，每一刀都能看到——打字机效果</li>
+      <li><strong>custom</strong>：厨师自己拿对讲机，想说什么说什么——完全自定义</li>
+      <li><strong>values</strong>：每做完一道菜，把整桌菜都拍张照发给你——全量快照</li>
+    </ul>
+    <p><strong>怎么选</strong>：大多数时候用 updates 就够了。需要打字机效果加 messages，需要看工具进度加 custom。</p>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能用生活化类比讲清抽象概念，且能给出"怎么选"的实用建议。</div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q14: 请用一个类比解释 get_stream_writer() 的 contextvars 机制</div>
+  <div class="answer">
+    <p>想象一个快递公司：</p>
+    <ul>
+      <li><strong>contextvars</strong> = 每个快递员胸前的工牌，上面写着当前配送的订单号</li>
+      <li><strong>get_stream_writer()</strong> = 快递员低头看工牌，知道自己在送哪一单</li>
+      <li><strong>多个快递员同时工作</strong> = 每个人看自己的工牌，不会看错</li>
+    </ul>
+    <p>关键点：工牌是<strong>自动传递</strong>的——快递员不需要问"我在送哪一单"，工牌上已经写着。同样，工具函数不需要问"我在哪个流里"，contextvars 已经设好了。</p>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能用一个非技术领域的类比讲清 contextvars 的"自动传递"和"并发隔离"两个特性。</div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q15: 如果新人问"为什么不能把 stream_mode 设为 True，自动帮我选最好的模式？"</div>
+  <div class="answer">
+    <p>因为<strong>"最好"是主观的</strong>，取决于你的需求：</p>
+    <ul>
+      <li>要打字机效果 → 最好用 messages</li>
+      <li>要步骤进度 → 最好用 updates</li>
+      <li>要工具进度 → 最好用 custom</li>
+      <li>要节省带宽 → 最好只用 updates</li>
+    </ul>
+    <p><strong>没有一种模式能同时满足所有需求</strong>。即使 LangGraph 自动选了 updates+custom+messages 全开，你也会抱怨"为什么输出这么多，前端卡死了"。</p>
+    <p>所以 <code>stream_mode</code> 被设计为<strong>显式参数</strong>——你必须说清楚要什么，框架才能给你最优的输出。</p>
+  </div>
+  <div class="key-point"><strong>关键点</strong>：能解释"为什么显式比隐式好"——这在 Python 哲学（Zen of Python）中也是一条核心原则。</div>
+</div>
+
+<div class="deep-grill-readiness">
+  <h4>面试题库就绪度</h4>
+  <ul>
+    <li class="done">面试官角度 3 题：概念定义 + 原理追问 + 设计原理</li>
+    <li class="done">架构师角度 3 题：系统设计 + 选型对比 + 跨生态对比</li>
+    <li class="done">代码审查者角度 3 题：边界条件 + 常见 bug + 性能风险</li>
+    <li class="done">故障排查者角度 3 题：排查路径 + 根因分析 + 降级方案</li>
+    <li class="done">技术讲师角度 3 题：费曼讲解 + 类比 + 新人常见问题</li>
+  </ul>
+  <p style="margin-top: 0.8rem; color: var(--accent);">全部 15 题已覆盖 deep-grill 的五个考察角度，每题均带完整参考答案和关键判分点。</p>
+</div>
+
+    <div class="page-nav">
+      <span><a href="../source-walkthroughs/0001-stream-writer.html">← 上一课：源码走读</a></span>
+      <span></span>
+    </div>
+
+    </div>
+  </main>
+
+</div>
+
+
+
+
+
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

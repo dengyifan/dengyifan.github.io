@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LangGraph Agent Streaming 知识地图</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="./index.html" style="text-decoration:none">Deep​Mastery <span>/ Streaming</span></a>
+</nav>
+
+<div class="container">
+
+  <div class="article-header">
+    <div class="breadcrumb">
+      <a href="index.html">LangGraph Agent Streaming</a> / 知识地图
+    </div>
+    <h1>LangGraph Agent Streaming 知识地图</h1>
+  </div>
+
+  <div class="article-body">
+
+<h2>概念图谱</h2>
+
+<div class="mermaid">
+%%{init: {'theme': 'base', 'flowchart': {'nodeSpacing': 30, 'rankSpacing': 100}, 'themeVariables': {'fontSize': '16px'}}}%%
+flowchart LR
+    R["LangGraph Agent Streaming"]
+
+    R --> A["stream_mode 参数"]
+    R --> B["多模式组合"]
+    R --> C["stream / astream 方法"]
+    R --> D["langgraph_node 元数据"]
+    R --> E["StreamWriter 机制"]
+    R --> F["Agent 执行流程"]
+    R --> G["content_blocks 结构"]
+
+    A --> A1["updates"]
+    A --> A2["messages"]
+    A --> A3["custom"]
+    A --> A4["debug"]
+    A --> A5["values"]
+
+    A1 --> A1a["按步骤粒度输出"]
+    A1 --> A1b["每个 superstep 一个事件"]
+
+    A2 --> A2a["按 Token 粒度输出"]
+    A2 --> A2b["逐字生成（打字机效果）"]
+    A2 --> A2c["metadata langgraph_node"]
+
+    A3 --> A3a["get_stream_writer()"]
+    A3 --> A3b["工具内部自定义输出"]
+    A3 --> A3c["进度提示 / 中间状态"]
+
+    A4 --> A4a["调试模式"]
+    A4 --> A4b["完整执行图追踪"]
+
+    A5 --> A5a["整个状态快照"]
+    A5 --> A5b["每个 superstep 后完整 state"]
+
+    B --> B1["stream_mode 列表形式"]
+    B --> B2["mode, chunk 元组迭代"]
+    B --> B3["updates + custom 组合"]
+
+    C --> C1["agent.stream()"]
+    C --> C2["agent.astream()"]
+    C --> C3["同步 vs 异步"]
+
+    D --> D1["区分模型输出 vs 工具输出"]
+    D --> D2["metadata 结构"]
+
+    E --> E1["get_stream_writer() 上下文"]
+    E --> E2["线程安全"]
+    E --> E3["多 writer 场景"]
+
+    F --> F1["create_agent"]
+    F --> F2["model 节点"]
+    F --> F3["tools 节点"]
+    F --> F4["superstep 概念"]
+    F --> F5["事件循环"]
+
+    G --> G1["AIMessageChunk"]
+    G --> G2["ToolCallChunk"]
+    G --> G3["文本块 vs 工具调用块"]
+</div>
+
+<h2>分支优先级</h2>
+
+<table>
+  <thead>
+    <tr><th>分支</th><th>优先级</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>stream_mode 参数</td><td><span class="priority-red">🔴 必须深钻</span></td><td>核心概念，四种模式是面试高频</td></tr>
+    <tr><td>updates 模式</td><td><span class="priority-red">🔴 必须深钻</span></td><td>最常用的 agent 流式模式</td></tr>
+    <tr><td>messages 模式</td><td><span class="priority-red">🔴 必须深钻</span></td><td>Token 级流式，打字机效果核心</td></tr>
+    <tr><td>custom 模式</td><td><span class="priority-red">🔴 必须深钻</span></td><td>自定义流式，工具内进度输出</td></tr>
+    <tr><td>多模式组合</td><td><span class="priority-yellow">🟡 建议掌握</span></td><td>实战常见，需理解 (mode, chunk) 元组</td></tr>
+    <tr><td>stream / astream</td><td><span class="priority-yellow">🟡 建议掌握</span></td><td>同步 vs 异步的选择</td></tr>
+    <tr><td>StreamWriter 机制</td><td><span class="priority-yellow">🟡 建议掌握</span></td><td>底层实现原理</td></tr>
+    <tr><td>Agent 执行流程</td><td><span class="priority-yellow">🟡 建议掌握</span></td><td>理解 superstep 才能理解流式粒度</td></tr>
+    <tr><td>content_blocks 结构</td><td><span class="priority-yellow">🟡 建议掌握</span></td><td>消息内容的数据结构</td></tr>
+    <tr><td>values 模式</td><td><span class="priority-green">🟢 了解即可</span></td><td>较少使用，全量快照输出</td></tr>
+    <tr><td>debug 模式</td><td><span class="priority-green">🟢 了解即可</span></td><td>开发调试用，非生产核心</td></tr>
+  </tbody>
+</table>
+
+<h2>交叉关联</h2>
+
+<ul>
+  <li><code>stream_mode</code> 的粒度与 Agent 的 <strong>superstep</strong> 概念紧密相关（每个 superstep 触发一次 updates 事件）</li>
+  <li><code>custom</code> 模式依赖 <code>get_stream_writer()</code>，其底层实现与 LangGraph 的 <strong>context</strong> 机制相关</li>
+  <li><code>messages</code> 模式中的 <code>metadata["langgraph_node"]</code> 与 Agent 的 <strong>节点名称</strong>（model / tools）对应</li>
+  <li><code>summarization_middleware</code> 和 <code>remove_message</code> 等中间件会在流式过程中影响状态，需理解其执行时机</li>
+  <li>多模式组合需要理解 <strong>(mode, chunk) 元组</strong> 的迭代模式，类似 Python 枚举</li>
+</ul>
+
+<h2>学习路径</h2>
+
+<p>建议顺序：Agent 执行流程 → updates → messages → custom → 多模式组合 → StreamWriter 机制 → content_blocks → values / debug</p>
+
+  </div>
+
+  <div class="footer">
+    <p>DeepMastery · 五层穿透模型 · 源码级深度掌握</p>
+  </div>
+
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function() {
+  var btn = document.getElementById('backToTop');
+  window.addEventListener('scroll', function() {
+    if (window.scrollY > 400) {
+      btn.classList.add('visible');
+    } else {
+      btn.classList.remove('visible');
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

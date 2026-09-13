@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第2课：读取记忆 — state 与 context 的区别和用法</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep​Mastery <span>/ 第2课：读取记忆</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">Table of Contents</div>
+  </nav>
+  <main class="content">
+
+    <div class="article-header">
+      <h1>第2课：读取记忆 — state 与 context 的区别和用法</h1>
+      <div class="article-meta">
+        <span>📖 前置：<a href="0001-toolruntime-injection.html">第1课 ToolRuntime</a></span>
+        <span>⏱ 预计 30 分钟</span>
+        <span>🎯 L2</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+<p>上一课讲了 ToolRuntime 是什么、怎么注入的。本课聚焦：<strong>用 ToolRuntime 读什么、怎么读，state 和 context 到底有什么区别？</strong></p>
+
+<h2 id="read-state">2.1 读取 state：访问当前状态</h2>
+
+<p>代码示例：</p>
+
+<pre><code>class CustomState(AgentState):
+    user_id: str
+
+@tool
+def get_user_info(runtime: ToolRuntime) -> str:
+    """look up user info"""
+    user_id = runtime.state["user_id"]   # 读取自定义状态字段
+    return "User is John Smith" if user_id == "user_123" else "User is unknown"
+
+agent = create_agent(model, tools=[get_user_info], state_schema=CustomState)
+result = agent.invoke({
+    "messages": "look up user information",
+    "user_id": "user_123"   # 传入自定义状态
+})</code></pre>
+
+<p>关键点：<code>runtime.state</code> 是一个 dict-like 对象，含有 <code>AgentState</code> 的所有字段（包括内置的 <code>messages</code> 和自定义的 <code>user_id</code>）。</p>
+
+<h3>state 里有什么</h3>
+
+<table>
+<tr><th>字段</th><th>来源</th><th>说明</th></tr>
+<tr><td><code>messages</code></td><td>AgentState 内置</td><td>对话历史消息列表</td></tr>
+<tr><td>{自定义字段}</td><td>state_schema 扩展</td><td>如 <code>user_id</code>、<code>preferences</code> 等</td></tr>
+</table>
+
+<div class="note"><strong>state 的本质</strong>：state 是<strong>图的运行状态</strong>——它会随着工具执行、节点输出而<strong>动态变化</strong>。工具可以读它，也可以写它（下节课讲）。state 的典型用途：跨轮次共享信息、在工具间传递中间结果。</div>
+
+<h2 id="read-context">2.2 读取 context：访问运行时上下文</h2>
+
+<p>看 context 的用法：</p>
+
+<pre><code>class CustomContext(BaseModel):
+    user_id: str
+
+@tool
+def update_user_info(runtime: ToolRuntime[CustomContext, CustomState]) -> Command:
+    """look up and update user info."""
+    user_id = runtime.context.user_id   # 从 context 读取
+    user_name = "John Smith" if user_id == "user_123" else "Unknown"
+    return Command(update={"user_name": user_name, ...})
+
+agent = create_agent(
+    model, tools=[update_user_info, greet],
+    state_schema=CustomState,
+    context_schema=CustomContext   # 声明 context 类型
+)
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "greet the user"}]},
+    context=CustomContext(user_id="user_123")   # 传入 context（与 invoke 参数同级）
+)</code></pre>
+
+<p>注意两个关键区别：</p>
+<ol>
+  <li><strong>context 通过 <code>context_schema</code> 声明，在 <code>invoke</code> 时作为独立参数传入</strong>，而不是放在 <code>state</code> 字典里</li>
+  <li><code>runtime.context</code> 是 <strong>类型安全</strong> 的（通过泛型 <code>ToolRuntime[CustomContext, CustomState]</code>），IDE 可以有代码补全</li>
+</ol>
+
+<h2 id="state-vs-context">2.3 state vs context：核心区别</h2>
+
+<div class="mermaid">
+flowchart LR
+    subgraph state["State（动态）"]
+        S1["messages"]
+        S2["user_name"]
+        S3["preferences"]
+    end
+    subgraph context["Context（静态）"]
+        C1["user_id"]
+        C2["api_key"]
+        C3["tenant_id"]
+    end
+    S1 -.->|"工具可读写"| T["ToolRuntime"]
+    C1 -.->|"工具只读"| T
+</div>
+
+<table>
+<tr><th>维度</th><th>state</th><th>context</th></tr>
+<tr><td><strong>本质</strong></td><td>图的运行状态</td><td>运行时外部配置</td></tr>
+<tr><td><strong>生命周期</strong></td><td>随着图执行动态变化</td><td>invoke 时传入，执行期间不变</td></tr>
+<tr><td><strong>可写性</strong></td><td>工具可读可写（通过 Command）</td><td>工具只读</td></tr>
+<tr><td><strong>持久化</strong></td><td>由 Checkpointer 持久化</td><td>不持久化，每次都需传入</td></tr>
+<tr><td><strong>典型用途</strong></td><td>对话历史、工具执行结果、中间状态</td><td>用户身份、租户信息、API 密钥</td></tr>
+<tr><td><strong>传入方式</strong></td><td>invoke 的 state 字典里</td><td>invoke 的 context 参数</td></tr>
+<tr><td><strong>类型安全</strong></td><td>dict-like 访问（无类型推导）</td><td>泛型约束（IDE 可补全）</td></tr>
+</table>
+
+<div class="tip"><strong>判断口诀</strong>：如果这个信息<strong>会随着对话过程变化</strong>（比如"用户刚才说了什么"、"工具查到了什么"），放 state。如果它<strong>在整个对话中不变、只是外部传入的配置</strong>（比如"当前用户是谁"、"用哪个 API key"），放 context。</div>
+
+<h2 id="why-two">2.4 为什么分 state 和 context？</h2>
+
+<p>这是面试中常被追问的问题。答案分三层：</p>
+
+<div class="note"><strong>1. 职责分离</strong>：state 是<strong>对话内</strong>的（对话结束后就没意义了），context 是<strong>对话外</strong>的（不管谁和 agent 对话，这个用户 ID 都固定）。混在一起会让状态管理变得混乱。</div>
+
+<div class="note"><strong>2. 持久化策略不同</strong>：state 需要持久化（多轮对话恢复），context 不需要（每次调用都重新传入）。如果 context 也持久化，修改一个用户 ID 需要清理所有历史 checkpoint，这是灾难性的。</div>
+
+<div class="note"><strong>3. 安全性</strong>：context 可能包含敏感信息（如 API key）。这些信息不应该出现在 state 中——state 会被 Checkpointer 持久化到数据库，增加了泄露风险。context 只在内存中，用完即丢弃。</div>
+
+<h2 id="dynamic-prompt">2.5 扩展：在 Middleware 中读取记忆</h2>
+
+<p>除了在工具中读取，也可以在 <strong>Middleware</strong> 中读取 state 和 context，用于动态生成系统提示词：</p>
+
+<pre><code>from langchain.agents.middleware import dynamic_prompt, ModelRequest
+
+@dynamic_prompt
+def dynamic_system_prompt(request: ModelRequest) -> str:
+    user_name = request.runtime.context["user_name"]   # 从 context 读取
+    system_prompt = f"You are a helpful assistant. Address the user as {user_name}."
+    return system_prompt</code></pre>
+
+<p>注意这里用的是 <code>request.runtime</code>（<strong>Runtime</strong>，不是 ToolRuntime），因为 Middleware 不在工具执行上下文中。这是第 4 课要深入讲的区别。</p>
+
+<h2 id="java">2.6 从 Java 视角看</h2>
+
+<div class="java-comparison">
+<div class="header">Java 视角对照</div>
+<p><strong>state ↔ 类似 HttpSession</strong>：跨请求共享数据，会随着用户操作而变化。但 HttpSession 是服务端存储，而 LangGraph 的 state 由 Checkpointer 持久化到数据库。</p>
+<p><strong>context ↔ 类似 ThreadLocal 或 Request Header</strong>：每次请求独立传入，请求期间不变，请求结束后丢弃。但 context 比 ThreadLocal 更安全——ThreadLocal 可能导致内存泄漏，而 context 的生命周期由框架显式管理。</p>
+<p><strong>关键区别</strong>：Java 的 HttpSession 和 Request Header 是 Servlet 容器层面的概念，不区分"对话内状态"和"对话外配置"。LangGraph 的 state/context 分离是<strong>对 Agent 场景的针对性设计</strong>——对话状态需要持久化，外部配置不需要。</p>
+</div>
+
+<h2 id="summary">2.7 本课小结</h2>
+
+<table>
+<tr><th>你怎么读</th><th>代码</th></tr>
+<tr><td>读 state 字段</td><td><code>runtime.state["user_id"]</code> 或 <code>runtime.state["messages"]</code></td></tr>
+<tr><td>读 context 字段</td><td><code>runtime.context.user_id</code>（泛型安全）或 <code>runtime.context["user_name"]</code></td></tr>
+</table>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能说出 state 和 context 的四个核心区别（本质/生命周期/可写性/持久化）</li>
+<li class="done">能举例说明什么信息该放 state、什么该放 context</li>
+<li class="done">能解释为什么分 state 和 context（职责分离/持久化策略/安全性）</li>
+<li class="done">能写出在工具中读取 state 和 context 的代码</li>
+</ul>
+</div>
+
+<div class="page-nav">
+  <span><a href="0001-toolruntime-injection.html">← 上一课：自动注入机制</a></span>
+  <span><a href="0003-write-state.html">下一课：写入记忆（Command + update）→</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

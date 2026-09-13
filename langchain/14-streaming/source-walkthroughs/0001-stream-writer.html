@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>源码走读：get_stream_writer 与 Stream 机制</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../../../index.html" style="text-decoration:none">Deep​Mastery <span>/ Streaming</span></a>
+</nav>
+
+<div class="layout">
+
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">目录</div>
+  </nav>
+
+  <main class="content">
+
+    <div class="article-header">
+      
+      <h1>源码走读：get_stream_writer 与 Stream 机制</h1>
+      <div class="article-meta">
+        <span>L3 源码层</span>
+        <span>2026-08-24</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+<p><strong>仓库</strong>: <a href="https://github.com/langchain-ai/langgraph">https://github.com/langchain-ai/langgraph</a></p>
+<p><strong>版本</strong>: langgraph >= 0.2.0</p>
+<p><strong>核心文件</strong>: <code>langgraph/config.py</code>, <code>langgraph/pregel/main.py</code></p>
+
+<h2>1. 关键数据结构</h2>
+
+<table>
+  <thead>
+    <tr><th>类/函数</th><th>作用</th><th>所属文件</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>get_stream_writer()</code></td><td>获取当前流的 writer</td><td>langgraph/config.py</td><td>基于 contextvars 实现</td></tr>
+    <tr><td><code>StreamWriter</code></td><td>可调用对象，写入 custom 流</td><td>langgraph/config.py</td><td>内部持有回调函数</td></tr>
+    <tr><td><code>CONFIG_KEY_STREAM_WRITER</code></td><td>contextvars 的 key</td><td>langgraph/config.py</td><td>用于在上下文中存取 writer</td></tr>
+    <tr><td><code>Pregel.stream()</code></td><td>流式执行的主方法</td><td>langgraph/pregel/main.py</td><td>解析 stream_mode，分发事件</td></tr>
+    <tr><td><code>Pregel._emit()</code></td><td>发出单个流事件</td><td>langgraph/pregel/main.py</td><td>根据不同 mode 包装事件</td></tr>
+  </tbody>
+</table>
+
+<h2>2. 核心调用链</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    participant User
+    participant Pregel as Pregel.stream
+    participant Emit as _emit
+    participant Node
+    participant Tool
+    participant Writer as get_stream_writer
+
+    User->>Pregel: stream(input, stream_mode...)
+    Pregel->>Pregel: 解析 stream_mode 列表
+    Pregel->>Pregel: 设置 StreamWriter 到 contextvars
+
+    loop 每个 superstep
+        Pregel->>Node: 执行节点
+        Node->>Tool: 调用工具函数
+        Tool->>Writer: 获取 writer
+        Writer-->>Tool: writer 可调用对象
+        Tool->>Pregel: writer 写入 custom content
+        Pregel->>Emit: mode=custom
+        Emit-->>User: yield custom
+        Tool-->>Node: 返回结果
+        Node-->>Pregel: 节点执行完毕
+        Pregel->>Emit: mode=updates
+        Emit-->>User: yield updates
+    end
+</div>
+
+<h2>3. 逐段分析</h2>
+
+<h3>3.1 get_stream_writer() — langgraph/config.py</h3>
+
+<pre><code class="language-python"># 伪代码重构（基于 contextvars 实现原理）
+import contextvars
+
+# 全局 contextvar，存储 StreamWriter 实例
+STREAM_WRITER_KEY: contextvars.ContextVar = contextvars.ContextVar(
+    "stream_writer", default=None
+)
+
+def get_stream_writer() -> callable:
+    """获取当前上下文的 StreamWriter。
+
+    工具函数内部调用此函数，获取 writer 可调用对象。
+    通过 writer(content) 将自定义内容写入流。
+
+    Returns:
+        callable: 一个可调用对象，调用它即可写入流。
+
+    Raises:
+        RuntimeError: 如果当前没有活跃的流上下文。
+    """
+    # L1: 从 contextvars 中取出 writer
+    writer = STREAM_WRITER_KEY.get()
+    if writer is None:
+        raise RuntimeError(
+            "No stream writer found in current context. "
+            "get_stream_writer() must be called from within a tool "
+            "running inside an agent with stream_mode='custom'."
+        )
+    return writer
+</code></pre>
+
+<p><strong>分析</strong>：</p>
+<ul>
+  <li><strong>contextvars 选择</strong>：Python 的 <code>contextvars</code> 模块在 3.7 引入，专门解决"隐式上下文传递"问题。与 <code>threading.local</code> 不同，它在 async/await 切换时能正确传递上下文。</li>
+  <li><strong>为什么不是全局变量</strong>：如果 writer 是全局变量，多个并发请求会互相覆盖。contextvars 确保了每个请求的 writer 是隔离的。</li>
+  <li><strong>RuntimeError 设计</strong>：在工具外部调用 get_stream_writer() 会抛出异常，这是一个好的防御性设计——明确告诉开发者"你用错了"，而不是静默失败。</li>
+</ul>
+
+<h3>3.2 StreamWriter 的写入机制</h3>
+
+<pre><code class="language-python"># 伪代码：StreamWriter 如何在 Pregel.stream() 中设置
+class Pregel:
+    def stream(self, input, stream_mode):
+        modes = stream_mode if isinstance(stream_mode, list) else [stream_mode]
+
+        # L1: 创建 StreamWriter 回调
+        def _custom_writer(data):
+            """Writer 内部回调：将数据作为 custom 事件发出"""
+            self._emit("custom", data)
+
+        # L2: 将 writer 设置到 contextvars 上下文
+        token = STREAM_WRITER_KEY.set(_custom_writer)
+
+        try:
+            # L3: 执行 Agent
+            for step_output in self._execute(input):
+                if "updates" in modes:
+                    self._emit("updates", step_output)
+                if "messages" in modes:
+                    for token_chunk in step_output.tokens:
+                        self._emit("messages", token_chunk)
+                # custom 不在循环中 emit，因为由 _custom_writer 回调驱动
+        finally:
+            # L4: 恢复上下文
+            STREAM_WRITER_KEY.reset(token)
+</code></pre>
+
+<p><strong>分析</strong>：</p>
+<ul>
+  <li><strong>回调模式</strong>：StreamWriter 本质上是一个<strong>回调函数</strong>。当工具调用 writer(data) 时，实际上是触发了 <code>_custom_writer(data)</code>，进而调用 <code>_emit("custom", data)</code>。</li>
+  <li><strong>上下文的设置与恢复</strong>：使用 <code>contextvars.ContextVar.set()</code> 的返回值 token 在 <code>finally</code> 块中恢复，确保即使 Agent 执行异常，上下文也不会泄漏。</li>
+  <li><strong>custom 不在主循环中 emit</strong>：custom 事件由工具内部的 writer 调用驱动，而不是由 Pregel 的 step 循环驱动。这是它与 updates/messages 的本质区别。</li>
+</ul>
+
+<h3>3.3 _emit() — 事件分发</h3>
+
+<pre><code class="language-python"># 伪代码：_emit 如何产生生成器的输出
+def _emit(self, mode, data):
+    """根据 stream_mode 产生对应的 yield 输出。
+
+    Args:
+        mode: 事件类型 ("updates" | "custom" | "messages" | "values" | "debug")
+        data: 事件数据
+    """
+    # L1: 如果 stream_mode 是单个字符串，直接 yield data
+    if len(self._modes) == 1:
+        yield data
+        return
+
+    # L2: 如果 stream_mode 是列表，yield (mode, data) 元组
+    yield (mode, data)
+</code></pre>
+
+<p><strong>分析</strong>：</p>
+<ul>
+  <li><strong>单个模式 vs 列表模式</strong>：当 stream_mode 是字符串时，直接 yield data（不需要元组包装）；当是列表时，yield (mode, data) 元组。这是消费者端需要区分处理的根本原因。</li>
+  <li><strong>设计意图</strong>：单个模式是简化版 API，列表模式是全功能版。这种"渐进式复杂度"的设计在 Python 生态中很常见（如 asyncio 的 API）。</li>
+</ul>
+
+<h2>4. 关键设计决策</h2>
+
+<table>
+  <thead>
+    <tr><th>决策</th><th>为什么</th><th>代价</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>使用 contextvars 而非全局变量</td>
+      <td>保证并发安全，每个请求/协程独立</td>
+      <td>增加了 API 的隐式性，对新手不直观</td>
+    </tr>
+    <tr>
+      <td>custom 事件由回调驱动而非主循环</td>
+      <td>custom 事件的发生时机完全由工具控制</td>
+      <td>如果工具不调用 writer，custom 流永远为空</td>
+    </tr>
+    <tr>
+      <td>单模式 yield data，多模式 yield (mode, data)</td>
+      <td>简化常见场景（单模式），同时支持复杂场景</td>
+      <td>消费者需要根据 stream_mode 参数类型做不同处理</td>
+    </tr>
+    <tr>
+      <td>RuntimeError 在无上下文时抛出</td>
+      <td>明确告知开发者使用错误，而非静默失败</td>
+      <td>要求开发者在工具外捕获异常（但通常不需要）</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="deep-grill-readiness">
+  <h4>本课 Deep-Grill 就绪度</h4>
+  <ul>
+    <li class="done">能画出 get_stream_writer 的完整调用链（对应 architect 角度）</li>
+    <li class="done">能解释 contextvars 为什么比全局变量更适合（对应 interviewer 角度）</li>
+    <li class="done">能说出 StreamWriter 的回调驱动模式（对应 architect 角度）</li>
+    <li class="done">能理解 _emit 中单模式 vs 多模式的 yield 差异（对应 code reviewer 角度）</li>
+  </ul>
+</div>
+
+    <div class="page-nav">
+      <span><a href="../lessons/0003-multi-mode.html">← 上一课：多模式组合</a></span>
+      <span><a href="../interview/0001-streaming.html">下一课：面试题库 →</a></span>
+    </div>
+
+    </div>
+  </main>
+
+</div>
+
+
+
+
+
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

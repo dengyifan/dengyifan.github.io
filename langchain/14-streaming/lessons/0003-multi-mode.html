@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>多模式组合与实战</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../../../index.html" style="text-decoration:none">Deep​Mastery <span>/ Streaming</span></a>
+</nav>
+
+<div class="layout">
+
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">目录</div>
+  </nav>
+
+  <main class="content">
+
+    <div class="article-header">
+      
+      <h1>多模式组合与实战</h1>
+      <div class="article-meta">
+        <span>L3 源码层 + L4 边界层</span>
+        <span>2026-08-24</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+
+  <video controls preload="metadata" src="./0003-multi-mode-canvas-video.mp4"></video>
+</div>
+
+<h2>1. 多模式组合：同时订阅多种流</h2>
+
+<h3>1.1 原理</h3>
+
+<p>当 <code>stream_mode</code> 被设为一个<strong>列表</strong>时，LangGraph 会同时启用多种模式。每次迭代返回一个 <code>(stream_mode, chunk)</code> 元组，第一个元素标识当前 chunk 属于哪种模式。</p>
+
+<p><strong>关键区别：单一模式 vs 列表模式</strong></p>
+
+<table>
+  <thead>
+    <tr><th>参数形式</th><th>返回值</th><th>示例</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>stream_mode="updates"</code>（字符串）</td><td><strong>裸 chunk</strong>（直接是 dict）</td><td><code>{"model": {...}}</code></td></tr>
+    <tr><td><code>stream_mode=["updates", "custom"]</code>（列表）</td><td><strong>(mode, chunk) 元组</strong></td><td><code>("updates", {"model": {...}})</code></td></tr>
+  </tbody>
+</table>
+
+<p>这就是为什么多模式消费端必须用 <code>for stream_mode, chunk in agent.stream(...)</code> 解包——因为返回值从裸 chunk 变成了元组。如果忘了这个区别，直接用单一模式的写法消费多模式流，会得到 <code>TypeError</code>。</p>
+
+<div class="warning">
+  <div class="warning-title">常见错误</div>
+  <p>当 stream_mode 是列表时，chunk 是 <code>(mode, chunk)</code> 元组。如果对 custom 模式的 chunk（字符串）做 <code>chunk["messages"]</code> 操作，会抛出 <code>TypeError: string indices must be integers, not 'str'</code>。必须先按 stream_mode 分支，再按各自类型处理。</p>
+</div>
+
+<div class="mermaid">
+flowchart LR
+    subgraph 订阅
+        A["stream_mode = [updates, custom]"]
+    end
+    subgraph 输出
+        B["(updates, chunk1)"]
+        C["(custom, chunk2)"]
+        D["(custom, chunk3)"]
+        E["(updates, chunk4)"]
+    end
+    A --> B
+    A --> C
+    A --> D
+    A --> E
+    classDef red fill:#fef0f0,stroke:#ea6f5a
+    class A red
+</div>
+
+<h3>1.2 示例代码</h3>
+
+<pre><code class="language-python"># stream_mode=["updates", "custom"] — 多模式组合
+import os
+from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
+from langgraph.config import get_stream_writer
+
+def get_weather(city: str) -> str:
+    """Get the weather for a city."""
+    writer = get_stream_writer()
+    writer(f"Looking up data for city: {city}")
+    writer(f"Acquired data for city: {city}")
+    return f"It's always sunny in {city}."
+
+model = ChatOpenAI(
+    base_url=os.getenv("LOCAL_AI_API_URL"),
+    api_key=os.getenv("LOCAL_AI_API_KEY"),
+    temperature=0.0,
+    model="deepseek-v4-pro",
+)
+
+agent = create_agent(model, tools=[get_weather])
+
+for stream_mode, chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "what is the weather in SF?"}]},
+    stream_mode=["updates", "custom"]
+):
+    print(f"stream_mode: {stream_mode}")
+    print(f"content: {chunk}")
+    print("\n")
+</code></pre>
+
+<h3>1.3 输出序列分析</h3>
+
+<p>假设 Agent 执行：model → tools → model，则输出顺序为：</p>
+
+<pre><code class="language-python"># 输出顺序（按事件发生时间）
+("updates", {"model": {...}})     # superstep 1: 模型决定调用工具
+("custom", "Looking up data...")  # 工具执行中：自定义进度
+("custom", "Acquired data...")    # 工具执行中：自定义进度
+("updates", {"tools": {...}})     # superstep 2: 工具执行完成
+("updates", {"model": {...}})     # superstep 3: 模型生成最终回答
+</code></pre>
+
+<div class="note">
+  <div class="note-title">关键点</div>
+  <p>chunk 按<strong>事件发生的时间顺序</strong>输出，不是按模式的顺序。custom 模式的 chunk 可以在 updates 之间任意位置出现，取决于工具何时调用 writer()。</p>
+</div>
+
+<h3>1.4 消费端代码模式</h3>
+
+<pre><code class="language-python"># 推荐：按模式分发处理
+for stream_mode, chunk in agent.stream(
+    input,
+    stream_mode=["updates", "custom"]
+):
+    if stream_mode == "updates":
+        handle_updates(chunk)
+    elif stream_mode == "custom":
+        handle_custom(chunk)
+</code></pre>
+
+<div class="java-comparison">
+  <div class="header">从 Java 视角看</div>
+  <p>多模式组合的 <code>(mode, chunk)</code> 元组类似于 Java 的 <strong>Union type</strong> 或 <strong>sealed class</strong> 模式：</p>
+  <pre><code class="language-java">// Java 等价思维
+sealed interface StreamEvent {
+    record Updates(Map&lt;String, StateUpdate&gt; data) implements StreamEvent {}
+    record Custom(String data) implements StreamEvent {}
+}
+
+// 消费
+for (StreamEvent event : stream) {
+    switch (event) {
+        case Updates(var data) -> handleUpdates(data);
+        case Custom(var data) -> handleCustom(data);
+    }
+}
+</code></pre>
+  <p>Python 的选择是<strong>结构化的</strong>（用元组 + 字符串标签），Java 的选择是<strong>类型化的</strong>（用 sealed class）。各有优劣：Python 更灵活但缺乏编译期检查，Java 更安全但更啰嗦。</p>
+</div>
+
+<h2>2. 生产环境最佳实践</h2>
+
+<h3>2.1 常见组合方案</h3>
+
+<table>
+  <thead>
+    <tr><th>组合</th><th>适用场景</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>["updates"]</code></td><td>简单步骤展示</td><td>最常用，适合不需要实时 token 的场景</td></tr>
+    <tr><td><code>["messages"]</code></td><td>打字机效果</td><td>适合需要实时显示 LLM 输出的场景</td></tr>
+    <tr><td><code>["updates", "custom"]</code></td><td>步骤 + 工具进度</td><td><strong>生产环境最推荐</strong>：兼顾结构化和实时性</td></tr>
+    <tr><td><code>["updates", "messages"]</code></td><td>全功能</td><td>同时展示步骤和 token，但输出量大</td></tr>
+    <tr><td><code>["updates", "messages", "custom"]</code></td><td>极致体验</td><td>所有模式全部开启，需注意消费端复杂度</td></tr>
+  </tbody>
+</table>
+
+<div class="tip">
+  <div class="tip-title">生产环境推荐</div>
+  <p><code>stream_mode=["updates", "custom"]</code> 是生产环境的最佳平衡点：</p>
+  <ul>
+    <li><code>updates</code> 提供步骤级别的结构化输出（用于 UI 步骤展示）</li>
+    <li><code>custom</code> 提供工具内部的实时进度反馈（用于 loading 动画）</li>
+    <li>不需要 <code>messages</code> 如果你不需要打字机效果</li>
+  </ul>
+</div>
+
+<h3>2.2 生产环境注意事项</h3>
+
+<div class="production-note">
+  <div class="header">生产环境关注点</div>
+  <ul>
+    <li><strong>输出量控制</strong>：不要同时订阅 3 种以上的模式，输出量会急剧膨胀</li>
+    <li><strong>前端消费</strong>：通过 SSE（Server-Sent Events）将 stream 转发到前端，每个 chunk 作为一个 SSE 事件</li>
+    <li><strong>错误处理</strong>：工具内部的 writer 调用如果异常，默认不会中断 Agent 执行，但流会中断</li>
+    <li><strong>超时管理</strong>：长时间无输出的流需要前端做超时处理（如 30 秒无输出则显示"处理中..."）</li>
+    <li><strong>checkpointer 选择</strong>：流式输出 + checkpointer 会增加延迟，PostgresSaver 的写入延迟高于 MemorySaver</li>
+  </ul>
+</div>
+
+<h3>2.3 多模式性能开销</h3>
+
+<p>同时开启 messages + updates 会产生以下问题：</p>
+
+<table>
+  <thead>
+    <tr><th>开销类型</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>内容重复</strong></td><td>同一段文本在 messages 中逐 token 流一次，在 updates 中完整输出一次——用户看到两次相同内容</td></tr>
+    <tr><td><strong>内存开销</strong></td><td>每种模式需要独立缓冲，三模式全开时内存占用翻倍</td></tr>
+    <tr><td><strong>序列化开销</strong></td><td>同一文本被序列化两次（messages 和 updates），CPU 浪费</td></tr>
+    <tr><td><strong>网络传输</strong></td><td>双倍数据量通过 SSE 传输</td></tr>
+    <tr><td><strong>前端渲染复杂度</strong></td><td>需要去重逻辑，避免重复渲染</td></tr>
+  </tbody>
+</table>
+
+<p><strong>优化方案</strong>：如果既需要打字机效果（messages），又需要后端审计（需要记录完整步骤），推荐"后端聚合"方案：</p>
+
+<pre><code class="language-python"># 方案：前端用 messages + custom，后端从 messages 流拼接完整消息写日志
+# 不开启 updates 模式，避免重复传输
+
+full_message = ""
+current_msg_id = None
+
+for stream_mode, chunk in agent.stream(input, stream_mode=["messages", "custom"]):
+    if stream_mode == "messages":
+        msg_id = chunk.id
+        if msg_id != current_msg_id:
+            if current_msg_id is not None:
+                log_to_audit(full_message)  # 完整消息写入审计日志
+            current_msg_id = msg_id
+            full_message = ""
+        full_message += chunk.content
+        yield chunk  # 透传给前端打字机
+    elif stream_mode == "custom":
+        yield chunk  # 透传给前端进度提示</code></pre>
+
+<div class="note">
+  <div class="note-title">与 deep-grill 的对照</div>
+  <p>在 deep-grill 追问中，学习者对多模式性能开销认识不足，也不清楚如何在既要打字机又要审计的场景下优化。关键是：审计用 updates 虽然方便但浪费，更好的做法是从 messages 流中通过 message_id 拼接完整消息，一举两得。</p>
+</div>
+
+<h3>2.4 流式可观测性：心跳与超时</h3>
+
+<p>生产环境中如何知道流式输出是否还活着？</p>
+
+<pre><code class="language-python">import asyncio
+
+async def stream_with_timeout(agent, input, timeout=30):
+    """带超时检测的流式消费"""
+    async for chunk in agent.astream(input, stream_mode=["updates", "custom"]):
+        yield chunk  # 每次收到事件 = 心跳，重置超时
+
+# 或使用 asyncio.wait_for 包装整个流
+try:
+    async for chunk in asyncio.wait_for(
+        agent.astream(input, stream_mode=["updates", "custom"]),
+        timeout=60
+    ).__aiter__():
+        yield chunk
+except asyncio.TimeoutError:
+    yield ("custom", "请求超时，请稍后重试")</code></pre>
+
+<p><strong>关键点</strong>：</p>
+<ul>
+  <li>metadata 里<strong>没有</strong> token 计数字段——不能用它来检测存活</li>
+  <li>正确做法：每次收到事件重置定时器（心跳模式），或使用 asyncio.wait_for 整体超时</li>
+  <li>如果工具执行了 60 秒还没返回，writer("Looking up...") 在阻塞前已发出，前端会收到这个 custom 事件然后卡住</li>
+</ul>
+
+<h3>2.5 流式中断与恢复</h3>
+
+<p>用户通过 stream_mode="messages" 看到打字机效果，在 LLM 生成到一半时网络断开：</p>
+
+<table>
+  <thead>
+    <tr><th>问题</th><th>答案</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>后端状态里的消息是截断的还是完整的？</td><td><strong>通常是完整的</strong>。流式传输中断 ≠ 生成中断，后端 LLM 通常还在继续生成，最终 messages 里的 AIMessage 是完整的</td></tr>
+    <tr><td>能否从断点继续？</td><td><strong>不能从 token 级别断点续写</strong>。可以通过 checkpointer 恢复整个 superstep 的状态，但生成中的那半句话无法精确续写</td></tr>
+    <tr><td>如何避免 token 浪费？</td><td>设置 max_tokens 限制；心跳+断线检测 → 立即 cancel LLM 调用；缓存相同问题；检查点+重放避免从头重新生成</td></tr>
+  </tbody>
+</table>
+
+<p><strong>message_id 和 checkpoint 的本质区别</strong>：</p>
+
+<table>
+  <thead>
+    <tr><th>概念</th><th>作用</th><th>持久化</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>AIMessageChunk.id</strong>（message_id）</td><td>流式识别符，帮助拼接同一条消息的 token 碎块</td><td>❌ 不持久化</td></tr>
+    <tr><td><strong>checkpoint</strong></td><td>状态恢复点，每个 superstep 后保存完整 state 快照</td><td>✅ 持久化</td></tr>
+  </tbody>
+</table>
+
+<p>两者职责完全不同：id 是流式拼接的"胶水"，checkpoint 是断点续传的"存档"。不能互相替代。</p>
+
+<div class="note">
+  <div class="note-title">与 deep-grill 的对照</div>
+  <p>在 deep-grill 追问中，学习者混淆了 message_id 和 checkpoint 机制，错误认为"可以通过 message_id 从断点输出"。正确理解：网络断开不一定会截断后端状态；message_id 只用于拼接，不能用于恢复；checkpoint 在每个 superstep 后保存，但生成中的半句话无法精确续写。</p>
+</div>
+
+<h2>3. 边界条件与坑</h2>
+
+<h3>3.1 坑 1：custom 模式下忘记 stream_mode 参数</h3>
+
+<pre><code class="language-python"># 错误：工具内调用了 writer，但 stream_mode 没包含 "custom"
+for chunk in agent.stream(input, stream_mode="updates"):
+    # 永远不会收到 custom 内容！
+    pass
+
+# 正确：stream_mode 必须包含 "custom"
+for chunk in agent.stream(input, stream_mode=["updates", "custom"]):
+    pass
+</code></pre>
+
+<h3>3.2 坑 2：get_stream_writer() 在工具外调用</h3>
+
+<pre><code class="language-python"># 错误：在工具外调用 get_stream_writer()
+writer = get_stream_writer()  # RuntimeError: 没有活跃的流上下文
+
+# 正确：只在工具函数内调用
+def my_tool(x: str) -> str:
+    writer = get_stream_writer()  # OK
+    writer("progress")
+    return "result"
+</code></pre>
+
+<h3>3.3 坑 3：messages 模式下 metadata 的不稳定字段</h3>
+
+<pre><code class="language-python"># 不推荐：直接访问 metadata 的其他字段
+for token, metadata in agent.stream(input, stream_mode="messages"):
+    node = metadata["langgraph_node"]  # ✅ 稳定字段
+    # thread_id = metadata["thread_id"]  # ❌ 可能不存在
+
+# 推荐：使用 .get() 防御性访问
+for token, metadata in agent.stream(input, stream_mode="messages"):
+    node = metadata.get("langgraph_node")
+</code></pre>
+
+<h3>3.4 坑 4：多模式组合时消费端未区分模式</h3>
+
+<pre><code class="language-python"># 错误：未区分模式，直接处理 chunk
+for stream_mode, chunk in agent.stream(input, stream_mode=["updates", "custom"]):
+    print(chunk["messages"])  # custom 的 chunk 不是 dict，会报错！
+
+# 正确：按模式分发
+for stream_mode, chunk in agent.stream(input, stream_mode=["updates", "custom"]):
+    if stream_mode == "updates":
+        print(chunk["messages"])
+    elif stream_mode == "custom":
+        print(chunk)
+</code></pre>
+
+<h2>4. 设计原理追问</h2>
+
+<h3>4.1 为什么选择 (mode, chunk) 元组而不是按 mode 分组输出？</h3>
+
+<p>如果按 mode 分组输出（如先输出所有 updates，再输出所有 custom），那么：</p>
+<ul>
+  <li>所有 custom 内容会延迟到 Agent 执行完后才输出，失去了"实时进度"的意义</li>
+  <li>前端无法交错展示步骤和进度</li>
+</ul>
+
+<p>按时间顺序输出保证了<strong>时序正确性</strong>——用户看到的内容顺序就是实际发生的顺序。</p>
+
+<h3>4.2 这个设计有什么代价？</h3>
+
+<p>代价是<strong>消费端需要显式分发</strong>。每次迭代都要检查 mode 字符串，增加了消费端代码复杂度。如果 LangGraph 未来能提供类型安全的 stream 消费 API（如 typed stream），可以降低这个代价。</p>
+
+<h3>4.3 如果是你，会怎么改进？</h3>
+
+<p>一个方向是提供 <strong>回调式 API</strong> 作为生成器 API 的补充：</p>
+
+<pre><code class="language-python"># 理想 API（回调式）
+agent.stream(
+    input,
+    on_updates=lambda chunk: handle_updates(chunk),
+    on_custom=lambda chunk: handle_custom(chunk),
+    on_messages=lambda token, meta: handle_messages(token, meta),
+)
+</code></pre>
+
+<p>这样消费端不需要自己做分发，每种模式有独立的回调。但生成器模式更符合 Python 生态习惯，两种 API 可以共存。</p>
+
+<h2>5. 费曼自检</h2>
+
+<blockquote>
+  <p>多模式组合就像同时开了多个监控摄像头：</p>
+  <ul>
+    <li>updates = 厨房门口监控（看到厨师进进出出）</li>
+    <li>custom = 厨师身上的 GoPro（看到厨师视角）</li>
+    <li>组合 = 同时看两个画面，但画面是实时交错的，不是先放完一个再放另一个</li>
+  </ul>
+</blockquote>
+
+<div class="deep-grill-readiness">
+  <h4>本课 Deep-Grill 就绪度</h4>
+  <ul>
+    <li class="done">能解释 (mode, chunk) 元组的输出顺序规则（对应 interviewer 角度）</li>
+    <li class="done">能区分单一模式（裸 chunk）和多模式（元组）的返回结构差异（对应 interviewer 角度）</li>
+    <li class="done">能说出多种组合方案的适用场景（对应 architect 角度）</li>
+    <li class="done">能分析多模式组合的性能开销，并给出"后端聚合"优化方案（对应 architect 角度）</li>
+    <li class="done">能解释流式存活检测（心跳/超时）而非依赖 metadata 的 token 计数（对应 incident responder 角度）</li>
+    <li class="done">能区分 message_id（流式拼接）和 checkpoint（断点续传）的职责（对应 incident responder 角度）</li>
+    <li class="done">能识别 4 个常见坑并给出修复方案（对应 code reviewer 角度）</li>
+    <li class="done">能解释为什么多模式组合要按时间顺序输出而非按模式分组（对应 architect 角度）</li>
+    <li class="done">能用大白话讲清多模式组合（对应 instructor 角度）</li>
+    <li>能排查 custom 模式不生效的根因（对应 incident responder 角度）</li>
+  </ul>
+</div>
+
+    <div class="page-nav">
+      <span><a href="0002-stream-modes.html">← 上一课：四种 stream_mode 详解</a></span>
+      <span><a href="../source-walkthroughs/0001-stream-writer.html">下一课：源码走读 →</a></span>
+    </div>
+
+    </div>
+  </main>
+
+</div>
+
+
+
+
+
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

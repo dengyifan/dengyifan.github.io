@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent 执行流程与 superstep 概念</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../../../index.html" style="text-decoration:none">Deep​Mastery <span>/ Streaming</span></a>
+</nav>
+
+<div class="layout">
+
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">目录</div>
+  </nav>
+
+  <main class="content">
+
+    <div class="article-header">
+      
+      <h1>Agent 执行流程与 superstep 概念</h1>
+      <div class="article-meta">
+        <span>L1 概念层 + L2 原理层</span>
+        <span>2026-08-24</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+
+  <video controls preload="metadata" src="./0001-agent-execution-flow-canvas-video.mp4"></video>
+</div>
+
+<h2>1. 整体架构：Agent 是什么</h2>
+
+<p>在 LangGraph 中，一个 Agent 本质上是一个<strong>状态图（StateGraph）</strong>——由多个节点（node）和边（edge）组成的有限状态机。每个节点执行一个具体操作（如调用 LLM、执行工具），边定义了节点之间的流转规则。</p>
+
+<div class="mermaid">
+flowchart TD
+    A[用户输入] --> B[model 节点]
+    B -->|需要工具| C[tools 节点]
+    B -->|直接回答| D[结束]
+    C --> B
+    classDef model fill:#fef0f0,stroke:#ea6f5a
+    classDef tools fill:#f0f7fd,stroke:#3194d0
+    class B model
+    class C tools
+</div>
+
+<p>这是一个典型的 <strong>ReAct Agent</strong> 循环：模型调用 → 工具调用 → 模型调用 → ... → 最终回答。每一次从「模型调用」到「工具调用」再回到「模型调用」的完整轮次，就是一个 <strong>superstep</strong>。</p>
+
+<h2>2. superstep：流式粒度的最小单位</h2>
+
+<p><strong>superstep</strong> 是理解 LangGraph 流式输出的核心概念。它不是一个 API 参数，而是 Agent 执行流程中的<strong>天然步骤</strong>。</p>
+
+<h3>2.1 什么是 superstep？</h3>
+
+<p>一个 superstep 包含以下完整过程：</p>
+
+<ol>
+  <li>从当前 state 中读取输入</li>
+  <li>执行一个节点（如 model 或 tools）</li>
+  <li>将输出写回 state</li>
+  <li>触发 checkpoint（如果配置了 checkpointer）</li>
+</ol>
+
+<p>换句话说，<strong>一个 superstep = 一个节点的完整执行周期</strong>。</p>
+
+<div class="note">
+  <div class="note-title">关键洞察</div>
+  <p>superstep 是 LangGraph 执行模型中的原子单位。每个 superstep 执行完毕后，state 被更新，checkpoint 被保存。这也是为什么 <code>stream_mode="updates"</code> 会按 superstep 粒度输出事件——因为每个 superstep 完成后，state 才真正发生变化。</p>
+</div>
+
+<h3>2.2 用代码理解 superstep</h3>
+
+<pre><code class="language-python">from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
+import os
+
+def get_weather(city: str) -> str:
+    """Get the weather for a city."""
+    return f"The weather in {city} is sunny."
+
+model = ChatOpenAI(
+    base_url=os.getenv("LOCAL_AI_API_URL"),
+    api_key=os.getenv("LOCAL_AI_API_KEY"),
+    temperature=0.0,
+    model="deepseek-v4-pro",
+)
+
+agent = create_agent(model, tools=[get_weather])
+
+# stream_mode="updates" 按 superstep 输出
+for chunk in agent.stream(
+    {"messages": [{"role": "user", "content": "What is the weather in SF?"}]},
+    stream_mode="updates"
+):
+    for step, data in chunk.items():
+        print(f"Step {step}")
+        print(f"content: {data['messages'][-1].content}")
+</code></pre>
+
+<p>当你运行这段代码，你会看到<strong>两个 superstep</strong>：</p>
+<ol>
+  <li><code>Step model</code> — 模型决定调用工具 get_weather</li>
+  <li><code>Step tools</code> — 工具执行并返回天气结果</li>
+  <li><code>Step model</code> — 模型基于工具结果生成最终回答</li>
+</ol>
+
+<p>每个 <code>Step model</code> 或 <code>Step tools</code> 就是一个 superstep 的输出。</p>
+
+<h2>3. Agent 执行流程详解</h2>
+
+<h3>3.1 时序图</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant User
+    participant Agent
+    participant Model as model节点
+    participant Tools as tools节点
+
+    User->>Agent: stream(input, stream_mode=updates)
+
+    Note over Agent: superstep 1
+    Agent->>Model: 执行model节点
+    Model-->>Agent: 返回tool_calls
+    Agent-->>User: updates, model
+
+    Note over Agent: superstep 2
+    Agent->>Tools: 执行tools节点
+    Tools-->>Agent: 返回天气结果
+    Agent-->>User: updates, tools
+
+    Note over Agent: superstep 3
+    Agent->>Model: 执行model节点
+    Model-->>Agent: 返回最终回答
+    Agent-->>User: updates, model
+</div>
+
+<h3>3.2 条件边的判断逻辑</h3>
+
+<p>条件边决定 Agent 下一步去向。它的判断逻辑非常简洁：</p>
+
+<pre><code class="language-python">def route_after_agent(state):
+    """条件边路由函数：根据最后一条消息是否有 tool_calls 决定去向"""
+    last_message = state["messages"][-1]
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        return "tools"       # 有工具调用 → 去 tools 节点
+    else:
+        return "__end__"     # 无工具调用 → 结束</code></pre>
+
+<p><strong>核心判断</strong>：<code>messages[-1].tool_calls</code> 是否非空。这是整个 ReAct 循环的"方向盘"——它决定了 Agent 是继续调用工具还是直接结束。</p>
+
+<div class="note">
+  <div class="note-title">与 deep-grill 的对照</div>
+  <p>在 deep-grill 追问中，学习者能复述图结构（"有 tool_calls → tools 节点，无 tool_calls → END"），但被要求写伪代码时遗漏了具体判断逻辑。关键是：条件边是一条边，由路由函数动态决定去向，两个分支不算独立边。</p>
+</div>
+
+<h3>3.3 图结构总结：节点、边与 State</h3>
+
+<p><code>create_agent</code> 生成的完整 LangGraph 图包含：</p>
+
+<table>
+  <thead>
+    <tr><th>元素</th><th>数量</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>节点</td><td><strong>2 个</strong></td><td><code>agent</code> 节点（调用 LLM）和 <code>tools</code> 节点（执行工具）</td></tr>
+    <tr><td>边</td><td><strong>3 条</strong></td><td>START→agent（入口边）、agent→tools→agent（条件边+循环边）、agent→END（条件边，条件边是一条边，两个分支不算独立边）</td></tr>
+    <tr><td>State 关键字段</td><td><strong>messages</strong></td><td>消息列表，是 State 中最重要的（也是最稳定）字段。没有"下一个步骤节点"字段——下一步由条件边的路由函数<strong>实时计算</strong></td></tr>
+  </tbody>
+</table>
+
+<div class="warning">
+  <div class="warning-title">常见误区</div>
+  <p>很多人会误以为 State 中有"下一个步骤节点"字段（如 <code>next_node</code>），实际上没有。Agent 的下一步去向由条件边的路由函数根据 state 内容实时计算，而不是预先存储在 state 中。这是 LangGraph 的"无状态路由"设计。</p>
+</div>
+
+<h3>3.4 多工具调用的并发与串行语义</h3>
+
+<p>如果 LLM 一次返回多个 <code>tool_calls</code>（如 <code>[get_weather, get_air_quality]</code>），tools 节点如何处理？</p>
+
+<table>
+  <thead>
+    <tr><th>场景</th><th>LLM 返回</th><th>图流转</th><th>工具执行方式</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>一次返回多个工具</td><td><code>[weather, aq]</code></td><td>agent→tools→agent（1 轮）</td><td><strong>并行</strong>（同一节点内执行所有工具）</td></tr>
+    <tr><td>分两次返回</td><td>先 <code>[weather]</code> 再 <code>[aq]</code></td><td>agent→tools→agent→tools→agent（2 轮）</td><td><strong>串行</strong>（需两次经过 agent 节点）</td></tr>
+  </tbody>
+</table>
+
+<p><strong>关键理解</strong>：多工具是并行还是串行，<strong>不由工具定义顺序决定</strong>，而是由 LLM 单次返回的 <code>tool_calls</code> 数量决定。ToolNode 收到 AIMessage 后遍历 <code>tool_calls</code> 列表，对每个 tool_call 执行工具并包装成 ToolMessage。tools 节点只执行一次，处理整个列表。</p>
+
+<div class="note">
+  <div class="note-title">与 deep-grill 的对照</div>
+  <p>在 deep-grill 中，学习者认为"定义顺序决定串行/并发"，这是错误理解。真正的决定因素是：LLM 在一次推理中返回了几个 tool_calls。如果 LLM 需要先执行一个工具、看到结果后再决定是否执行下一个，那就是两轮 ReAct 循环（串行）。</p>
+</div>
+
+<h3>3.5 每个 superstep 内部发生了什么</h3>
+
+<table>
+  <thead>
+    <tr><th>阶段</th><th>操作</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1. 读取 state</td><td>从 checkpointer 或初始 state 读取</td><td>确保节点拿到最新状态</td></tr>
+    <tr><td>2. 执行节点</td><td>调用 node 函数（如 LLM 推理）</td><td>节点可能是同步或异步的</td></tr>
+    <tr><td>3. 更新 state</td><td>通过 reducer 合并输出到 state</td><td>messages 的 reducer 是 add_messages</td></tr>
+    <tr><td>4. 保存 checkpoint</td><td>将新 state 写入 checkpointer</td><td>仅在配置了 checkpointer 时执行</td></tr>
+    <tr><td>5. 发出事件</td><td>通知 stream 消费者</td><td>具体内容取决于 stream_mode</td></tr>
+  </tbody>
+</table>
+
+<h2>4. stream 方法的调用方式</h2>
+
+<h3>4.1 同步 vs 异步</h3>
+
+<table>
+  <thead>
+    <tr><th>方法</th><th>类型</th><th>适用场景</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>agent.stream()</code></td><td>同步生成器</td><td>脚本、CLI 工具、简单 Web 应用</td></tr>
+    <tr><td><code>agent.astream()</code></td><td>异步生成器</td><td>FastAPI、异步 Web 框架</td></tr>
+  </tbody>
+</table>
+
+<pre><code class="language-python"># 同步版本
+for chunk in agent.stream(input, stream_mode="updates"):
+    process(chunk)
+
+# 异步版本
+async for chunk in agent.astream(input, stream_mode="updates"):
+    await process(chunk)
+</code></pre>
+
+<div class="java-comparison">
+  <div class="header">从 Java 视角看</div>
+  <p>Java 中的 <code>Stream&lt;T&gt;</code> 是惰性求值的管道，而 Python 的 <code>agent.stream()</code> 返回的是 <strong>生成器（generator）</strong>。两者的核心区别：</p>
+  <ul>
+    <li><strong>Java Stream</strong>：数据源已存在，只是延迟计算</li>
+    <li><strong>Python Generator</strong>：数据按需<strong>产生</strong>，每次 <code>yield</code> 后才会有下一个值</li>
+  </ul>
+  <p>这意味着 LangGraph 的 stream 是<strong>真正的实时流式</strong>——Agent 一边执行，一边产出结果。不是等全部执行完再一次性返回。</p>
+  <pre><code class="language-java">// Java 等价思维：Spring WebFlux 的 Flux&lt;T&gt;
+Flux&lt;String&gt; stream = Flux.create(sink -> {
+    // 每个 superstep 调用 sink.next(data)
+    sink.next("superstep 1 output");
+    sink.next("superstep 2 output");
+    sink.complete();
+});
+</code></pre>
+</div>
+
+<h3>4.2 stream_mode 参数</h3>
+
+<p><code>stream_mode</code> 决定了流式输出的<strong>粒度</strong>和<strong>内容</strong>。它支持以下值：</p>
+
+<table>
+  <thead>
+    <tr><th>模式</th><th>粒度</th><th>输出内容</th><th>典型场景</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>"updates"</code></td><td>superstep 级别</td><td>每个步骤的完整 state 更新</td><td>显示 Agent 执行步骤</td></tr>
+    <tr><td><code>"messages"</code></td><td>token 级别</td><td>每个 LLM token + metadata</td><td>打字机效果</td></tr>
+    <tr><td><code>"custom"</code></td><td>自定义</td><td>工具内部通过 writer 输出</td><td>进度提示、中间状态</td></tr>
+    <tr><td><code>"values"</code></td><td>superstep 级别</td><td>每个步骤后的完整 state</td><td>状态快照监控</td></tr>
+    <tr><td><code>"debug"</code></td><td>细粒度</td><td>完整执行图追踪</td><td>开发调试</td></tr>
+  </tbody>
+</table>
+
+<div class="tip">
+  <div class="tip-title">最佳实践</div>
+  <p><strong>生产环境最常见的选择</strong>：<code>stream_mode=["updates", "custom"]</code> 组合。updates 提供步骤级别的结构化输出，custom 提供工具内部的实时进度反馈。</p>
+</div>
+
+<h2>5. 设计原理追问</h2>
+
+<h3>5.1 为什么 LangGraph 选择按 superstep 粒度输出，而不是更细或更粗？</h3>
+
+<p>superstep 是 <strong>state 变更的最小单位</strong>。在 LangGraph 的设计中，state 只在 superstep 完成后才更新——这意味着：</p>
+<ul>
+  <li><strong>更细</strong>（如每次函数调用）：没有意义，因为 state 没变</li>
+  <li><strong>更粗</strong>（如整个 Agent 执行完）：失去了流式的意义，用户还是要等</li>
+</ul>
+
+<p>所以 superstep 是<strong>自然的粒度选择</strong>——它恰好对应 state 的变更点。</p>
+
+<h3>5.2 这个设计有什么代价？</h3>
+
+<p>代价是：<strong>用户无法在 superstep 内部看到进度</strong>。比如 LLM 正在生成 token 的过程中，updates 模式不会输出任何内容，直到整个生成完成。这也是为什么需要 `messages` 模式——它在 token 级别做补充。</p>
+
+<h3>5.3 如果是你，会怎么改进？</h3>
+
+<p>一个可能的改进方向是支持 <strong>progress 回调</strong>——在 superstep 内部（如 LLM 生成过程中）定期回调一个进度函数，不需要等到整个 superstep 结束。这本质上是 `messages` 模式的另一种表达方式，但更灵活。</p>
+
+<h2>6. 费曼自检：用大白话讲一遍</h2>
+
+<blockquote>
+  <p>想象一个餐厅厨房。顾客点了一道菜（用户输入），厨师（Agent）开始工作：</p>
+  <ul>
+    <li>第一步：看菜单决定做什么菜（model 节点）</li>
+    <li>第二步：切菜炒菜（tools 节点）</li>
+    <li>第三步：装盘点缀（model 节点）</li>
+  </ul>
+  <p>每完成一步，厨师就喊一声"好了！"——这就是 <strong>superstep</strong>。`stream_mode="updates"` 就是在厨房门口装了个喇叭，每次厨师喊"好了"的时候就广播出去。</p>
+  <p>而 `stream_mode="messages"` 则是把摄像头对准厨师的手，每切一刀、每翻一下锅都直播出去——这就是 token 级别的流式。</p>
+</blockquote>
+
+<div class="deep-grill-readiness">
+  <h4>本课 Deep-Grill 就绪度</h4>
+  <ul>
+    <li class="done">能解释 superstep 是什么，以及为什么它是流式粒度的最小单位（对应 interviewer 角度）</li>
+    <li class="done">能画 Agent 执行流程的时序图（对应 architect 角度）</li>
+    <li class="done">能写出条件边的判断伪代码，理解 messages[-1].tool_calls 的核心判断逻辑（对应 interviewer 角度）</li>
+    <li class="done">能说出图结构：2 个节点、3 条边、State 只有 messages 字段（对应 interviewer 角度）</li>
+    <li class="done">能解释多工具调用的并发/串行语义：由 LLM 单次返回的 tool_calls 数量决定，而非定义顺序（对应 interviewer 角度）</li>
+    <li class="done">能说出 stream 和 astream 的区别（对应 code reviewer 角度）</li>
+    <li class="done">能用大白话讲清 superstep 的概念（对应 instructor 角度）</li>
+    <li>能区分 5 种 stream_mode 的适用场景（下一课覆盖）</li>
+  </ul>
+</div>
+
+    <div class="page-nav">
+      <span></span>
+      <span><a href="0002-stream-modes.html">下一课：四种 stream_mode 详解 →</a></span>
+    </div>
+
+    </div>
+  </main>
+
+</div>
+
+
+
+
+
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

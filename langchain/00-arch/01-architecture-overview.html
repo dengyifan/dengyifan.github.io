@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LangChain 整体架构 — 生态全景与核心抽象</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad:false,
+      theme:'base',
+      themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}
+    });
+    window.addEventListener('DOMContentLoaded', function() { mermaid.run(); });
+  </script>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep&#8203;Mastery <span>/ LangChain 整体架构</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">Table of Contents</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>LangChain 整体架构</h1>
+      <div class="article-meta"><span>基于 LangChain 1.0+ / LangGraph 0.2+</span><span>Architecture Overview</span><span>Source: langchain 1.x</span></div>
+    </div>
+    <div class="article-body">
+
+<div class="note">
+  <div class="note-title">阅读导读</div>
+  <p>本文基于 <strong>LangChain 1.0+ / LangGraph 0.2+</strong> 生态，给出从应用层到基础设施层的完整架构图景。所有图表保留原始 Mermaid 语义，可直接复制到支持的渲染器中复用。</p>
+</div>
+
+<h2 id="一-生态全景图">一、生态全景图</h2>
+
+<div class="mermaid">
+graph TB
+    subgraph 应用层["🏗️ 应用层"]
+        AGENT["🤖 Agent 智能体"]
+        CHAIN["🔗 Chain 链"]
+        GRAPH["📊 StateGraph 状态图"]
+        RAG_APP["📚 RAG 检索增强"]
+        MULTI["👥 多智能体系统"]
+    end
+
+    subgraph 组件层["🧩 核心组件层"]
+        direction TB
+        MODEL["🧠 Model 模型"]
+        TOOL["🔧 Tool 工具"]
+        MSG["💬 Message 消息"]
+        MEM["🧠 Memory 记忆"]
+        MIDDLE["🔌 Middleware 中间件"]
+        STREAM["📡 Stream 流式"]
+        STRUCT["📋 结构化输出"]
+    end
+
+    subgraph 基础层["⚙️ 基础设施层"]
+        direction LR
+        VEC["💾 向量数据库"]
+        EMBED["🧮 嵌入模型"]
+        DOC["📄 文档处理"]
+        MCP["🌐 MCP 协议"]
+    end
+
+    应用层 --> 组件层
+    组件层 --> 基础层
+
+    style 应用层 fill:#e3f2fd,stroke:#1565c0,stroke-width:3px
+    style 组件层 fill:#fff3e0,stroke:#ef6c00,stroke-width:3px
+    style 基础层 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+</div>
+
+<h2 id="二-runnable-类层次结构">二、Runnable 类层次结构</h2>
+
+<p>LangChain 的核心抽象是 <code>Runnable&lt;Input, Output&gt;</code>，所有可运行组件都继承自它。</p>
+
+<div class="mermaid">
+classDiagram
+
+    class Runnable {
+        &lt;&lt;Abstract&gt;&gt;
+        +invoke()
+        +stream()
+        +batch()
+        +pipe()
+        +bind()
+        +with_retry()
+        +with_fallbacks()
+    }
+
+    class RunnableSerializable {
+        +to_json()
+        +configurable_fields()
+        +configurable_alternatives()
+    }
+
+    class RunnableSequence {
+        +first Runnable
+        +middle list
+        +last Runnable
+    }
+
+    class RunnableParallel {
+        +steps Mapping
+    }
+
+    class RunnableBranch {
+        +branches list
+        +default Runnable
+    }
+
+    class RunnableWithFallbacks {
+        +runnable Runnable
+        +fallbacks list
+    }
+
+    class RunnableBinding {
+        +bound Runnable
+        +kwargs Mapping
+    }
+
+    class RunnableRetry {
+        +max_attempt_number int
+        +retry_exception_types tuple
+    }
+
+    class RunnablePassthrough {
+        +func Callable
+    }
+
+    class RunnableAssign {
+        +mapper RunnableParallel
+    }
+
+    class RunnablePick {
+        +keys str
+    }
+
+    class RunnableLambda {
+        +func Callable
+    }
+
+    class RunnableGenerator {
+        +transform Callable
+    }
+
+    RunnableSerializable --|> Runnable
+    RunnableGenerator --|> Runnable
+    RunnableLambda --|> Runnable
+
+    RunnableSequence --|> RunnableSerializable
+    RunnableParallel --|> RunnableSerializable
+    RunnableBranch --|> RunnableSerializable
+    RunnableWithFallbacks --|> RunnableSerializable
+    RunnableBinding --|> RunnableSerializable
+    RunnableRetry --|> RunnableSerializable
+    RunnablePassthrough --|> RunnableSerializable
+    RunnableAssign --|> RunnableSerializable
+    RunnablePick --|> RunnableSerializable
+</div>
+
+<div class="note">
+  <div class="note-title">关于泛型参数</div>
+  <p>完整签名是 <code>Runnable&lt;Input, Output&gt;</code>，为适配 Mermaid 类图语法并保证渲染稳定，图中泛型参数做了简化（仅保留首参 <code>Input</code>）。实际使用时请以 Python 源码签名为准。</p>
+</div>
+
+<h2 id="三-五大核心模块">三、五大核心模块</h2>
+
+<h3 id="31-模型层-model">3.1 模型层 (Model)</h3>
+
+<div class="mermaid">
+graph LR
+    subgraph 模型调用方式
+        INVOKE["invoke()<br/>同步调用，返回完整结果"]
+        STREAM["stream()<br/>流式输出，逐 token 返回"]
+        BATCH["batch()<br/>批量调用，并行处理"]
+        AINVOKE["ainvoke()<br/>异步调用"]
+    end
+
+    subgraph 模型能力
+        CHAT["ChatOpenAI<br/>对话模型"]
+        TOOL_CALL["工具调用<br/>bind_tools()"]
+        STRUCT_OUT["结构化输出<br/>with_structured_output()"]
+        REASONING["推理模式<br/>thinking 参数"]
+    end
+
+    CHAT --> TOOL_CALL
+    CHAT --> STRUCT_OUT
+    CHAT --> REASONING
+    TOOL_CALL --> INVOKE
+    STRUCT_OUT --> STREAM
+    REASONING --> BATCH
+</div>
+
+<h3 id="32-工具层-tool">3.2 工具层 (Tool)</h3>
+
+<div class="mermaid">
+classDiagram
+
+    class Tool {
+        +name str
+        +description str
+        +args_schema BaseModel
+        +func Callable
+        +invoke()
+    }
+
+    class ToolRuntime {
+        +state State
+        +context Context
+        +store Store
+        +config RunnableConfig
+        +tool_call_id str
+    }
+
+    class Command {
+        +goto str_or_list
+        +update dict
+        +graph Command_PARENT_or_GRAPH
+    }
+
+    class InjectedState {
+        &lt;&lt;Interface&gt;&gt;
+    }
+
+    class InjectedToolCallId {
+        &lt;&lt;Interface&gt;&gt;
+    }
+
+    Tool --> ToolRuntime : 运行时注入
+    Tool --> Command : 返回更新状态
+    Tool --> InjectedState : 依赖注入
+    Tool --> InjectedToolCallId : 依赖注入
+</div>
+
+<div class="note">
+  <div class="note-title">关于类型联合语法</div>
+  <p>原文档使用 <code>str | list[str]</code> 与 <code>Command.PARENT | Command.GRAPH</code> 表示联合类型。由于 <code>|</code> 在 Mermaid 类图中有特殊含义，图中以「或」替代；点号也替换为下划线以规避解析冲突。</p>
+</div>
+
+<h3 id="33-记忆层-memory">3.3 记忆层 (Memory)</h3>
+
+<div class="mermaid">
+graph TB
+    subgraph 记忆管理策略
+        TRIM["trim_messages()<br/>裁剪消息，控制 token 数"]
+        REMOVE["RemoveMessage<br/>删除指定消息"]
+        SUMMARY["Summarization<br/>长对话自动摘要"]
+        CHECKPOINT["InMemorySaver<br/>检查点持久化"]
+        AGENT_STATE["AgentState<br/>代理状态读写"]
+    end
+
+    subgraph 记忆生命周期
+        BEFORE["before_model<br/>模型调用前预处理"]
+        MODEL["模型调用"]
+        AFTER["after_model<br/>模型调用后处理"]
+    end
+
+    BEFORE --> TRIM
+    BEFORE --> SUMMARY
+    TRIM --> MODEL
+    SUMMARY --> MODEL
+    MODEL --> AFTER
+    AFTER --> CHECKPOINT
+    AFTER --> REMOVE
+</div>
+
+<h3 id="34-中间件层-middleware">3.4 中间件层 (Middleware)</h3>
+
+<div class="mermaid">
+graph TB
+    subgraph 内置中间件
+        SUM["SummarizationMiddleware<br/>长对话摘要"]
+        HITL["HumanInTheLoopMiddleware<br/>人工审批"]
+        MODEL_LIMIT["ModelCallLimitMiddleware<br/>模型调用限流"]
+        TOOL_LIMIT["ToolCallLimitMiddleware<br/>工具调用限流"]
+    end
+
+    subgraph 自定义中间件
+        PII["PIIMiddleware<br/>敏感信息检测脱敏"]
+        DYNAMIC["DynamicPrompt<br/>动态系统提示"]
+        PLAN["PlanMiddleware<br/>计划生成"]
+        DECORATOR["@wrap_model_call<br/>@wrap_tool_call<br/>自定义装饰器"]
+    end
+
+    subgraph 钩子机制
+        BEFORE_MODEL["before_model<br/>模型调用前"]
+        AFTER_MODEL["after_model<br/>模型调用后"]
+        BEFORE_TOOL["before_tool<br/>工具调用前"]
+        AFTER_TOOL["after_tool<br/>工具调用后"]
+    end
+
+    内置中间件 --> 钩子机制
+    自定义中间件 --> 钩子机制
+</div>
+
+<h3 id="35-流式处理-stream">3.5 流式处理 (Stream)</h3>
+
+<div class="mermaid">
+graph LR
+    subgraph 流模式
+        UPDATES["stream_mode='updates'<br/>节点级别更新"]
+        MESSAGES["stream_mode='messages'<br/>消息级别流式"]
+        CUSTOM["stream_mode='custom'<br/>自定义流"]
+        EVENTS["astream_events()<br/>事件级流式"]
+    end
+
+    subgraph StreamWriter
+        WRITER["get_stream_writer()<br/>节点内写入流"]
+    end
+
+    UPDATES --> WRITER
+    MESSAGES --> WRITER
+    CUSTOM --> WRITER
+</div>
+
+<h2 id="四-多智能体系统五种模式">四、多智能体系统五种模式</h2>
+
+<div class="mermaid">
+graph TB
+    subgraph S1["1️⃣ Supervisor 监督者模式<br/>集中式调度"]
+        direction LR
+        SUP["🧠 Supervisor"]
+        SA["🔍 搜索 Agent"]
+        CA["💻 代码 Agent"]
+        AA["📊 分析 Agent"]
+        SUP --> SA
+        SUP --> CA
+        SUP --> AA
+        SA --> SUP
+        CA --> SUP
+        AA --> SUP
+    end
+
+    subgraph S2["2️⃣ Handoffs 交接模式<br/>控制权转移"]
+        direction LR
+        GA["🤖 通用助手"]
+        TS["🔧 技术专家"]
+        BS["💰 账单专员"]
+        GA -->|handoff| TS
+        TS -->|handoff| GA
+        GA -->|handoff| BS
+        BS -->|handoff| GA
+    end
+
+    subgraph S3["3️⃣ Router 路由模式<br/>分类→并行→聚合"]
+        direction LR
+        R["🔀 Router"]
+        E1["专家 A"]
+        E2["专家 B"]
+        E3["专家 C"]
+        AGG["📋 聚合器"]
+        R --> E1
+        R --> E2
+        R --> E3
+        E1 --> AGG
+        E2 --> AGG
+        E3 --> AGG
+    end
+
+    subgraph S4["4️⃣ Skills 技能模式<br/>按需加载"]
+        direction LR
+        GEN["🤖 通用 Agent"]
+        SK1["📝 写作技能"]
+        SK2["💰 财务技能"]
+        GEN -.->|加载| SK1
+        GEN -.->|加载| SK2
+    end
+
+    subgraph S5["5️⃣ Custom Workflow<br/>自由编排"]
+        direction LR
+        N1["节点 A"]
+        N2["节点 B"]
+        N3["节点 C"]
+        N1 --> N2
+        N2 --> N3
+        N3 -.->|条件循环| N1
+    end
+
+    style S1 fill:#e3f2fd,stroke:#1565c0,stroke-width:3px
+    style S2 fill:#fff3e0,stroke:#ef6c00,stroke-width:3px
+    style S3 fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px
+    style S4 fill:#f3e5f5,stroke:#6a1b9a,stroke-width:3px
+    style S5 fill:#fff8e1,stroke:#f9a825,stroke-width:3px
+</div>
+
+<div class="note">
+  <div class="note-title">五种模式的核心差异</div>
+  <p>Supervisor 是<strong>集中式调度</strong>，Handoffs 是<strong>控制权转移</strong>，Router 是<strong>无状态分类分发</strong>，Skills 是<strong>按需加载能力</strong>，Custom Workflow 则是<strong>完全自由编排</strong>。选择哪种，取决于「谁负责协调」与「协调是否集中」。</p>
+</div>
+
+<h2 id="五-rag-架构全景">五、RAG 架构全景</h2>
+
+<div class="mermaid">
+graph TB
+    subgraph 离线阶段["📥 离线索引阶段"]
+        direction TB
+        LOAD["📄 文档加载<br/>TextLoader / PyPDF"]
+        SPLIT["✂️ 文档分块<br/>RecursiveCharacterTextSplitter<br/>chunk_size=500, overlap=50"]
+        EMBED["🧮 向量嵌入<br/>DashScopeEmbeddings<br/>text-embedding-v3"]
+        STORE["💾 向量存储<br/>ChromaDB / FAISS<br/>Milvus / Qdrant"]
+    end
+
+    subgraph 在线阶段["🔍 在线检索阶段"]
+        direction TB
+        QUERY["📝 用户提问"]
+        RETRIEVE["🔍 向量检索<br/>similarity_search()<br/>k=4"]
+        RERANK["📊 重排序<br/>Cross-Encoder<br/>Re-Ranker"]
+        GENERATE["🤖 生成回答<br/>create_stuff_documents_chain<br/>+ LLM"]
+    end
+
+    subgraph 增强["🔧 增强组件"]
+        direction LR
+        HISTORY["历史感知<br/>create_history_aware_retriever"]
+        MULTI_DOC["多文档管理<br/>元数据过滤"]
+        HYBRID["混合检索<br/>向量 + 关键词"]
+        GRADIO["Gradio UI<br/>交互式问答"]
+    end
+
+    LOAD --> SPLIT --> EMBED --> STORE
+    QUERY --> RETRIEVE --> RERANK --> GENERATE
+    RETRIEVE -.-> STORE
+    HISTORY -.-> RETRIEVE
+    MULTI_DOC -.-> RETRIEVE
+    HYBRID -.-> RETRIEVE
+    GENERATE -.-> GRADIO
+
+    style 离线阶段 fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style 在线阶段 fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    style 增强 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+</div>
+
+<h2 id="六-核心数据流">六、核心数据流</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    participant User as 👤 用户
+    participant Agent as 🤖 Agent
+    participant Model as 🧠 LLM 模型
+    participant Tool as 🔧 工具
+    participant State as 📊 StateGraph
+    participant Memory as 💾 Checkpoint
+
+    User->>State: 输入问题 (HumanMessage)
+    State->>Agent: 分发到 Agent 节点
+    
+    loop Agent 思考-行动循环
+        Agent->>Model: 发送消息 + 工具定义
+        Model-->>Agent: 返回 AI 回复 / 工具调用请求
+        
+        alt 需要调用工具
+            Agent->>Tool: 执行工具调用
+            Tool-->>Agent: 返回 ToolMessage
+            Agent->>Model: 发送工具结果
+            Model-->>Agent: 返回最终回复
+        end
+    end
+
+    Agent-->>State: 返回结果 (AIMessage)
+    State->>Memory: 保存 Checkpoint
+    State-->>User: 返回最终回答
+</div>
+
+<h2 id="七-模式选择决策树">七、模式选择决策树</h2>
+
+<div class="mermaid">
+graph TD
+    START["开始：需要多智能体吗？"] --> Q1{"任务是否可拆分为<br/>独立子任务？"}
+    
+    Q1 -->|"否"| SINGLE["使用单一 Agent<br/>+ 工具 + 中间件"]
+    Q1 -->|"是"| Q2{"子任务之间<br/>是否需要协调？"}
+    
+    Q2 -->|"否，各自独立"| ROUTER["Router 模式<br/>分类→并行→聚合"]
+    Q2 -->|"是"| Q3{"谁负责协调？"}
+    
+    Q3 -->|"集中调度器"| SUPERVISOR["Supervisor 模式<br/>监督者统一调度"]
+    Q3 -->|"Agent 自行交接"| HANDOFFS["Handoffs 模式<br/>控制权转移"]
+    
+    Q3 -->|"按需加载技能"| SKILLS["Skills 模式<br/>动态加载专业知识"]
+    Q3 -->|"自定义流程"| CUSTOM["Custom Workflow<br/>LangGraph 自由编排"]
+
+    style SINGLE fill:#e3f2fd,stroke:#1565c0
+    style ROUTER fill:#e8f5e9,stroke:#2e7d32
+    style SUPERVISOR fill:#fff3e0,stroke:#ef6c00
+    style HANDOFFS fill:#f3e5f5,stroke:#6a1b9a
+    style SKILLS fill:#fff8e1,stroke:#f9a825
+    style CUSTOM fill:#ffccbc,stroke:#e64a19
+</div>
+
+<h2 id="八-技术栈关系">八、技术栈关系</h2>
+
+<table>
+  <tr><th>层级</th><th>技术</th><th>作用</th></tr>
+  <tr>
+    <td><strong>编排引擎</strong></td>
+    <td>LangGraph</td>
+    <td>StateGraph 构建有状态工作流，条件路由，Checkpoint</td>
+  </tr>
+  <tr>
+    <td><strong>Agent 框架</strong></td>
+    <td>LangChain <code>create_agent()</code></td>
+    <td>创建智能体，绑定工具和系统提示</td>
+  </tr>
+  <tr>
+    <td><strong>模型后端</strong></td>
+    <td>ChatOpenAI (兼容)</td>
+    <td>DeepSeek / OpenAI / 本地模型</td>
+  </tr>
+  <tr>
+    <td><strong>向量存储</strong></td>
+    <td>ChromaDB / FAISS</td>
+    <td>向量检索、混合检索、元数据过滤</td>
+  </tr>
+  <tr>
+    <td><strong>嵌入模型</strong></td>
+    <td>DashScope text-embedding-v3</td>
+    <td>文本向量化</td>
+  </tr>
+  <tr>
+    <td><strong>MCP 协议</strong></td>
+    <td>langchain-mcp-adapters</td>
+    <td>多服务器工具集成</td>
+  </tr>
+  <tr>
+    <td><strong>UI 框架</strong></td>
+    <td>Gradio</td>
+    <td>ChatInterface 交互式问答界面</td>
+  </tr>
+  <tr>
+    <td><strong>检查点</strong></td>
+    <td>InMemorySaver</td>
+    <td>会话状态持久化</td>
+  </tr>
+</table>
+
+<div class="production-note">
+  <div class="header">生产环境提示</div>
+  <p>上表中的 <code>InMemorySaver</code> 仅适用于本地开发与单元测试。生产环境请替换为持久化检查点（如 PostgreSQL / Redis Saver），否则进程重启即丢失全部会话状态。</p>
+</div>
+
+<div class="page-nav">
+  <span><a href="../index.html">← 返回目录</a></span>
+  <span><a href="./02-supervisor-multi-agent-example.html">下一篇：Supervisor 多智能体编程助手 →</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

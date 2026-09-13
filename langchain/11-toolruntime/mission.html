@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MISSION — 学习使命 · ToolRuntime</title>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="index.html" style="text-decoration:none">Deep​Mastery <span>/ ToolRuntime MISSION</span></a>
+</nav>
+
+<div class="container">
+
+  <div class="card">
+    <h1>Mission: 深度掌握 ToolRuntime — 在工具中读写短期记忆</h1>
+
+    <h2>Why</h2>
+    <p>LangGraph/LangChain 中，ToolRuntime 是工具与 Agent 状态之间的桥梁。理解它意味着理解「工具如何访问对话上下文、如何修改状态、如何做流式输出」。这是构建生产级 Agent 的核心能力——不会用 ToolRuntime 就无法写出真正有用的工具。</p>
+
+    <h2>Success looks like</h2>
+    <ul>
+      <li>能独立写出「在工具中读取 state / context」的代码，不需要查文档</li>
+      <li>能写出「通过 Command 从工具写入状态」的代码，说清与直接修改 state 的区别</li>
+      <li>能解释 ToolRuntime 的自动注入机制（源码级：ToolNode._func 如何构造 ToolRuntime 实例）</li>
+      <li>能说清 ToolRuntime 与 Runtime（langgraph.runtime）的本质区别</li>
+      <li>能说清 state 和 context 各自的使用场景和区别</li>
+      <li>能回答面试中关于 ToolRuntime 的追问（为什么工具参数对模型隐藏？注入机制怎么实现？）</li>
+    </ul>
+
+    <h2>Constraints</h2>
+    <ul>
+      <li>工作区：<code>langchain/11-toolruntime/</code></li>
+      <li>源码：langgraph 1.2.5 / langchain 1.3.9</li>
+      <li>学习风格：先架构再细节，重原理 + 源码 + 面试</li>
+    </ul>
+
+    <h2>Out of scope</h2>
+    <ul>
+      <li>Tool 本身的定义和使用（@tool 装饰器、pydantic 参数定义等基础）</li>
+      <li>Middleware 的完整讲解（仅在与 ToolRuntime 交叉时提及）</li>
+      <li>Checkpointer 的完整讲解</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    <p>Built with Deep Mastery · <code>langgraph==1.2.5</code></p>
+  </div>
+
+</div>
+
+</body>
+</html>

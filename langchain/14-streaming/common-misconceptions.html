@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>常见误区知识库</title>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="./index.html" style="text-decoration:none">Deep​Mastery <span>/ Streaming</span></a>
+</nav>
+
+<div class="container">
+
+  <div class="article-header">
+    <div class="breadcrumb">
+      <a href="index.html">LangGraph Agent Streaming</a> / 常见误区
+    </div>
+    <h1>常见误区知识库</h1>
+    <p class="subtitle">LangGraph Agent Streaming 流式输出中最常见的 10 个误解。</p>
+  </div>
+
+  <div class="article-body">
+
+<div class="misconception">
+  <div class="mis-title">误区 1: stream_mode="updates" 会输出每个 token</div>
+  <div class="field">
+    <span class="field-label">错误理解：</span>
+    <span class="field-value">认为 <code>updates</code> 模式也会像 <code>messages</code> 一样逐 token 输出。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">正确理解：</span>
+    <span class="field-value"><code>updates</code> 按 superstep 粒度输出，每个 superstep（如一次模型调用、一次工具调用）完成后才发出一个事件。只有 <code>messages</code> 模式才是逐 token 输出。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">为什么容易犯：</span>
+    <span class="field-value">名字 <code>updates</code> 暗示"更新"，容易让人联想到实时更新，但实际是步骤级别的批量更新。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">如何避免：</span>
+    <span class="field-value">记住 <code>updates</code> = 步骤粒度，<code>messages</code> = token 粒度。用"步骤"和"字符"作为记忆锚点。</span>
+  </div>
+</div>
+
+<div class="misconception">
+  <div class="mis-title">误区 2: custom 模式需要额外的配置才能启用</div>
+  <div class="field">
+    <span class="field-label">错误理解：</span>
+    <span class="field-value">需要在 <code>create_agent</code> 时传入特殊参数来启用 custom 模式。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">正确理解：</span>
+    <span class="field-value">custom 模式的启用完全由 <code>stream_mode</code> 参数控制。只要在 <code>agent.stream()</code> 时传入 <code>stream_mode="custom"</code>（或包含 <code>"custom"</code> 的列表），工具内部的 <code>get_stream_writer()</code> 就能正常工作。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">为什么容易犯：</span>
+    <span class="field-value">其他框架（如 FastAPI 的 StreamingResponse）需要先配置再使用，形成了思维定式。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">如何避免：</span>
+    <span class="field-value"><code>get_stream_writer()</code> 是一个<strong>被动接收者</strong>，它不决定流是否开启，只是从当前上下文中获取 writer。流是否开启由 <code>stream_mode</code> 决定。</span>
+  </div>
+</div>
+
+<div class="misconception">
+  <div class="mis-title">误区 3: 多模式组合时，chunk 的顺序是固定的</div>
+  <div class="field">
+    <span class="field-label">错误理解：</span>
+    <span class="field-value">当 <code>stream_mode=["updates", "custom"]</code> 时，认为会先输出所有 updates，再输出所有 custom。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">正确理解：</span>
+    <span class="field-value">chunk 按实际发生的时间顺序输出。如果在工具执行过程中先调用了 <code>writer()</code>，那么 custom chunk 会在 updates 之前输出。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">为什么容易犯：</span>
+    <span class="field-value">数组的顺序暗示了优先级，但实际输出顺序由事件的发生时间决定。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">如何避免：</span>
+    <span class="field-value">理解 stream 是事件驱动的，不是模式驱动的。每种模式只是对同一事件流的不同"视角"。</span>
+  </div>
+</div>
+
+<div class="misconception">
+  <div class="mis-title">误区 4: messages 模式下 metadata 只有 langgraph_node</div>
+  <div class="field">
+    <span class="field-label">错误理解：</span>
+    <span class="field-value">认为 metadata 字典只有一个键。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">正确理解：</span>
+    <span class="field-value"><code>metadata</code> 是一个字典，<code>langgraph_node</code> 是其中一个关键字段。不同版本的 LangGraph 可能包含更多字段（如 <code>thread_id</code>、<code>checkpoint_id</code> 等），但 <code>langgraph_node</code> 是最稳定和常用的。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">如何避免：</span>
+    <span class="field-value">不要假设 metadata 只有 langgraph_node，使用时按需取值，不要硬编码索引。</span>
+  </div>
+</div>
+
+<div class="misconception">
+  <div class="mis-title">误区 5: tools 节点不出现在 messages 模式流中</div>
+  <div class="field">
+    <span class="field-label">错误理解：</span>
+    <span class="field-value">认为 messages 模式只输出 LLM 生成的 token，tools 节点（工具执行）不会出现在 messages 流中。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">正确理解：</span>
+    <span class="field-value">tools 节点<strong>会</strong>出现在 messages 模式流中，但输出形式不同——不是逐 token 流，而是工具执行完后 ToolMessage 作为一次性完整消息发出。messages 模式流的是状态中 messages 通道的<strong>所有增量</strong>，包含 LLM 消息和工具消息。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">为什么容易犯：</span>
+    <span class="field-value">把 "messages = LLM 生成" 想当然了，忽略了工具返回结果也是 messages 通道的一部分。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">如何避免：</span>
+    <span class="field-value">记住 messages 模式流的对象是 <strong>state 里的 messages 通道</strong>，而不仅是 LLM 的 token。工具结果（ToolMessage）也是 messages 通道的内容。</span>
+  </div>
+</div>
+
+<div class="misconception">
+  <div class="mis-title">误区 6: 多工具调用时，定义顺序决定串行还是并发</div>
+  <div class="field">
+    <span class="field-label">错误理解：</span>
+    <span class="field-value">认为 <code>tools=[get_weather, get_air_quality]</code> 中工具的先后顺序决定它们是串行执行还是并发执行。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">正确理解：</span>
+    <span class="field-value">多工具是并行还是串行，由 <strong>LLM 单次返回的 tool_calls 数量</strong>决定，与工具定义顺序无关。LLM 一次返回多个 tool_calls 时，tools 节点在同一个 superstep 内处理整个列表（并行）；LLM 分两次返回时，需要两轮 ReAct 循环（串行）。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">为什么容易犯：</span>
+    <span class="field-value">把工具的"定义顺序"（一个 Python list）误当成"执行顺序"。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">如何避免：</span>
+    <span class="field-value">区分"定义顺序"（代码里的列表）和"执行顺序"（图流转的轮次）。执行轮次由 LLM 的 tool_calls 返回决定。</span>
+  </div>
+</div>
+
+<div class="misconception">
+  <div class="mis-title">误区 7: writer 的内容会进入 messages 并被 LLM 看到</div>
+  <div class="field">
+    <span class="field-label">错误理解：</span>
+    <span class="field-value">认为 <code>writer("进度提示")</code> 会作为 ToolMessage 添加到 messages 列表，回传给 LLM。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">正确理解：</span>
+    <span class="field-value"><code>writer(...)</code> 写入的是 custom 流式通道，直接推送给用户，<strong>不会进 messages、不会进状态、不会被 LLM 看到</strong>。只有 <code>return</code> 返回值才被包装成 ToolMessage 进入 messages。这是"通知通道"与"数据通道"的分离（CQRS 变体）。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">为什么容易犯：</span>
+    <span class="field-value">看到工具函数里既有 <code>writer(...)</code> 又有 <code>return</code>，以为它们都进 messages。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">如何避免：</span>
+    <span class="field-value">记住两条通道：writer → 用户（进度通知），return → LLM（数据传递）。两者职责不同，不可混用。</span>
+  </div>
+</div>
+
+<div class="misconception">
+  <div class="mis-title">误区 8: 流式输出中断 = 后端状态也被截断</div>
+  <div class="field">
+    <span class="field-label">错误理解：</span>
+    <span class="field-value">用户网络断开导致流式中断，认为后端 state 里的消息也被截断了。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">正确理解：</span>
+    <span class="field-value">网络断开不一定会截断后端状态。流式传输中断 ≠ 生成中断，后端 LLM 通常还在继续生成，最终 messages 里的 AIMessage 是完整的。真正的恢复机制是 checkpoint（每个 superstep 后保存状态快照），而不是 message_id。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">为什么容易犯：</span>
+    <span class="field-value">混淆了"传输中断"和"生成中断"，以及 message_id（流式拼接）和 checkpoint（状态恢复）的职责。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">如何避免：</span>
+    <span class="field-value">区分 message_id（帮助拼接 token 碎块）和 checkpoint（帮助断点续传）。生成中的半句话无法精确续写，但可以通过 checkpoint 恢复已完成的 superstep。</span>
+  </div>
+</div>
+
+<div class="misconception">
+  <div class="mis-title">误区 9: 判断流式是否存活可以看 metadata 的 token 计数</div>
+  <div class="field">
+    <span class="field-label">错误理解：</span>
+    <span class="field-value">认为 metadata 里有一个 token 计数字段，通过它是否变化来判断流是否还活着。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">正确理解：</span>
+    <span class="field-value">metadata 里<strong>没有</strong> token 计数字段。判断流是否存活应该用心跳检测（每次收到事件重置定时器）或 asyncio.wait_for 超时机制。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">为什么容易犯：</span>
+    <span class="field-value">把"逐 token 输出"误当成"metadata 有 token 计数"。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">如何避免：</span>
+    <span class="field-value">存活检测用事件心跳（收到事件 = 心跳），或用整体超时包装。不要依赖不存在的 metadata 字段。</span>
+  </div>
+</div>
+
+<div class="misconception">
+  <div class="mis-title">误区 10: content 和 tool_calls 可以同时存在</div>
+  <div class="field">
+    <span class="field-label">错误理解：</span>
+    <span class="field-value">认为一条消息可以既有文本 content，又有 tool_calls。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">正确理解：</span>
+    <span class="field-value">对于 tool_call 类型的消息，<code>content</code> 返回空字符串 <code>""</code>。因为 content 是纯文本部分，tool_calls 是结构化函数调用指令，两者语义互斥——模型要么"说"（生成文本），要么"做"（调用工具），不会同时。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">为什么容易犯：</span>
+    <span class="field-value">把 content_blocks（可以同时包含 text 和 tool_call 块）和 content（纯文本）混为一谈。</span>
+  </div>
+  <div class="field">
+    <span class="field-label">如何避免：</span>
+    <span class="field-value">记住 content_blocks 是结构化列表（可以混装），content 是纯文本（对 tool_call 为空）。</span>
+  </div>
+</div>
+
+  </div>
+
+  <div class="footer">
+    <p>DeepMastery · 五层穿透模型 · 源码级深度掌握</p>
+  </div>
+
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function() {
+  var btn = document.getElementById('backToTop');
+  window.addEventListener('scroll', function() {
+    if (window.scrollY > 400) {
+      btn.classList.add('visible');
+    } else {
+      btn.classList.remove('visible');
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

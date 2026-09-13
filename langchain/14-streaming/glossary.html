@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LangGraph Agent Streaming 术语表</title>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="./index.html" style="text-decoration:none">Deep​Mastery <span>/ Streaming</span></a>
+</nav>
+
+<div class="container">
+
+  <div class="article-header">
+    <div class="breadcrumb">
+      <a href="index.html">LangGraph Agent Streaming</a> / 术语表
+    </div>
+    <h1>LangGraph Agent Streaming 术语表</h1>
+    <p class="subtitle">LangGraph Agent 流式输出机制的核心概念定义。</p>
+  </div>
+
+  <div class="article-body">
+
+<div class="glossary-item">
+  <div class="term">stream_mode</div>
+  <div class="definition">LangGraph <code>agent.stream()</code> 方法的参数，决定流式输出的粒度。支持 <code>updates</code>、<code>messages</code>、<code>custom</code>、<code>values</code>、<code>debug</code> 五种模式，也支持列表形式的多模式组合。</div>
+  <div class="avoid">Avoid: 流模式、输出模式</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">superstep</div>
+  <div class="definition">Agent 执行的一个完整步骤（如一次模型调用或一次工具调用）。每个 superstep 完成后触发一次 <code>updates</code> 模式的事件。是理解流式粒度的核心概念。</div>
+  <div class="avoid">Avoid: 超级步骤、执行步</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">get_stream_writer()</div>
+  <div class="definition">LangGraph 提供的上下文函数，在工具函数内部调用，返回一个 writer 可调用对象，用于向 <code>custom</code> 流中写入自定义内容。基于 <code>contextvars</code> 实现线程安全。</div>
+  <div class="avoid">Avoid: 流写入器、自定义输出器</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">content_blocks</div>
+  <div class="definition"><code>AIMessageChunk</code> 的属性，以列表形式存储消息内容块。每个元素可能是文本块（<code>{"type": "text", "text": "..."}</code>）或工具调用块（<code>{"type": "tool_call_chunk", ...}</code>）。在 <code>messages</code> 模式下逐 token 累积。</div>
+  <div class="avoid">Avoid: 内容块、消息块</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">langgraph_node</div>
+  <div class="definition"><code>messages</code> 模式中 <code>metadata</code> 字典的键，值为当前 token 来源的节点名称（如 <code>"model"</code> 或 <code>"tools"</code>）。用于区分流式输出来自模型生成还是工具调用结果。</div>
+  <div class="avoid">Avoid: 节点标识、来源节点</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">多模式组合</div>
+  <div class="definition">将 <code>stream_mode</code> 设为列表（如 <code>["updates", "custom"]</code>），每次迭代返回 <code>(stream_mode, chunk)</code> 元组，根据第一个元素区分不同类型的流数据。</div>
+  <div class="avoid">Avoid: 混合模式、复合流式</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">条件边（conditional edge）</div>
+  <div class="definition">LangGraph 中的一种边类型，由路由函数根据 state 动态决定下一步去向。在 Agent 中，条件边判断 <code>messages[-1].tool_calls</code> 是否非空，决定去 tools 节点还是结束。一条条件边包含多个分支，但只算一条边。</div>
+  <div class="avoid">Avoid: 判断边、动态边</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">message_id（AIMessageChunk.id）</div>
+  <div class="definition">同一轮 LLM 生成拆出的所有 token 碎块（AIMessageChunk）共享的 id。用于流式拼接——id 变化说明一条新消息开始。是流式识别符，不持久化。</div>
+  <div class="avoid">Avoid: 消息 id、token id</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">checkpoint</div>
+  <div class="definition">LangGraph 在每个 superstep 完成后保存的状态快照，可通过 thread_id 恢复。是状态恢复点，用于断点续传。与 message_id 职责不同（checkpoint 恢复状态，message_id 拼接流）。</div>
+  <div class="avoid">Avoid: 检查点、存档点</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">handle_tool_errors</div>
+  <div class="definition">LangGraph 的工具异常处理参数。设为 True 时，工具抛出的异常被捕获并包装成 ToolMessage（含 tool_call_id 匹配）回传给 LLM，让 LLM 感知并处理失败，而非中断流程。</div>
+  <div class="avoid">Avoid: 工具错误处理、异常捕获参数</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">writer 与 return 的职责分离</div>
+  <div class="definition">custom 模式中的核心设计原则。<code>writer(...)</code> 走"通知通道"（custom 流 → 用户），不进 messages、不被 LLM 看到；<code>return</code> 走"数据通道"（包装成 ToolMessage → messages → LLM）。是 CQRS 变体的体现。</div>
+  <div class="avoid">Avoid: 写入器职责、流通道分离</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">消息边界（message boundary）</div>
+  <div class="definition">从 messages 模式的 token 碎块中判断一条消息何时结束。三种方式：message_id 变化（最可靠）、langgraph_node 节点切换、finish_reason 标记。</div>
+  <div class="avoid">Avoid: 消息分隔、消息终止</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">静默失败（silent failure）</div>
+  <div class="definition">工具内 API 调用未抛异常但返回空字符串 "" 的场景。LLM 看到空 ToolMessage 是模糊信号，可能幻觉编造结果。应显式返回 "ERROR: ..." 让 LLM 明确知道是失败。</div>
+  <div class="avoid">Avoid: 静默异常、空返回失败</div>
+</div>
+
+<div class="glossary-item">
+  <div class="term">ReAct 循环（ReAct loop）</div>
+  <div class="definition">Agent 的"推理-行动"循环：模型调用 → 决定调用工具 → 执行工具 → 结果回传模型 → 再次推理。一轮 ReAct 循环 = 一次 agent 节点 + 一次 tools 节点的完整流转。</div>
+  <div class="avoid">Avoid: 反应循环、推理行动环</div>
+</div>
+
+  </div>
+
+  <div class="footer">
+    <p>DeepMastery · 五层穿透模型 · 源码级深度掌握</p>
+  </div>
+
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function() {
+  var btn = document.getElementById('backToTop');
+  window.addEventListener('scroll', function() {
+    if (window.scrollY > 400) {
+      btn.classList.add('visible');
+    } else {
+      btn.classList.remove('visible');
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

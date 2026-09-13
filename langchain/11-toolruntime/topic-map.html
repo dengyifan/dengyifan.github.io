@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TOPIC-MAP — 知识地图 · ToolRuntime</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="index.html" style="text-decoration:none">Deep​Mastery <span>/ TOPIC-MAP</span></a>
+</nav>
+
+<div class="container">
+
+  <div class="card">
+    <h1>ToolRuntime 深度掌握 — 知识地图</h1>
+
+    <h2>概念图谱</h2>
+
+    <div class="mermaid">
+mindmap
+  root((ToolRuntime))
+    自动注入机制
+      ToolNode._func 构造 ToolRuntime
+      _inject_tool_args 注入参数
+      对模型隐藏（参数签名不可见）
+    读取记忆（Reading State）
+      runtime.state 访问当前状态
+      runtime.context 访问运行时上下文
+      state vs context 区别
+    写入记忆（Writing State）
+      Command(update={...}) 返回状态更新
+      ToolMessage + tool_call_id
+      state 更新 vs 直接修改
+    与 Runtime 的关系
+      Runtime（langgraph.runtime）
+      ToolRuntime 继承 Runtime 的 context/store/stream_writer
+      额外字段：state / config / tool_call_id / tools
+    emit_output_delta
+      ContextVar 机制
+      StreamWriter 的 on_tool_start 回调
+      stream_mode="tools" 的前提条件
+    配套概念
+      AgentState 扩展
+      context_schema 定义
+      create_agent 传入 state_schema / context_schema
+    </div>
+
+    <h2>分支优先级</h2>
+
+    <table>
+      <tr><th>分支</th><th>优先级</th><th>说明</th></tr>
+      <tr><td>自动注入机制</td><td>🔴 必须深钻</td><td>核心机制，面试高频：为什么对模型隐藏？怎么注入的？</td></tr>
+      <tr><td>读取记忆（state/context）</td><td>🔴 必须深钻</td><td>基础用法，必须做到不用查文档能写</td></tr>
+      <tr><td>写入记忆（Command）</td><td>🔴 必须深钻</td><td>工具修改状态的核心方式，与直接修改的区别常考</td></tr>
+      <tr><td>ToolRuntime vs Runtime</td><td>🟡 建议掌握</td><td>理解两个 Runtime 的分工，避免混淆</td></tr>
+      <tr><td>emit_output_delta</td><td>🟡 建议掌握</td><td>流式输出场景，生产环境常用</td></tr>
+      <tr><td>配套概念</td><td>🟢 了解即可</td><td>本课提及，但不深入展开</td></tr>
+    </table>
+
+    <h2>交叉关联</h2>
+    <ul>
+      <li><strong>AgentState 扩展</strong> → 依赖 AgentState 的前置理解</li>
+      <li><strong>ToolRuntime vs Runtime</strong> → 与 Middleware 中的 <code>Runtime</code> 概念重叠，需区分</li>
+      <li><strong>Command + update</strong> → 与 <code>langgraph.types.Command</code> 的完整用法相关，但本课只聚焦工具场景</li>
+      <li><strong>ContextVar stream writer</strong> → 与 <code>emit_output_delta</code> 的实现直接相关，源码级理解</li>
+    </ul>
+
+    <h2>学习路径</h2>
+    <p>建议顺序：自动注入机制 → 读取记忆（state/context）→ 写入记忆（Command）→ ToolRuntime vs Runtime → emit_output_delta → 配套概念</p>
+  </div>
+
+  <div class="footer">
+    <p>Built with Deep Mastery · <code>langgraph==1.2.5</code></p>
+  </div>
+
+</div>
+
+</body>
+</html>

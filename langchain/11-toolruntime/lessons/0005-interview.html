@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>面试题库：ToolRuntime 深度掌握</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep​Mastery <span>/ 面试题库：ToolRuntime</span></a>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">Table of Contents</div>
+  </nav>
+  <main class="content">
+
+    <div class="article-header">
+      <h1>面试题库：ToolRuntime 深度掌握</h1>
+      <div class="article-meta">
+        <span>📖 前置：<a href="0004-runtime-vs-toolruntime.html">第4课</a></span>
+        <span>⏱ 预计 40 分钟</span>
+        <span>🎯 L5</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+<p>以下题目对齐 <strong>deep-grill 的五个考察角度</strong>，每题带完整参考答案。学完前 4 课后，用这些题目去 deep-grill 检验掌握度。</p>
+
+<h2 id="interviewer">面试官角度</h2>
+
+<div class="qa-block">
+<div class="question">Q1: LangGraph 中 ToolRuntime 是什么？它和普通函数参数有什么区别？</div>
+<div class="answer">
+<p><strong>参考答案</strong>：</p>
+<p>ToolRuntime 是 LangGraph 在工具执行时<strong>自动注入</strong>的运行时上下文对象。区别在于：</p>
+<ul>
+<li>普通参数由模型在 ToolCall.args 中提供（如 <code>"x": 5</code>），对模型可见</li>
+<li>ToolRuntime 对模型<strong>隐藏</strong>——参数签名中声明了，但模型看不到它，系统在工具执行时自动注入</li>
+<li>它承载了 state（图状态）、context（运行时上下文）、config（执行配置）、tool_call_id（调用 ID）、store（持久化存储）等框架内部信息</li>
+</ul>
+<div class="key-point"><strong>关键得分点</strong>：自动注入 + 对模型隐藏 + 承载框架内部状态</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 为什么 ToolRuntime 要对模型隐藏？如果暴露给模型会有什么问题？</div>
+<div class="answer">
+<p><strong>参考答案</strong>：</p>
+<p>三个原因：</p>
+<ol>
+<li><strong>安全</strong>：防止模型通过 ToolCall.args 伪造注入参数。如果 runtime 暴露给模型，恶意模型可以篡改 state、伪造 tool_call_id。源码中 <code>_inject_tool_args</code> 的 <code>stripped_args</code> 逻辑专门剥离模型提供的注入键，然后再填回受信任值。</li>
+<li><strong>职责分离</strong>：state、store、context 是框架内部状态，模型只该负责业务参数。这符合「关注点分离」原则。</li>
+<li><strong>简化模型决策</strong>：模型不需要理解「当前有哪些上下文可拿」，降低认知负担和出错率。</li>
+</ol>
+<div class="key-point"><strong>关键得分点</strong>：安全（防伪造）+ 职责分离 + 简化模型决策，能引用源码 stripped_args 逻辑加分</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — 你能说出 ToolRuntime 里有哪几个字段？哪些是从 Runtime 继承的，哪些是工具特有的？</div>
+<div class="answer">
+<p><strong>参考答案</strong>：</p>
+<p>继承自 Runtime 的：context、store、stream_writer、execution_info、server_info</p>
+<p>工具特有的：state、tool_call_id、config、tools</p>
+<p>记忆口诀：<strong>state（当前状态）、tool_call_id（调用 ID）、config（执行配置）、tools（可用工具列表）</strong>——这四个是工具专属的。</p>
+<div class="key-point"><strong>关键得分点</strong>：能区分继承和特有，能说出四个特有字段的名称和作用</div>
+</div>
+</div>
+
+<h2 id="architect">架构师角度</h2>
+
+<div class="qa-block">
+<div class="question">Q1: 在设计一个多 Agent 系统时，state 和 context 分别该放什么信息？为什么？</div>
+<div class="answer">
+<p><strong>参考答案</strong>：</p>
+<ul>
+<li><strong>state 放「对话内变化的信息」</strong>：对话历史、工具执行结果、中间状态（如"已查到的用户信息"）、跨轮次共享的上下文。</li>
+<li><strong>context 放「对话外不变的配置」</strong>：用户身份、租户 ID、API 密钥、权限级别。</li>
+</ul>
+<p>核心原因：state 需要持久化（多轮对话恢复），context 不需要。如果 context 混入 state 并被持久化，修改一个用户 ID 需要清理所有历史 checkpoint，这是灾难性的。同时 context 可能含敏感信息（API key），不应出现在持久化的 state 中，增加泄露风险。</p>
+<div class="key-point"><strong>关键得分点</strong>：区分「对话内动态」vs「对话外静态」+ 持久化策略差异 + 安全性考量</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 如果两个工具并行执行，同时修改同一个 state 字段，会发生什么？你怎么解决？</div>
+<div class="answer">
+<p><strong>参考答案</strong>：</p>
+<p>当模型一次返回多个 ToolCall 时，ToolNode 用 <code>executor.map</code> 并行执行，写入顺序不确定。三种解决方式：</p>
+<ol>
+<li><strong>字段隔离</strong>：每个工具只写自己负责的字段，不交叉（最简单）</li>
+<li><strong>使用 reducer</strong>：在 state 定义时声明合并策略，如 <code>Annotated[list, operator.add]</code> 用于追加，由框架自动合并</li>
+<li><strong>串行执行</strong>：通过图结构设计让工具按序执行，而非让模型一次性返回所有 ToolCall</li>
+</ol>
+<div class="key-point"><strong>关键得分点</strong>：能说出三种方案 + 知道 executor.map 是并行执行 + 能给出具体场景的推荐方案</div>
+</div>
+</div>
+
+<h2 id="code-reviewer">代码审查者角度</h2>
+
+<div class="qa-block">
+<div class="question">Q1: 以下代码有什么问题？</div>
+<pre><code>@tool
+def update_user_info(runtime: ToolRuntime) -> str:
+    runtime.state["user_name"] = "John"
+    return "done"</code></pre>
+<div class="answer">
+<p><strong>参考答案</strong>：</p>
+<p>三个问题：</p>
+<ol>
+<li><strong>无法生效</strong>：runtime.state 是不可变快照，直接修改它不会影响图的实际状态。</li>
+<li><strong>缺少 ToolMessage</strong>：正确写法应返回 <code>Command(update={"user_name": "John", "messages": [ToolMessage("done", tool_call_id=runtime.tool_call_id)]})</code>。ToolMessage 是 LangGraph 追踪工具执行的必要记录。</li>
+<li><strong>并发不安全</strong>：如果多个工具并行执行且都尝试直接修改 state，会导致竞态条件。</li>
+</ol>
+<div class="key-point"><strong>关键得分点</strong>：不可变快照 + 缺少 ToolMessage + 并发安全</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 以下代码有什么问题？</div>
+<pre><code>@tool
+def my_tool(x: int, runtime: str) -> str:
+    context = runtime  # 类型标注错误
+    return f"done {x}"</code></pre>
+<div class="answer">
+<p><strong>参考答案</strong>：</p>
+<p>类型标注错误：<code>runtime</code> 参数应该标注为 <code>runtime: ToolRuntime</code>，而不是 <code>runtime: str</code>。系统在 <code>_get_all_injected_args</code> 中通过类型标注来识别注入参数——如果类型不是 <code>ToolRuntime</code>，系统不会注入，<code>runtime</code> 会被当作普通参数暴露给模型。结果就是模型需要在 ToolCall 中提供一个 <code>runtime</code> 字符串值，而不是框架自动注入。</p>
+<div class="key-point"><strong>关键得分点</strong>：类型标注决定注入行为 + 错误的类型标注会导致注入失效</div>
+</div>
+</div>
+
+<h2 id="incident">故障排查者角度</h2>
+
+<div class="qa-block">
+<div class="question">Q1: 生产环境 Agent 报错 <code>KeyError: 'user_id'</code>，发生在 <code>runtime.state["user_id"]</code> 处。怎么排查？</div>
+<div class="answer">
+<p><strong>参考答案</strong>：</p>
+<p>排查步骤：</p>
+<ol>
+<li><strong>确认 state_schema 定义</strong>：检查 <code>create_agent</code> 中是否通过 <code>state_schema</code> 定义了 <code>user_id</code> 字段。如果 <code>CustomState(AgentState)</code> 里没有 <code>user_id</code>，这里必然报 KeyError。</li>
+<li><strong>确认 invoke 时传入</strong>：检查 <code>agent.invoke({"messages": ..., "user_id": "user_123"})</code> 中是否传入了 <code>user_id</code>。如果没传，state 里就没有这个字段。</li>
+<li><strong>检查是否被其他工具覆盖</strong>：如果前面有工具返回了 <code>Command(update={"user_id": ...})</code> 但覆盖错误，也可能导致字段丢失。</li>
+<li><strong>检查 Checkpointer 脏数据</strong>：如果使用了 Checkpointer 且 thread_id 复用，之前对话的 state 可能不含 <code>user_id</code>。清理旧 checkpoint 或用新 thread_id。</li>
+</ol>
+<div class="key-point"><strong>关键得分点</strong>：按"定义 → 传入 → 覆盖 → 持久化"的顺序排查，不是胡乱猜测</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 工具正常返回了 Command，但后续工具读不到写入的 state 字段。可能的原因？</div>
+<div class="answer">
+<p><strong>参考答案</strong>：</p>
+<ol>
+<li><strong>update 的 key 拼写错误</strong>：<code>Command(update={"user_name": ...})</code> 中 key 拼写与 state 定义不一致</li>
+<li><strong>Graph 未正确处理 Command</strong>：检查 <code>_normalize_tool_response</code> 是否被绕过（极少发生，但自定义 ToolNode 时可能）</li>
+<li><strong>后续工具在同一个 ToolNode 批次中执行</strong>：如果模型一次返回了多个 ToolCall（并行执行），后续工具拿到的 state 是批次开始时的快照，看不到同批次其他工具的写入。这是设计行为，不是 bug——需要用 reducer 或串行执行解决。</li>
+</ol>
+<div class="key-point"><strong>关键得分点</strong>：能识别"同批次并行执行"是 root cause，而不是以为是 bug</div>
+</div>
+</div>
+
+<h2 id="instructor">技术讲师角度</h2>
+
+<div class="qa-block">
+<div class="question">Q1: 请用大白话向一个新人解释 ToolRuntime 是什么。</div>
+<div class="answer">
+<p><strong>参考答案</strong>：</p>
+<p>想象你是一个餐厅的服务员（工具），客人（模型）点了菜（ToolCall），厨房（框架）在你开始做菜之前，偷偷塞给你一张小纸条（ToolRuntime），上面写着：</p>
+<ul>
+<li>这桌客人之前点过什么（state）——帮你了解上下文</li>
+<li>这桌客人的会员卡号（context）——帮你确认身份</li>
+<li>这道菜的订单编号（tool_call_id）——帮你追踪</li>
+</ul>
+<p>客人看不到这张纸条（对模型隐藏），但你可以用纸条上的信息来更好地服务。</p>
+<div class="key-point"><strong>关键得分点</strong>：服务员/小纸条的类比 + 强调「客人看不到」这个核心特征</div>
+</div>
+</div>
+
+<div class="page-nav">
+  <span><a href="0004-runtime-vs-toolruntime.html">← 上一课：ToolRuntime vs Runtime</a></span>
+  <span></span>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){if(window.scrollY>400)b.classList.add('visible');else b.classList.remove('visible')})})();
+(function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
+</script>
+
+</body>
+</html>

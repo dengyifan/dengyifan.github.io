@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LangGraph Agent Streaming — Deep Mastery Course</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0',
+        primaryBorderColor: '#ea6f5a',
+        lineColor: '#999',
+        fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <a class="logo" href="../index.html" style="text-decoration:none">Deep​Mastery <span>/ Agent Streaming</span></a>
+</nav>
+
+<div class="container">
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>LangGraph Agent Streaming 流式输出</h1>
+    <p class="subtitle">
+      从「会用 stream」到「吃透四种 stream_mode 的源码级原理 + 面试过关」。
+      沿五层穿透模型（概念 → 原理 → 源码 → 边界 → 面试）逐步深入。
+      基于 <code>langgraph &gt;= 0.2.0</code> 源码。
+    </p>
+    <div class="meta">
+      <span>📦 langgraph >= 0.2.0</span>
+      <span>🔬 Source-verified</span>
+      <span>🧪 15 道面试题</span>
+      <span>🎯 L1-L5 五层穿透</span>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="number">3</div>
+      <div class="label">Lessons (L1–L4)</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">1</div>
+      <div class="label">源码走读</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">15</div>
+      <div class="label">面试题（五角度）</div>
+    </div>
+    <div class="stat-card">
+      <div class="number">5</div>
+      <div class="label">支持文档</div>
+    </div>
+  </div>
+
+  <!-- Learning Roadmap -->
+  <div class="roadmap">
+    <h2>📖 推荐学习路径</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-title">L1+L2: Agent 流程</div>
+        <div class="step-desc">superstep 概念、节点与边、条件路由</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-title">L2+L3: stream_mode</div>
+        <div class="step-desc">updates/messages/custom/values 四种模式详解</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-title">L3+L4: 多模式实战</div>
+        <div class="step-desc">组合、生产最佳实践、4 个常见坑</div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-title">L3: 源码走读</div>
+        <div class="step-desc">get_stream_writer / StreamWriter / _emit</div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-title">L5: 面试题库</div>
+        <div class="step-desc">五角度 15 题，每题带完整答案</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Core Lessons -->
+  <div class="section">
+    <div class="section-header">
+      <h2>🎓 核心课程</h2>
+      <span class="badge core">REQUIRED</span>
+    </div>
+    <div class="item-list">
+      <a class="item" href="./lessons/0001-agent-execution-flow.html">
+        <div class="icon l1">L1</div>
+        <div class="info">
+          <div class="title">Agent 执行流程与 superstep 概念</div>
+          <div class="desc">理解 Agent 是什么、superstep 为什么是流式粒度的最小单位、stream/astream 的调用方式、条件边判断逻辑</div>
+          <div class="tags"><span class="tag">superstep</span><span class="tag">图结构</span><span class="tag">条件边</span><span class="tag">并发语义</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0002-stream-modes.html">
+        <div class="icon l2">L2</div>
+        <div class="info">
+          <div class="title">四种 stream_mode 详解</div>
+          <div class="desc">updates / messages / custom / values 的粒度、数据结构、适用场景，writer 与 return 的职责分离，内容取法（content vs content_blocks）</div>
+          <div class="tags"><span class="tag">token 级</span><span class="tag">superstep 级</span><span class="tag">writer</span><span class="tag">handle_tool_errors</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0003-multi-mode.html">
+        <div class="icon l3">L3</div>
+        <div class="info">
+          <div class="title">多模式组合与实战</div>
+          <div class="desc">(mode, chunk) 元组时序规则、生产环境最佳实践（推荐组合、性能开销、心跳超时）、4 个常见坑与边界条件</div>
+          <div class="tags"><span class="tag">多模式</span><span class="tag">生产环境</span><span class="tag">断流恢复</span><span class="tag">性能</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Source Walkthroughs -->
+  <div class="section">
+    <div class="section-header">
+      <h2>🔍 源码走读</h2>
+      <span class="badge support">REFERENCE</span>
+    </div>
+    <div class="item-list">
+      <a class="item" href="./source-walkthroughs/0001-stream-writer.html">
+        <div class="icon doc">📄</div>
+        <div class="info">
+          <div class="title">get_stream_writer 与 Stream 机制</div>
+          <div class="desc">contextvars 实现原理、StreamWriter 回调驱动模式、_emit 事件分发、关键设计决策</div>
+          <div class="tags"><span class="tag">contextvars</span><span class="tag">StreamWriter</span><span class="tag">_emit</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Interview Bank -->
+  <div class="section">
+    <div class="section-header">
+      <h2>🧪 面试题库</h2>
+      <span class="badge core">REQUIRED</span>
+    </div>
+    <div class="item-list">
+      <a class="item" href="./interview/0001-streaming.html">
+        <div class="icon l5">L5</div>
+        <div class="info">
+          <div class="title">面试题库：LangGraph Agent Streaming</div>
+          <div class="desc">对齐 deep-grill 五角度：面试官（3）、架构师（3）、代码审查者（3）、故障排查者（3）、技术讲师（3），共 15 题，每题带完整答案和关键判分点</div>
+          <div class="tags"><span class="tag">面试官</span><span class="tag">架构师</span><span class="tag">代码审查</span><span class="tag">故障排查</span><span class="tag">讲师</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Supporting Documents -->
+  <div class="section">
+    <div class="section-header">
+      <h2>📋 支持文档</h2>
+      <span class="badge support">REFERENCE</span>
+    </div>
+    <div class="item-list">
+      <a class="item" href="./topic-map.html">
+        <div class="icon doc">🗺</div>
+        <div class="info">
+          <div class="title">TOPIC-MAP — 知识地图</div>
+          <div class="desc">mermaid mindmap 概念图谱、分支优先级（🔴必须/🟡建议/🟢了解）、交叉关联与学习路径</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./glossary.html">
+        <div class="icon doc">📖</div>
+        <div class="info">
+          <div class="title">GLOSSARY — 术语表</div>
+          <div class="desc">superstep / stream_mode / get_stream_writer / metadata 等核心术语定义</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./common-misconceptions.html">
+        <div class="icon doc">⚠️</div>
+        <div class="info">
+          <div class="title">Common Misconceptions — 常见误区</div>
+          <div class="desc">deep-grill 积累的常见误解与知识缺口</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./spaced-repetition.html">
+        <div class="icon doc">🔄</div>
+        <div class="info">
+          <div class="title">Spaced Repetition — 间隔复习</div>
+          <div class="desc">基于 1/3/7/21 天间隔的复习队列，对抗遗忘曲线</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./mission.html">
+        <div class="icon doc">🎯</div>
+        <div class="info">
+          <div class="title">MISSION — 学习使命</div>
+          <div class="desc">为什么学、成功标准（6 个目标）、学习约束与排除范围</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>Built with Deep Mastery · <code>langgraph >= 0.2.0</code> · 全中文授课</p>
+    <p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
+  </div>
+
+</div>
+
+</body>
+</html>

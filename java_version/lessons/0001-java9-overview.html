@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Java 9 全景：模块化与工程化的起点</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true, theme: 'base',
+      themeVariables: {
+        primaryColor: '#fef0f0', primaryBorderColor: '#ea6f5a',
+        lineColor: '#999', fontSize: '14px'
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <div class="logo">Deep&#8203;Mastery <span>/ Java 9</span></div>
+</nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc">
+    <div class="toc-title">目录</div>
+  </nav>
+
+  <main class="content">
+    <div class="article-header">
+      <h1>L1 · Java 9 全景：模块化与工程化的起点</h1>
+      <div class="article-meta">
+        <span>📚 层模型 L1 概念层</span>
+        <span>🔬 OpenJDK jdk9</span>
+        <span>⏱ 预计 25 分钟</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+<h2>一句话定位</h2>
+
+<p>Java 9 是 Java 平台从「语言演进」转向「<strong>平台工程化</strong>」的分水岭。它引入的 JPMS 不是又一个语法糖，而是重新定义了 JAR 之间的边界、JDK 的部署形态和整个生态的依赖契约。</p>
+
+<blockquote>
+Java 8 给了你 Lambda 和 Stream，让<strong>代码</strong>更优雅；Java 9 给了你 JPMS 和 jlink，让<strong>系统</strong>更可控。
+</blockquote>
+
+<h2>为什么是 Java 9：三个根本问题</h2>
+
+<h3>问题一：类路径的“JAR 地狱”</h3>
+
+<p>Java 从 1.0 起使用<strong>类路径（Classpath）</strong> 来定位类。类路径是一个扁平的 JAR 列表，JVM 按顺序扫描，加载第一个匹配的类。这个机制有三个致命缺陷：</p>
+
+<table>
+  <thead><tr><th>缺陷</th><th>具体表现</th><th>后果</th></tr></thead>
+  <tbody>
+    <tr><td><strong>隐式依赖</strong></td><td>类路径上看不到 A 依赖 B 的哪个版本</td><td>版本冲突难以诊断</td></tr>
+    <tr><td><strong>无封装边界</strong></td><td>只要类在类路径上，任何 JAR 都能访问 public 类</td><td>内部实现被外部依赖，无法演进</td></tr>
+    <tr><td><strong>运行时臃肿</strong></td><td>整个 <code>rt.jar</code> 约 60MB+ 全部部署</td><td>容器镜像大、攻击面大</td></tr>
+  </tbody>
+</table>
+
+<div class="warning">
+  <div class="warning-title">常见误区</div>
+  很多开发者以为「用了 Maven/Gradle 就不会有 JAR 地狱」。事实上构建工具只解决<strong>编译期</strong>的依赖解析，<strong>运行时</strong>的类加载仍然是扁平类路径——这正是 JPMS 要解决的核心问题。
+</div>
+
+<h3>问题二：JDK 自身的巨型单体</h3>
+
+<p>Java 8 的 JDK 是一个约 60MB 的单体 <code>rt.jar</code>。无论你的应用只用 <code>java.util.List</code> 还是用了全套 Swing/JavaFX，部署时都要带上整个 JDK。这在容器化时代是巨大的浪费。</p>
+
+<h3>问题三：没有官方的依赖契约</h3>
+
+<p>在 Java 9 之前，一个 JAR 能声明“我依赖什么”“我导出什么”的唯一方式是 Maven POM——但这是<strong>构建期</strong>的元数据，运行期 JVM 完全看不见。JVM 只知道“这些类在类路径上”，不知道“谁依赖谁、谁该被暴露”。</p>
+
+<h2>Java 9 的答案：JPMS 的整体设计</h2>
+
+<div class="mermaid">
+flowchart TD
+    A["Java 8 世界"] --> A1["扁平类路径"]
+    A --> A2["单体 rt.jar"]
+    A --> A3["无运行期依赖契约"]
+    A1 --> B["Java 9 JPMS"]
+    A2 --> B
+    A3 --> B
+    B --> C1["模块图<br/>(Module Graph)"]
+    B --> C2["90+ JDK 模块<br/>(java.base 为根)"]
+    B --> C3["module-info.java<br/>(编译期+运行期契约)"]
+    C1 --> D1["可靠配置<br/>Reliable Configuration"]
+    C2 --> D2["jlink<br/>定制运行时"]
+    C3 --> D3["强封装<br/>Strong Encapsulation"]
+    style B fill:#fef0f0,stroke:#ea6f5a,stroke-width:2px
+    style D1 fill:#e8f5e9
+    style D2 fill:#e8f5e9
+    style D3 fill:#e8f5e9
+</div>
+
+<p>JPMS 用三个机制回应上述三个问题：</p>
+
+<ol>
+  <li><strong>可靠配置（Reliable Configuration）</strong>：用模块图在<strong>启动时</strong>就检查依赖完整性。缺模块直接启动失败，而不是运行时抛 <code>NoClassDefFoundError</code>。</li>
+  <li><strong>模块化 JDK</strong>：JDK 拆成 90+ 模块，<code>java.base</code> 是根。应用可以只依赖需要的模块。</li>
+  <li><strong>强封装（Strong Encapsulation）</strong>：未 <code>exports</code> 的包，即使类是 public 也无法从其他模块访问。JAR 之间终于有了真正的边界。</li>
+</ol>
+
+<h2>Java 9 特性地图</h2>
+
+<div class="mermaid">
+mindmap
+  root((Java 9))
+    模块化
+      JPMS
+      module-info
+      强封装
+      模块化JDK
+      jlink
+    语言特性
+      JShell
+      接口私有方法
+      try-with-resources
+      钻石操作符扩展
+    API增强
+      集合工厂方法
+      Stream增强
+      Optional增强
+      HTTP Client
+      Compact Strings
+      ProcessHandle
+      VarHandle
+      Stack-Walking
+    工具链
+      G1默认GC
+      多版本JAR
+      统一JVM日志
+      序列化过滤
+</div>
+
+<table>
+  <thead><tr><th>分支</th><th>优先级</th><th>一句话说明</th></tr></thead>
+  <tbody>
+    <tr><td>JPMS 模块系统</td><td>🔴 必须深钻</td><td>Java 9 的核心，面试高频，重塑整个生态</td></tr>
+    <tr><td>jlink</td><td>🔴 必须深钻</td><td>模块化的直接产物，工程化部署关键</td></tr>
+    <tr><td>G1 GC</td><td>🔴 必须深钻</td><td>默认 GC 变更，影响所有生产环境</td></tr>
+    <tr><td>Compact Strings</td><td>🔴 必须深钻</td><td>String 底层实现变革，内存影响巨大</td></tr>
+    <tr><td>HTTP Client API</td><td>🟡 建议掌握</td><td>原生 HTTP/2 支持，Java 11 正式化</td></tr>
+    <tr><td>VarHandle</td><td>🟡 建议掌握</td><td>替代 Unsafe 的官方现代方案</td></tr>
+    <tr><td>JShell</td><td>🟡 建议掌握</td><td>快速原型工具</td></tr>
+    <tr><td>接口私有方法</td><td>🟢 了解即可</td><td>语法糖，理解即可</td></tr>
+    <tr><td>多版本 JAR</td><td>🟢 了解即可</td><td>库开发者关注</td></tr>
+  </tbody>
+</table>
+
+<h2>Java 8 vs Java 9：思维方式的转变</h2>
+
+<table>
+  <thead><tr><th>维度</th><th>Java 8 之前</th><th>Java 9 之后</th></tr></thead>
+  <tbody>
+    <tr><td>依赖单位</td><td>JAR / 类路径</td><td>模块 / 模块路径</td></tr>
+    <tr><td>依赖声明</td><td>构建工具 POM（运行期不可见）</td><td>module-info.java（编译期+运行期）</td></tr>
+    <tr><td>封装边界</td><td>package + public（可被绕过）</td><td>module + exports（强封装）</td></tr>
+    <tr><td>JDK 部署</td><td>整个 rt.jar</td><td>jlink 定制运行时</td></tr>
+    <tr><td>启动检查</td><td>运行时懒加载</td><td>启动时解析模块图</td></tr>
+    <tr><td>反射访问</td><td>setAccessible(true) 即可</td><td>需要 opens 或 --add-opens</td></tr>
+  </tbody>
+</table>
+
+<div class="production-note">
+  <div class="header">生产环境视角：JPMS 迁移的真实成本</div>
+  企业级应用（Spring、Hibernate、Dubbo）大量依赖反射访问内部 API。迁移到 JPMS 时，这些框架需要：
+  <ul>
+    <li>在 <code>module-info.java</code> 中声明 <code>opens</code> 开放被反射访问的包</li>
+    <li>或在启动参数加 <code>--add-opens java.base/java.lang=ALL-UNNAMED</code></li>
+    <li>升级到支持 JPMS 的框架版本（Spring 5+、Hibernate 5.2+）</li>
+  </ul>
+  <strong>结论</strong>：JPMS 迁移不是“加个 module-info.java”，而是整个依赖契约的重新梳理。中小项目可以先用自动模块（Automatic Module）平滑过渡。
+</div>
+
+<h2>关键判断逻辑：模块化迁移的决策树</h2>
+
+<p>面对一个现有项目，决定是否需要/如何迁移到 JPMS 时，可以参考以下伪代码逻辑：</p>
+
+<pre><code>// 伪代码：JPMS 迁移决策
+function decideJPMSMigration(project) {
+    if (project.hasReflectionHeavyFrameworks()) {
+        // Spring/Hibernate 等：优先用自动模块过渡
+        return useAutomaticModules(project);
+    }
+
+    if (project.isLibrary() && project.targetsMultipleJDKVersions()) {
+        // 库开发者：考虑多版本 JAR
+        return useMultiReleaseJAR(project);
+    }
+
+    if (project.isApplication() && project.wantsJlinkRuntime()) {
+        // 应用开发者：完整迁移以使用 jlink
+        return fullJPMSMigration(project);
+    }
+
+    // 默认：保持类路径，按需渐进
+    return keepClasspath(project);
+}</code></pre>
+
+<div class="info">
+  <div class="info-title">判断要点</div>
+  JPMS 迁移的核心决策因素不是“技术难度”，而是<strong>收益</strong>：如果不需要 jlink 定制运行时、不需要强封装保护内部 API，那么完整迁移的收益有限。自动模块（把 JAR 放到模块路径但不写 module-info）是绝大多数项目的合理起点。
+</div>
+
+<h2>本课核心概念清单</h2>
+
+<table>
+  <thead><tr><th>概念</th><th>定义</th><th>本课程后续深入</th></tr></thead>
+  <tbody>
+    <tr><td>JPMS</td><td>Java Platform Module System，模块化系统</td><td>L2 深入原理</td></tr>
+    <tr><td>模块图</td><td>启动时解析出的模块依赖关系图</td><td>L2 深入原理</td></tr>
+    <tr><td>强封装</td><td>未 exports 的包不可跨模块访问</td><td>L2 深入原理</td></tr>
+    <tr><td>jlink</td><td>基于模块生成定制运行时镜像的工具</td><td>L2 深入原理</td></tr>
+    <tr><td>自动模块</td><td>放在模块路径上但无 module-info 的 JAR</td><td>L4 边界与 trade-off</td></tr>
+    <tr><td>Compact Strings</td><td>String 用 byte[]+coder 存储</td><td>L3 源码走读</td></tr>
+    <tr><td>G1 GC</td><td>Java 9 起的默认垃圾回收器</td><td>L4 边界与 trade-off</td></tr>
+  </tbody>
+</table>
+
+<h2>本课 Deep-Grill 就绪度</h2>
+
+<div class="deep-grill-readiness">
+  <h4>学完本课后，检查以下能力：</h4>
+  <ul>
+    <li class="done">能解释 JPMS 要解决的三个根本问题（对应 interviewer 角度）</li>
+    <li class="done">能说出 Java 8 和 Java 9 在依赖管理上的本质区别（对应 architect 角度）</li>
+    <li class="done">能判断一个项目是否值得完整迁移到 JPMS（对应 architect 角度）</li>
+    <li class="done">能用大白话讲清「JAR 地狱」和「强封装」（对应 instructor 角度）</li>
+    <li>能说出反射访问在 JPMS 下的变化（对应 code reviewer 角度）</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <span></span>
+  <a href="./0002-jpms-module-system.html">下一课：JPMS 模块系统原理 →</a>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function() {
+  var btn = document.getElementById('backToTop');
+  window.addEventListener('scroll', function() {
+    btn.classList.toggle('visible', window.scrollY > 400);
+  });
+})();
+(function() {
+  var toc = document.getElementById('toc');
+  var headings = document.querySelectorAll('.article-body h2, .article-body h3');
+  headings.forEach(function(h) {
+    var id = h.id || h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+    h.id = id;
+    var a = document.createElement('a');
+    a.href = '#' + id;
+    a.textContent = h.textContent;
+    a.className = 'toc-' + h.tagName.toLowerCase();
+    toc.appendChild(a);
+  });
+  var links = toc.querySelectorAll('a');
+  var headingEls = [];
+  links.forEach(function(link) {
+    var id = link.getAttribute('href').replace('#', '');
+    var el = document.getElementById(id);
+    if (el) headingEls.push({ el: el, link: link });
+  });
+  window.addEventListener('scroll', function() {
+    var scrollY = window.scrollY + 120;
+    var current = null;
+    headingEls.forEach(function(item) {
+      if (item.el.offsetTop <= scrollY) current = item;
+    });
+    links.forEach(function(l) { l.classList.remove('active'); });
+    if (current) current.link.classList.add('active');
+  });
+})();
+</script>
+
+</body>
+</html>

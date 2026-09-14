@@ -1,0 +1,1859 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Java 9 补充特性详解（去重版）</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'base',
+      themeVariables: { primaryColor: '#fef0f0', primaryBorderColor: '#ea6f5a', lineColor: '#999', fontSize: '14px' } });
+  </script>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 9 补充特性</span></div></nav>
+
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+
+  <main class="content">
+    <div class="article-header">
+      <h1>L2/L3 补充：Java 9 其余特性详解</h1>
+      <div class="article-meta">
+        <span>📚 补充课件 · 与 L2/L3/L4 互补不重叠</span>
+        <span>🔬 OpenJDK jdk9</span>
+        <span>⏱ 预计 60 分钟</span>
+        <span>🧪 含可执行示例 + mermaid 原理图</span>
+      </div>
+    </div>
+
+    <div class="article-body">
+
+<h2>本课定位：与已有课程的分工</h2>
+
+<p>Java 9 的 26 个特性中，有 <strong>5 个核心特性</strong>已经在前面课程深入讲解过，本课<strong>不重复</strong>：</p>
+
+<table>
+  <thead><tr><th>特性</th><th>已覆盖课程</th><th>深度</th></tr></thead>
+  <tbody>
+    <tr><td>JPMS 模块系统</td><td>L2 · JPMS 模块系统原理</td><td>module-info 指令、模块图解析、强封装实现</td></tr>
+    <tr><td>强封装机制</td><td>L2 · JPMS 模块系统原理</td><td>类加载检查链、反射 opens 检查</td></tr>
+    <tr><td>JDK 模块化</td><td>L2 · JPMS 模块系统原理</td><td>90+ 模块、java.base 为根</td></tr>
+    <tr><td>jlink</td><td>L2 · JPMS 模块系统原理</td><td>传递闭包、优化选项、完整命令</td></tr>
+    <tr><td>Compact Strings</td><td>L3 · Compact Strings 源码走读</td><td>String.java 源码逐行、coder 分发、StringLatin1/UTF16</td></tr>
+    <tr><td>G1 GC</td><td>L4 · G1 GC 边界与 Trade-off</td><td>Region 布局、Mixed GC 选择、调优参数、Full GC 诊断</td></tr>
+  </tbody>
+</table>
+
+<p>本课只覆盖<strong>前面未深入讲过的 19 个特性</strong>，分四组：</p>
+
+<ul>
+  <li><strong>语言与语法</strong>（5 项）：JShell、接口私有方法、try-with-resources、钻石操作符、<span class="new-badge">NEW</span> @SafeVarargs</li>
+  <li><strong>核心 API</strong>（9 项）：集合工厂、Stream、Optional、HTTP Client、ProcessHandle、Stack-Walking、VarHandle、<span class="new-badge">NEW</span> 多分辨率图像、<span class="new-badge">NEW</span> @Deprecated</li>
+  <li><strong>JVM 工具链</strong>（5 项）：多版本 JAR、序列化过滤、统一日志、Javadoc、CompletableFuture</li>
+</ul>
+
+<div class="info">
+  <div class="info-title">去重原则</div>
+  只讲「前几课没讲过的细节」。如果某个特性在前面已深入，本课跳过或只做一句「见 L2」的指引。这样避免重复学习，也保证 Java 9 特性清单完整。
+</div>
+
+<!-- =================================================================== -->
+
+<h2>一、语言与语法特性</h2>
+
+<h3>1.1 JShell (REPL)</h3>
+
+<div class="feature-box">
+  <div class="why">Java 长期缺少交互式执行环境。测试一个 <code>String.format()</code> 行为要创建类、写 main、编译、运行。对于快速验证 API，这个流程太重。JShell 提供了官方 REPL。</div>
+
+  <div class="principle">JShell 依赖 <code>jdk.jshell</code> 模块和 <strong>JDI（Java Debug Interface）</strong>。它用 <code>SourceCodeAnalysis</code> 分析片段完整性（Complete/Incomplete/Error），然后通过 JDI 在远程 JVM 中注入执行。变量可以重复声明，因为每次声明都在远程 JVM 中重新定义。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code># 启动 JShell
+jshell
+
+# --- 基本表达式 ---
+jshell> int x = 5;
+x ==> 5
+
+jshell> x * 2
+$2 ==> 10
+
+jshell> String.format("Hello, %s! You are %d years old.", "Alice", 30)
+$3 ==> "Hello, Alice! You are 30 years old."
+
+# --- 变量重复声明（REPL 特色）---
+jshell> int y = 10;
+y ==> 10
+
+jshell> int y = 20;   // 重新声明，覆盖旧值
+y ==> 20
+
+# --- 定义方法 ---
+jshell> int add(int a, int b) { return a + b; }
+|  created method add(int,int)
+
+jshell> add(3, 5)
+$5 ==> 8
+
+# --- 定义类 ---
+jshell> class Point {
+   ...>     int x, y;
+   ...>     Point(int x, int y) { this.x = x; this.y = y; }
+   ...>     public String toString() { return "(" + x + ", " + y + ")"; }
+   ...> }
+|  created class Point
+
+jshell> new Point(3, 4)
+$6 ==> (3, 4)
+
+# --- 查看已定义内容 ---
+jshell> /vars
+|    int x = 5
+|    int y = 20
+
+jshell> /methods
+|    int add(int,int)
+
+# --- 导入包 ---
+jshell> import java.util.stream.*
+
+jshell> IntStream.range(1, 5).map(i -> i * i).toArray()
+$7 ==> int[4] { 1, 4, 9, 16 }
+
+# --- 从文件加载 ---
+jshell> /open script.jsh
+
+# --- 退出 ---
+jshell> /exit
+|  Goodbye</code></pre>
+
+<h4>实现原理</h4>
+
+<div class="mermaid">
+sequenceDiagram
+    participant User as 用户
+    participant JShell as JShellTool
+    participant Analysis as SourceCodeAnalysis
+    participant Eval as JDI ExecutionEngine
+    participant JVM as 远程 JVM
+
+    User->>JShell: 输入代码片段
+    JShell->>Analysis: analyzeCompletion(input)
+    Analysis-->>JShell: 完整性判断<br/>(Complete/Incomplete/Error)
+    alt 完整
+        JShell->>Eval: eval(snippet)
+        Eval->>JVM: 通过 JDI 注入
+        JVM-->>Eval: 执行结果
+        Eval-->>JShell: 结果值
+        JShell-->>User: 显示结果
+    else 不完整
+        JShell-->>User: 提示继续输入
+    end
+</div>
+
+---
+
+<h3>1.2 接口私有方法</h3>
+
+<div class="feature-box">
+  <div class="why">Java 8 引入接口默认方法后，如果两个默认方法有共享逻辑，只能抽成 <code>public</code> 方法（污染 API）或复制代码。Java 9 的私有方法解决了这个问题。</div>
+
+  <div class="principle">接口私有方法在编译期被编译为 <code>private</code> 方法（Java 11 之前是 synthetic 方法），只能在接口内部调用。私有静态方法可以在静态和非静态接口方法中使用。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>public interface Calculator {
+
+    default int add(int a, int b) {
+        validate(a, b);
+        log("add", a + b);
+        return a + b;
+    }
+
+    default int subtract(int a, int b) {
+        validate(a, b);
+        log("subtract", a - b);
+        return a - b;
+    }
+
+    // Java 9: 私有实例方法
+    private void validate(int a, int b) {
+        if (a < 0 || b < 0) {
+            throw new IllegalArgumentException(
+                "Negative numbers not supported: " + a + ", " + b);
+        }
+    }
+
+    // Java 9: 私有静态方法
+    private static void log(String op, int result) {
+        System.out.printf("[%s] result=%d%n", op, result);
+    }
+
+    static Calculator create() {
+        return new Calculator() {};
+    }
+}
+
+// 使用
+class Demo {
+    public static void main(String[] args) {
+        Calculator calc = Calculator.create();
+        System.out.println(calc.add(3, 5));       // [add] result=8 / 8
+        System.out.println(calc.subtract(10, 4)); // [subtract] result=6 / 6
+    }
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    A["接口方法"] --> B{"类型?"}
+    B -->|"public 抽象"| C["实现类必须实现"]
+    B -->|"public default"| D["实现类可继承/覆盖"]
+    B -->|"public static"| E["通过接口名调用"]
+    B -->|"private (Java 9)"| F["仅接口内部调用"]
+    B -->|"private static (Java 9)"| G["仅接口内部调用"]
+    style F fill:#f3e5f5,stroke:#9c27b0
+    style G fill:#f3e5f5,stroke:#9c27b0
+</div>
+
+---
+
+<h3>1.3 try-with-resources 增强</h3>
+
+<div class="feature-box">
+  <div class="why">Java 7 要求资源必须在 <code>try()</code> 中声明。如果已有 <code>final</code> 或 effectively-final 变量，得重新声明。Java 9 允许直接用外部变量。</div>
+
+  <div class="principle">编译器在编译时生成 <code>finally</code> 块调用 <code>close()</code>。Java 9 的语法糖不改变字节码语义，只减少冗余声明。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.io.*;
+
+public class TryWithResourcesDemo {
+    public static void main(String[] args) throws IOException {
+        // Java 7/8 写法：必须在 try 中重新声明
+        InputStream is1 = new FileInputStream("data.txt");
+        try (InputStream copy = is1) {   // 多余的重新声明
+            System.out.println("Read: " + copy.read());
+        }
+
+        // Java 9 写法：直接引用外部 effectively-final 变量
+        final InputStream is2 = new FileInputStream("data.txt");
+        try (is2) {
+            System.out.println("Read: " + is2.read());
+        } // is2 自动关闭
+
+        // 多个资源
+        final InputStream in = new FileInputStream("in.txt");
+        final OutputStream out = new FileOutputStream("out.txt");
+        try (in; out) {
+            in.transferTo(out);
+        } // in 和 out 都自动关闭
+
+        // 混合：外部变量 + try 中声明
+        final InputStream base = new FileInputStream("base.txt");
+        try (base; BufferedReader br = new BufferedReader(new InputStreamReader(base))) {
+            System.out.println(br.readLine());
+        }
+    }
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    A["try (is) { ... }"] --> B["编译器生成"]
+    B --> C["try { ... }<br/>finally {<br/>  is.close()<br/>}"]
+    C --> D["等价于 Java 7 写法<br/>try (InputStream copy = is) { ... }"]
+    style C fill:#e8f5e9,stroke:#42c02e
+</div>
+
+---
+
+<h3>1.4 钻石操作符 (&lt;&gt;) 扩展</h3>
+
+<div class="feature-box">
+  <div class="why">Java 8 中匿名内部类不能用 <code>&lt;&gt;</code>，因为类型推断在匿名类上下文中不可靠。Java 9 放宽了这个限制。</div>
+
+  <div class="principle">只要推断的类型是「可表示的（denotable）」，就可以用 <code>&lt;&gt;</code>。不能用于函数式接口的 lambda（lambda 没有类型可推断）。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.util.*;
+
+public class DiamondDemo {
+    public static void main(String[] args) {
+        // Java 7+: 普通泛型实例化
+        List&lt;String&gt; list1 = new ArrayList&lt;&gt;();
+
+        // Java 9: 匿名内部类也可以用 &lt;&gt;
+        List&lt;String&gt; list2 = new ArrayList&lt;&gt;() {
+            @Override
+            public boolean add(String s) {
+                System.out.println("Adding: " + s);
+                return super.add(s);
+            }
+        };
+        list2.add("hello");
+        list2.add("world");
+
+        // 比较器示例
+        Comparator&lt;String&gt; byLength = new Comparator&lt;&gt;() {
+            @Override
+            public int compare(String a, String b) {
+                return Integer.compare(a.length(), b.length());
+            }
+        };
+        System.out.println(byLength.compare("abc", "ab")); // 1
+    }
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    A["泛型实例化"] --> B{"上下文?"}
+    B -->|"普通类实例化"| C["Java 7+ 支持 &lt;&gt;"]
+    B -->|"匿名内部类"| D["Java 8 不支持<br/>Java 9 支持"]
+    B -->|"lambda"| E["无类型可推断<br/>不能用 &lt;&gt;"]
+    style D fill:#e8f5e9,stroke:#42c02e
+    style E fill:#fdf2f2,stroke:#e74c3c
+</div>
+
+---
+
+<h3>1.5 @SafeVarargs 注解扩展 <span class="new-badge">NEW</span></h3>
+
+<div class="feature-box">
+  <div class="why">Java 泛型使用类型擦除，可变参数泛型（<code>T...</code>）会导致「堆污染（Heap Pollution）」——可变参数底层是 <code>Object[]</code>，可以往里放任何类型的对象。<code>@SafeVarargs</code> 是告诉编译器的承诺：这个方法不会对可变参数数组做危险操作。<strong>Java 8 中 <code>@SafeVarargs</code> 只能用在 static 和 final 方法上</strong>，但 <code>private</code> 方法同样不可覆盖，也应该能用。Java 9 放宽了这个限制。</div>
+
+  <div class="principle"><code>@SafeVarargs</code> 是编译期的「抑制警告」注解。它不改变字节码，只影响 javac 是否发出 <code>unchecked</code> 警告。Java 9 允许在 <code>private</code> 实例方法上使用，因为这些方法不能被覆盖，安全性可保证。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.util.*;
+
+public class SafeVarargsDemo {
+
+    // Java 8 写法：final 方法上用 @SafeVarargs
+    @SafeVarargs
+    final &lt;T&gt; List&lt;T&gt; listOfFinal(T... elements) {
+        return new ArrayList&lt;&gt;(Arrays.asList(elements));
+    }
+
+    // Java 9 写法：private 实例方法上用 @SafeVarargs
+    @SafeVarargs
+    private &lt;T&gt; List&lt;T&gt; listOfPrivate(T... elements) {
+        return new ArrayList&lt;&gt;(Arrays.asList(elements));
+    }
+
+    public static void main(String[] args) {
+        SafeVarargsDemo demo = new SafeVarargsDemo();
+
+        List&lt;String&gt; l1 = demo.listOfFinal("a", "b", "c");
+        System.out.println("final method: " + l1);
+
+        List&lt;Integer&gt; l2 = demo.listOfPrivate(1, 2, 3);
+        System.out.println("private method: " + l2);
+
+        // 演示堆污染风险
+        List&lt;String&gt; polluted = demo.unsafeList("hello", "world");
+        System.out.println("unsafe list: " + polluted);
+    }
+
+    // 这个方法会产生 unchecked 警告，演示堆污染风险
+    @SuppressWarnings("unchecked")
+    &lt;T&gt; List&lt;T&gt; unsafeList(T... elements) {
+        Object[] arr = elements;   // 可变参数底层是 Object[]
+        arr[0] = 42;               // 堆污染：把 Integer 放进 String[]
+        return (List&lt;T&gt;) Arrays.asList(elements);
+    }
+}</code></pre>
+
+<h4>为什么 Java 9 要扩展</h4>
+
+<table>
+  <thead><tr><th>版本</th><th>允许 @SafeVarargs 的位置</th><th>原因</th></tr></thead>
+  <tbody>
+    <tr><td>Java 7</td><td>static 方法、final 实例方法、构造器</td><td>不可覆盖的方法</td></tr>
+    <tr><td>Java 9+</td><td>额外支持 private 实例方法</td><td>private 方法也不能被覆盖，安全性可保证</td></tr>
+    <tr><td>不允许</td><td>普通 public/protected 实例方法</td><td>子类可能覆盖并破坏类型安全</td></tr>
+  </tbody>
+</table>
+
+<div class="mermaid">
+flowchart TD
+    A["方法使用 @SafeVarargs"] --> B{"方法可覆盖?"}
+    B -->|"static"| C["✅ 允许"]
+    B -->|"final 实例方法"| C
+    B -->|"private 实例方法<br/>(Java 9 新增)"| C
+    B -->|"构造器"| C
+    B -->|"普通 public/protected"| D["❌ 编译错误<br/>'Invalid SafeVarargs annotation'"]
+    C --> E["编译器不发出 unchecked 警告"]
+    style C fill:#e8f5e9,stroke:#42c02e
+    style D fill:#fdf2f2,stroke:#e74c3c
+</div>
+
+---
+
+<!-- =================================================================== -->
+
+<h2>二、核心 API 与类库增强</h2>
+
+<h3>2.1 集合工厂方法</h3>
+
+<div class="feature-box">
+  <div class="why">Java 8 创建不可变集合很繁琐：<code>Collections.unmodifiableList(Arrays.asList(...))</code>。没有简洁的「创建包含元素的不可变集合」的方式。</div>
+
+  <div class="principle"><code>List.of()</code> 根据元素数量选择不同内部类：0 个元素返回 <code>ListN.EMPTY_LIST</code>，1 个返回 <code>List12</code>，2+ 返回 <code>ListN</code>。所有实现继承 <code>AbstractImmutableList</code>，修改方法抛 <code>UnsupportedOperationException</code>。不允许 null 元素。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.util.*;
+import java.util.stream.*;
+
+public class CollectionFactoryDemo {
+    public static void main(String[] args) {
+        // List.of
+        List&lt;String&gt; list = List.of("apple", "banana", "cherry");
+        System.out.println(list);
+
+        // Set.of（重复元素抛 IllegalArgumentException）
+        Set&lt;Integer&gt; set = Set.of(1, 2, 3, 4, 5);
+        System.out.println(set);
+        try {
+            Set.of(1, 2, 2);
+        } catch (IllegalArgumentException e) {
+            System.out.println("Set.of 重复: " + e.getMessage());
+        }
+
+        // Map.of（最多 10 对）
+        Map&lt;String, Integer&gt; map = Map.of(
+            "apple", 1, "banana", 2, "cherry", 3
+        );
+        System.out.println(map);
+
+        // Map.ofEntries（超过 10 对）
+        Map&lt;String, Integer&gt; bigMap = Map.ofEntries(
+            Map.entry("a", 1), Map.entry("b", 2),
+            Map.entry("c", 3), Map.entry("d", 4),
+            Map.entry("e", 5), Map.entry("f", 6),
+            Map.entry("g", 7), Map.entry("h", 8),
+            Map.entry("i", 9), Map.entry("j", 10),
+            Map.entry("k", 11)
+        );
+        System.out.println("bigMap size: " + bigMap.size());
+
+        // 不可变性验证
+        try {
+            list.add("date");
+        } catch (UnsupportedOperationException e) {
+            System.out.println("List 不可变");
+        }
+
+        // null 不允许
+        try {
+            List.of("a", null);
+        } catch (NullPointerException e) {
+            System.out.println("null 不允许");
+        }
+
+        // 与 Stream 结合
+        List&lt;Integer&gt; squares = Stream.of(1, 2, 3, 4)
+            .map(i -&gt; i * i)
+            .collect(Collectors.toUnmodifiableList());
+        System.out.println("unmodifiable squares: " + squares);
+    }
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    A["List.of(...)"] --> B{"元素数量?"}
+    B -->|0| C["ListN.EMPTY_LIST<br/>(静态常量)"]
+    B -->|1| D["List12<br/>(单元素优化)"]
+    B -->|2+| E["ListN<br/>(通用实现)"]
+    C --> F["AbstractImmutableList"]
+    D --> F
+    E --> F
+    F --> G["修改方法抛<br/>UnsupportedOperationException"]
+    F --> H["null 元素抛<br/>NullPointerException"]
+    style G fill:#fdf2f2,stroke:#e74c3c
+    style H fill:#fdf2f2,stroke:#e74c3c
+</div>
+
+---
+
+<h3>2.2 Stream API 增强</h3>
+
+<div class="feature-box">
+  <div class="why">Java 8 的 Stream 缺少几个常用操作：① 没有「从头取到条件不满足」的方法；② <code>Stream.of(null)</code> 抛 NPE，无法安全处理；③ <code>iterate</code> 需要配合 <code>limit</code> 使用，不如 for 循环直观。</div>
+
+  <div class="principle"><code>takeWhile</code>/<code>dropWhile</code> 是<strong>有状态中间操作</strong>，维护「是否已停止」标志。<code>ofNullable</code> 返回 0 或 1 元素的 Stream。<code>iterate</code> 重载接受终止条件 <code>Predicate</code>。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.util.*;
+import java.util.stream.*;
+
+public class StreamEnhancements {
+    public static void main(String[] args) {
+        List&lt;Integer&gt; nums = List.of(45, 43, 76, 87, 42, 77, 90);
+
+        // ===== takeWhile：从头取到第一个不满足 =====
+        List&lt;Integer&gt; taken = nums.stream()
+            .takeWhile(n -&gt; n &lt; 80)
+            .collect(Collectors.toList());
+        System.out.println("takeWhile &lt; 80: " + taken);
+        // [45, 43, 76]  — 遇到 87 停止
+
+        // ===== dropWhile：跳过直到第一个不满足 =====
+        List&lt;Integer&gt; dropped = nums.stream()
+            .dropWhile(n -&gt; n &lt; 80)
+            .collect(Collectors.toList());
+        System.out.println("dropWhile &lt; 80: " + dropped);
+        // [87, 42, 77, 90]
+
+        // 对比 filter：不依赖顺序
+        List&lt;Integer&gt; filtered = nums.stream()
+            .filter(n -&gt; n &lt; 80)
+            .collect(Collectors.toList());
+        System.out.println("filter &lt; 80: " + filtered);
+        // [45, 43, 76, 42, 77]
+
+        // ===== ofNullable =====
+        String maybeNull = null;
+        System.out.println("ofNullable(null): " + Stream.ofNullable(maybeNull).count()); // 0
+        System.out.println("ofNullable(hello): " + Stream.ofNullable("hello").count()); // 1
+
+        try {
+            Stream.of((Object) null);
+        } catch (NullPointerException e) {
+            System.out.println("Stream.of(null) 抛 NPE");
+        }
+
+        // ===== iterate 重载 =====
+        // Java 8 写法：需要 limit
+        List&lt;Integer&gt; oldWay = Stream.iterate(1, i -&gt; i + 1)
+            .limit(5)
+            .collect(Collectors.toList());
+        System.out.println("iterate+limit: " + oldWay); // [1,2,3,4,5]
+
+        // Java 9 写法：直接指定终止条件
+        List&lt;Integer&gt; newWay = Stream.iterate(1, i -&gt; i &lt;= 5, i -&gt; i + 1)
+            .collect(Collectors.toList());
+        System.out.println("iterate with predicate: " + newWay); // [1,2,3,4,5]
+
+        Stream.iterate(0, i -&gt; i &lt; 10, i -&gt; i + 2)
+            .forEach(i -&gt; System.out.print(i + " ")); // 0 2 4 6 8
+        System.out.println();
+    }
+}</code></pre>
+
+<div class="mermaid">
+flowchart LR
+    A["输入: 45, 43, 76, 87, 42, 77, 90"] --> B["takeWhile &lt; 80"]
+    A --> C["dropWhile &lt; 80"]
+    A --> D["filter &lt; 80"]
+    B --> B1["45, 43, 76<br/>(遇 87 停止)"]
+    C --> C1["87, 42, 77, 90<br/>(跳过 45,43,76)"]
+    D --> D1["45, 43, 76, 42, 77<br/>(取所有满足)"]
+    style B1 fill:#e8f5e9,stroke:#42c02e
+    style C1 fill:#fff8e1,stroke:#f5a623
+    style D1 fill:#f0f7fd,stroke:#3194d0
+</div>
+
+---
+
+<h3>2.3 Optional 类增强</h3>
+
+<div class="feature-box">
+  <div class="why">Java 8 的 Optional 缺少几个常用操作：① 无法转为 Stream 参与流水线；② 没有「有值做什么，无值做什么」的一体化 API；③ 无法链式提供备选 Optional。</div>
+
+  <div class="principle"><code>stream()</code> 把 Optional 转为 0 或 1 元素 Stream；<code>ifPresentOrElse()</code> 接受两个 Consumer；<code>or()</code> 接受 <code>Supplier&lt;Optional&gt;</code>，延迟计算备选。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.util.*;
+import java.util.stream.*;
+
+public class OptionalEnhancements {
+    public static void main(String[] args) {
+        // ===== stream() =====
+        Optional&lt;String&gt; opt = Optional.of("hello");
+        List&lt;String&gt; fromOpt = opt.stream()
+            .map(String::toUpperCase)
+            .collect(Collectors.toList());
+        System.out.println("stream(): " + fromOpt); // [HELLO]
+
+        System.out.println("empty stream count: " + Optional.empty().stream().count()); // 0
+
+        // ===== ifPresentOrElse =====
+        Optional&lt;String&gt; present = Optional.of("value");
+        present.ifPresentOrElse(
+            v -&gt; System.out.println("Found: " + v),
+            () -&gt; System.out.println("Not found")
+        );
+
+        Optional&lt;String&gt; empty = Optional.empty();
+        empty.ifPresentOrElse(
+            v -&gt; System.out.println("Found: " + v),
+            () -&gt; System.out.println("Not found")
+        );
+
+        // ===== or() 链式备选 =====
+        Optional&lt;String&gt; result = Optional.&lt;String&gt;empty()
+            .or(() -&gt; Optional.of("fallback"))
+            .or(() -&gt; Optional.of("never reached"));
+        System.out.println("or(): " + result.get()); // fallback
+
+        // or 是延迟的
+        Optional&lt;String&gt; lazy = Optional.of("first");
+        lazy.or(() -&gt; {
+            System.out.println("这个不会执行");
+            return Optional.of("second");
+        });
+        System.out.println("lazy or: " + lazy.get()); // first
+
+        // 组合用法
+        Optional&lt;String&gt; config = Optional.empty();
+        String value = config
+            .or(() -&gt; Optional.of("default"))
+            .stream()
+            .findFirst()
+            .orElse("none");
+        System.out.println("composed: " + value); // default
+    }
+}</code></pre>
+
+<div class="mermaid">
+flowchart LR
+    A["Optional.empty()"] --> B[".or(() -> Optional.of('fallback'))"]
+    B --> C["Optional['fallback']"]
+    C --> D[".or(() -> ...)"]
+    D --> E["跳过（已有值）"]
+    A2["Optional['first']"] --> B2[".or(() -> {print('不会执行')})"]
+    B2 --> C2["Optional['first']"]
+    style E fill:#f5f5f5,stroke:#999
+    style C2 fill:#e8f5e9,stroke:#42c02e
+</div>
+
+---
+
+<h3>2.4 全新 HTTP Client API</h3>
+
+<div class="feature-box">
+  <div class="why"><code>HttpURLConnection</code> 老旧难用：API 不友好、不支持 HTTP/2、不支持 WebSocket。第三方库（OkHttp、Apache HttpClient）不是标准库。Java 9 引入官方 HTTP Client（incubator 模块 <code>jdk.incubator.http</code>），Java 11 正式化。</div>
+
+  <div class="principle">HttpClient 不可变、可复用。使用 <code>Flow</code> API（Reactive Streams）实现响应体的<strong>背压（backpressure）</strong>控制。<code>BodyHandlers</code> 决定响应体如何处理：字符串、文件、字节流、Publisher。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>// 注意：Java 9 中包名是 jdk.incubator.http，Java 11 是 java.net.http
+// 编译时需要 --add-modules jdk.incubator.http
+
+import jdk.incubator.http.*;
+import java.net.URI;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+
+public class HttpClientDemo {
+    public static void main(String[] args) throws Exception {
+        // 构建 Client（不可变、可复用）
+        HttpClient client = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_2)
+            .connectTimeout(Duration.ofSeconds(10))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build();
+
+        // ===== 同步 GET =====
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create("https://httpbin.org/get"))
+            .timeout(Duration.ofSeconds(10))
+            .header("Accept", "application/json")
+            .GET()
+            .build();
+
+        HttpResponse&lt;String&gt; response = client.send(
+            request, HttpResponse.BodyHandler.asString()
+        );
+        System.out.println("Status: " + response.statusCode());
+        System.out.println("Body length: " + response.body().length());
+
+        // ===== 异步 GET =====
+        CompletableFuture&lt;HttpResponse&lt;String&gt;&gt; future =
+            client.sendAsync(request, HttpResponse.BodyHandler.asString());
+        future.thenAccept(resp -&gt; {
+            System.out.println("Async status: " + resp.statusCode());
+        }).join();
+
+        // ===== POST JSON =====
+        HttpRequest postReq = HttpRequest.newBuilder()
+            .uri(URI.create("https://httpbin.org/post"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyProcessor.fromString(
+                "{\"name\":\"Java9\"}"
+            ))
+            .build();
+
+        HttpResponse&lt;String&gt; postResp = client.send(
+            postReq, HttpResponse.BodyHandler.asString()
+        );
+        System.out.println("POST status: " + postResp.statusCode());
+
+        // ===== WebSocket 握手 =====
+        WebSocket ws = client.newWebSocketBuilder()
+            .buildAsync(URI.create("wss://echo.websocket.org"), new WebSocket.Listener() {
+                @Override
+                public void onOpen(WebSocket webSocket) {
+                    System.out.println("WebSocket opened");
+                    webSocket.sendText("Hello", true);
+                }
+
+                @Override
+                public CompletionStage&lt;?&gt; onText(WebSocket webSocket,
+                                                  CharSequence data, boolean last) {
+                    System.out.println("Received: " + data);
+                    return null;
+                }
+            })
+            .join();
+
+        Thread.sleep(2000);
+        ws.sendClose(WebSocket.NORMAL_CLOSURE, "bye").join();
+    }
+}</code></pre>
+
+<h4>架构设计</h4>
+
+<div class="mermaid">
+flowchart TD
+    A["HttpClient<br/>(不可变，可复用)"] --> B["HttpRequest<br/>(不可变，可重复构建)"]
+    B --> C["send() / sendAsync()"]
+    C --> D["HTTP/2 Connection"]
+    C --> E["HTTP/1.1 Connection"]
+    D --> F["Flow API<br/>(Reactive Streams 背压)"]
+    E --> G["NIO Selector<br/>(I/O 多路复用)"]
+    F --> H["HttpResponse"]
+    G --> H
+    H --> I["BodyHandler<br/>决定响应体如何处理"]
+    I --> I1["asString()<br/>聚合为字符串"]
+    I --> I2["asFile()<br/>写入文件"]
+    I --> I3["asByteArray()<br/>字节数组"]
+    style A fill:#f3e5f5,stroke:#9c27b0
+    style I fill:#e8f5e9,stroke:#42c02e
+</div>
+
+---
+
+<h3>2.5 进程 API 增强（ProcessHandle）</h3>
+
+<div class="feature-box">
+  <div class="why">Java 9 之前，获取 PID 只能通过 hack：<code>ManagementFactory.getRuntimeMXBean().getName()</code> 返回 <code>"pid@hostname"</code> 然后 split。销毁进程只能用 <code>Process.destroy()</code>，无法获取进程树信息、CPU 使用率、启动时间。</div>
+
+  <div class="principle"><code>ProcessHandle</code> 是进程的轻量句柄，通过 <code>Process.toHandle()</code> 或 <code>ProcessHandle.current()</code> 获取。<code>Info</code> 内部类封装进程元数据。<code>onExit()</code> 返回 <code>CompletableFuture</code> 用于异步回调。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.util.concurrent.CompletableFuture;
+
+public class ProcessHandleDemo {
+    public static void main(String[] args) throws Exception {
+        // ===== 当前进程信息 =====
+        ProcessHandle current = ProcessHandle.current();
+        ProcessHandle.Info info = current.info();
+
+        System.out.println("PID: " + current.pid());
+        info.command().ifPresent(cmd -&gt;
+            System.out.println("Command: " + cmd));
+        info.commandLine().ifPresent(cl -&gt;
+            System.out.println("CommandLine: " + cl));
+        info.startInstant().ifPresent(t -&gt;
+            System.out.println("Started: " + t));
+        info.totalCpuDuration().ifPresent(d -&gt;
+            System.out.println("CPU: " + d));
+        info.user().ifPresent(u -&gt;
+            System.out.println("User: " + u));
+
+        // ===== 创建子进程并监控 =====
+        Process p = new ProcessBuilder("sleep", "30").start();
+        ProcessHandle handle = p.toHandle();
+        System.out.println("\nChild PID: " + handle.pid());
+
+        CompletableFuture&lt;ProcessHandle&gt; onExit = handle.onExit();
+        onExit.thenAccept(h -&gt;
+            System.out.println("Process " + h.pid() + " exited")
+        );
+        System.out.println("State: " + handle.isAlive());
+
+        // ===== 列出所有进程（前 5 个）=====
+        System.out.println("\n=== All processes (top 5) ===");
+        ProcessHandle.allProcesses()
+            .filter(ProcessHandle::isAlive)
+            .limit(5)
+            .forEach(h -&gt; h.info().command()
+                .ifPresent(cmd -&gt;
+                    System.out.println(h.pid() + ": " + cmd)));
+
+        // ===== 进程树 =====
+        System.out.println("\n=== Process tree ===");
+        current.children().forEach(child -&gt;
+            System.out.println("Child: " + child.pid()));
+
+        // ===== 销毁 =====
+        Thread.sleep(1000);
+        handle.destroy();
+        if (handle.isAlive()) {
+            handle.destroyForcibly();
+        }
+    }
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    A["Process"] --> B["ProcessHandle"]
+    B --> C1["pid()"]
+    B --> C2["info()"]
+    B --> C3["isAlive()"]
+    B --> C4["onExit()"]
+    B --> C5["destroy()"]
+    B --> C6["destroyForcibly()"]
+    B --> C7["children()"]
+    B --> C8["parent()"]
+    C2 --> D1["command()"]
+    C2 --> D2["commandLine()"]
+    C2 --> D3["startInstant()"]
+    C2 --> D4["totalCpuDuration()"]
+    C2 --> D5["user()"]
+    C4 --> E["CompletableFuture<br/>(异步回调)"]
+    style B fill:#f3e5f5,stroke:#9c27b0
+</div>
+
+---
+
+<h3>2.6 Stack-Walking API</h3>
+
+<div class="feature-box">
+  <div class="why"><code>Thread.getStackTrace()</code> 和 <code>new Throwable().getStackTrace()</code> 一次性获取完整栈帧数组。但大多数场景只需要几个帧（如找到调用者类），获取完整栈既浪费性能又浪费内存。</div>
+
+  <div class="principle"><code>StackWalker.walk()</code> 传入函数，接收 <code>Stream&lt;StackFrame&gt;</code>——惰性流。JVM 只在需要时遍历帧。支持 <code>RETAIN_CLASS_REFERENCE</code> 等选项。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.lang.StackWalker;
+import java.util.stream.Collectors;
+
+public class StackWalkerDemo {
+    public static void main(String[] args) {
+        methodA();
+    }
+
+    static void methodA() { methodB(); }
+    static void methodB() { methodC(); }
+
+    static void methodC() {
+        // 只获取前 3 个帧（高效）
+        System.out.println("=== Top 3 frames ===");
+        StackWalker.getInstance()
+            .walk(frames -&gt; frames
+                .limit(3)
+                .map(f -&gt; f.getClassName() + "." + f.getMethodName()
+                    + ":" + f.getLineNumber())
+                .collect(Collectors.toList())
+            )
+            .forEach(System.out::println);
+
+        // 获取调用者类（最常用场景）
+        System.out.println("\n=== Caller class ===");
+        Class&lt;?&gt; caller = StackWalker.getInstance(
+            StackWalker.Option.RETAIN_CLASS_REFERENCE
+        ).getCallerClass();
+        System.out.println("Caller: " + caller.getName());
+
+        // 条件过滤
+        System.out.println("\n=== First frame from StackWalkerDemo ===");
+        StackWalker.getInstance()
+            .walk(frames -&gt; frames
+                .filter(f -&gt; f.getClassName().endsWith("StackWalkerDemo"))
+                .findFirst()
+            )
+            .ifPresent(f -&gt; System.out.println(f.getClassName() + "." + f.getMethodName()));
+
+        // 完整栈数量
+        long count = StackWalker.getInstance().walk(frames -&gt; frames.count());
+        System.out.println("Total frames: " + count);
+    }
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    A["StackWalker.getInstance()"] --> B{".walk(function)"}
+    B --> C["JVM 惰性遍历栈帧"]
+    C --> D{"需要更多帧?"}
+    D -->|"是"| C
+    D -->|"否 (如 .limit(3))"| E["停止遍历"]
+    E --> F["返回结果"]
+    A --> G[".getCallerClass()"]
+    G --> H["直接返回调用者类<br/>(最高效)"]
+    style C fill:#e8f5e9,stroke:#42c02e
+    style H fill:#f3e5f5,stroke:#9c27b0
+</div>
+
+---
+
+<h3>2.7 VarHandle</h3>
+
+<div class="feature-box">
+  <div class="why"><code>sun.misc.Unsafe</code> 提供低层内存操作，但它是私有 API，随时可能移除。<code>AtomicInteger</code> 等原子类功能有限。VarHandle 是官方替代方案，提供类型安全的变量访问和原子操作。</div>
+
+  <div class="principle">VarHandle 通过 <code>MethodHandles.lookup().findVarHandle()</code> 获取。首次查找后生成最优调用路径，性能接近直接字段访问。支持内存序控制：<code>setRelease</code>/<code>getAcquire</code>/<code>compareAndSet</code>/<code>getAndAdd</code> 等。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
+
+public class VarHandleDemo {
+    private volatile int x;
+    private static final VarHandle X;
+
+    static {
+        try {
+            X = MethodHandles.lookup()
+                .findVarHandle(VarHandleDemo.class, "x", int.class);
+        } catch (Exception e) {
+            throw new Error(e);
+        }
+    }
+
+    public static void main(String[] args) {
+        VarHandleDemo demo = new VarHandleDemo();
+
+        X.set(demo, 10);
+        System.out.println("set: " + X.get(demo)); // 10
+
+        boolean success = X.compareAndSet(demo, 10, 20);
+        System.out.println("CAS 10→20: " + success + ", value=" + X.get(demo));
+
+        int old = (int) X.getAndAdd(demo, 5);
+        System.out.println("getAndAdd(5): old=" + old + ", new=" + X.get(demo));
+
+        X.setVolatile(demo, 100);
+        int val = (int) X.getVolatile(demo);
+        System.out.println("volatile access: " + val);
+
+        X.setRelease(demo, 200);
+        int acquired = (int) X.getAcquire(demo);
+        System.out.println("acquire/release: " + acquired);
+    }
+}</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    A["VarHandle 获取"] --> B["MethodHandles.lookup()"]
+    B --> C["findVarHandle(class, field, type)"]
+    C --> D["首次查找生成最优调用路径"]
+    D --> E["后续调用接近直接字段访问"]
+
+    F["VarHandle 操作"] --> G["普通读写<br/>get/set"]
+    F --> H["volatile 读写<br/>getVolatile/setVolatile"]
+    F --> I["Acquire/Release<br/>getAcquire/setRelease"]
+    F --> J["CAS 操作<br/>compareAndSet"]
+    F --> K["原子算术<br/>getAndAdd/getAndSet"]
+    style D fill:#e8f5e9,stroke:#42c02e
+</div>
+
+<table>
+  <thead><tr><th>内存序</th><th>方法</th><th>语义</th></tr></thead>
+  <tbody>
+    <tr><td>Plain</td><td><code>get</code>/<code>set</code></td><td>无同步保证</td></tr>
+    <tr><td>Opaque</td><td><code>getOpaque</code>/<code>setOpaque</code></td><td>禁止编译器重排，不保证可见性顺序</td></tr>
+    <tr><td>Acquire/Release</td><td><code>getAcquire</code>/<code>setRelease</code></td><td>单向屏障，比 volatile 弱</td></tr>
+    <tr><td>Volatile</td><td><code>getVolatile</code>/<code>setVolatile</code></td><td>双向屏障，与 volatile 等价</td></tr>
+  </tbody>
+</table>
+
+---
+
+<h3>2.8 多分辨率图像 API <span class="new-badge">NEW</span></h3>
+
+<div class="feature-box">
+  <div class="why">在不同 DPI 的屏幕上（普通屏、Retina 屏、4K 屏），同一张图片需要不同分辨率的版本才能显示清晰。Java 9 之前，开发者需要自己管理多份图片。Java 9 引入 <code>java.awt.image.MultiResolutionImage</code>，把多个分辨率的图像<strong>封装成一个逻辑图像</strong>，由系统根据显示环境自动选择合适的版本。</div>
+
+  <div class="principle"><code>MultiResolutionImage</code> 是一个接口，核心方法 <code>getResolutionVariant(width, height)</code> 根据目标尺寸返回最合适的图像变体。<code>BaseMultiResolutionImage</code> 是默认实现。它与 <code>java.awt.Graphics</code> 的渲染管线集成：当绘制到高 DPI 设备时自动选择高分辨率变体。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.awt.*;
+import java.awt.image.*;
+import javax.swing.*;
+import java.util.List;
+import java.util.Arrays;
+
+public class MultiResolutionImageDemo {
+    public static void main(String[] args) throws Exception {
+        // 实际场景从文件加载：
+        // Image img1x = ImageIO.read(new File("icon@1x.png"));
+        // Image img2x = ImageIO.read(new File("icon@2x.png"));
+        // Image img3x = ImageIO.read(new File("icon@3x.png"));
+
+        // 这里用代码生成演示（蓝色正方形，不同尺寸）
+        Image img1x = createSolidImage(32, 32, Color.BLUE);
+        Image img2x = createSolidImage(64, 64, Color.BLUE);
+        Image img3x = createSolidImage(96, 96, Color.BLUE);
+
+        // 封装为 MultiResolutionImage
+        List&lt;Image&gt; variants = Arrays.asList(img1x, img2x, img3x);
+        MultiResolutionImage mrImage = new BaseMultiResolutionImage(
+            variants.toArray(new Image[0])
+        );
+
+        // 查询不同尺寸下的变体
+        System.out.println("=== MultiResolutionImage 变体查询 ===");
+
+        Image r1 = mrImage.getResolutionVariant(32, 32);
+        System.out.println("Request 32x32 → got " + r1.getWidth(null)
+            + "x" + r1.getHeight(null));
+
+        Image r2 = mrImage.getResolutionVariant(64, 64);
+        System.out.println("Request 64x64 → got " + r2.getWidth(null)
+            + "x" + r2.getHeight(null));
+
+        Image r3 = mrImage.getResolutionVariant(96, 96);
+        System.out.println("Request 96x96 → got " + r3.getWidth(null)
+            + "x" + r3.getHeight(null));
+
+        // 获取所有变体
+        System.out.println("\n=== 所有变体 ===");
+        List&lt;Image&gt; all = mrImage.getResolutionVariants();
+        for (int i = 0; i &lt; all.size(); i++) {
+            Image img = all.get(i);
+            System.out.println("  Variant " + i + ": "
+                + img.getWidth(null) + "x" + img.getHeight(null));
+        }
+
+        // 与 Graphics 渲染集成
+        System.out.println("\n=== Graphics 渲染集成 ===");
+        BufferedImage canvas = new BufferedImage(200, 200,
+            BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = canvas.createGraphics();
+        g.drawImage(mrImage, 0, 0, 200, 200, null);
+        g.dispose();
+        System.out.println("Drawn onto canvas (系统自动选择分辨率)");
+
+        // Swing 中使用
+        System.out.println("\n=== Swing 集成 ===");
+        JLabel label = new JLabel(new ImageIcon(mrImage));
+        System.out.println("Swing ImageIcon 可用 MultiResolutionImage");
+
+        System.out.println("\n=== 完成 ===");
+    }
+
+    static Image createSolidImage(int w, int h, Color color) {
+        BufferedImage img = new BufferedImage(w, h,
+            BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setColor(color);
+        g.fillRect(0, 0, w, h);
+        g.dispose();
+        return img;
+    }
+}</code></pre>
+
+<h4>实现原理</h4>
+
+<div class="mermaid">
+flowchart TD
+    A["MultiResolutionImage<br/>(接口)"] --> B["getResolutionVariant(w, h)"]
+    A --> C["getResolutionVariants()"]
+    B --> D["BaseMultiResolutionImage<br/>(默认实现)"]
+    C --> D
+    D --> E["根据目标尺寸<br/>选择最接近的变体"]
+
+    F["渲染管线"] --> G["Graphics.drawImage()"]
+    G --> H{"目标设备 DPI?"}
+    H -->|"普通屏"| I["选择 1x 变体"]
+    H -->|"Retina 屏"| J["选择 2x 变体"]
+    H -->|"4K 屏"| K["选择 3x 变体"]
+    I --> L["绘制"]
+    J --> L
+    K --> L
+    style D fill:#e8f5e9,stroke:#42c02e
+    style F fill:#f3e5f5,stroke:#9c27b0
+</div>
+
+<div class="info">
+  <div class="info-title">实际使用场景</div>
+  多分辨率图像在<strong>高 DPI 显示</strong>（macOS Retina、Windows HiDPI、Linux GNOME）中价值巨大。传统做法是加载一张大图然后缩放，会模糊；或者手动根据 <code>GraphicsConfiguration.getDefaultTransform()</code> 判断 DPI 后选择图片，代码繁琐。<code>MultiResolutionImage</code> 把这个逻辑内置到渲染管线。
+</div>
+
+---
+
+<h3>2.9 @Deprecated 注解增强 <span class="new-badge">NEW</span></h3>
+
+<div class="feature-box">
+  <div class="why">Java 8 之前 <code>@Deprecated</code> 只是一个标记，无法表达「为什么废弃」「从哪个版本开始废弃」「未来是否会移除」。开发者看到 <code>@Deprecated</code> 时无法判断：这个 API 是暂时不推荐还是即将删除？是应该尽快迁移还是可以继续用？</div>
+
+  <div class="principle">Java 9 为 <code>@Deprecated</code> 增加两个属性：<code>since</code>（从哪个版本废弃）和 <code>forRemoval</code>（是否会在未来版本移除）。<code>forRemoval=true</code> 时 javac 会发出更强的警告。这两个属性让废弃决策从「模糊的标记」变成「可操作的信号」。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>public class DeprecatedDemo {
+
+    // 普通废弃：暂时不推荐，但不会移除
+    @Deprecated(since = "9", forRemoval = false)
+    public static void oldButUsable() {
+        System.out.println("This is deprecated but still usable");
+    }
+
+    // 即将移除：应该尽快迁移
+    @Deprecated(since = "9", forRemoval = true)
+    public static void willBeRemoved() {
+        System.out.println("This will be removed in a future version");
+    }
+
+    // 只有 since，默认 forRemoval=false
+    @Deprecated(since = "9")
+    public static void sinceOnly() {
+        System.out.println("Deprecated since 9");
+    }
+
+    public static void newMethod() {
+        System.out.println("Use this instead");
+    }
+
+    public static void main(String[] args) throws Exception {
+        oldButUsable();
+        willBeRemoved();
+        sinceOnly();
+        newMethod();
+
+        // 通过反射读取注解属性
+        System.out.println("\n=== 反射读取 @Deprecated 属性 ===");
+        readDeprecatedInfo("oldButUsable");
+        readDeprecatedInfo("willBeRemoved");
+        readDeprecatedInfo("sinceOnly");
+        readDeprecatedInfo("newMethod");
+    }
+
+    static void readDeprecatedInfo(String methodName) throws Exception {
+        java.lang.reflect.Method m = DeprecatedDemo.class
+            .getMethod(methodName);
+        Deprecated d = m.getAnnotation(Deprecated.class);
+        System.out.println("\nMethod: " + methodName);
+        if (d == null) {
+            System.out.println("  Not deprecated");
+            return;
+        }
+        System.out.println("  since: " + d.since());
+        System.out.println("  forRemoval: " + d.forRemoval());
+    }
+}</code></pre>
+
+<p><strong>编译时警告差异</strong>：</p>
+
+<pre><code>$ javac DeprecatedDemo.java
+# 注意: DeprecatedDemo.java 使用或覆盖了已过时的 API。
+# 注意: 有关详细信息, 请使用 -Xlint:deprecation 重新编译。
+# 注意: DeprecatedDemo.java 使用或覆盖了标记为待移除的 API。
+# 注意: 有关详细信息, 请使用 -Xlint:removal 重新编译。
+
+$ javac -Xlint:removal DeprecatedDemo.java
+# DeprecatedDemo.java:30: 警告: [removal] DeprecatedDemo 中的
+#   willBeRemoved() 已过时, 且标记为待移除
+#         willBeRemoved();
+#         ^</code></pre>
+
+<h4>属性对比</h4>
+
+<table>
+  <thead><tr><th>属性</th><th>类型</th><th>默认值</th><th>作用</th></tr></thead>
+  <tbody>
+    <tr><td><code>since</code></td><td>String</td><td>""（空）</td><td>从哪个版本开始废弃（如 "9"）</td></tr>
+    <tr><td><code>forRemoval</code></td><td>boolean</td><td>false</td><td>是否会在未来版本移除</td></tr>
+  </tbody>
+</table>
+
+<table>
+  <thead><tr><th>forRemoval</th><th>javac 警告类型</th><th>严重度</th></tr></thead>
+  <tbody>
+    <tr><td>false</td><td><code>-Xlint:deprecation</code></td><td>普通废弃警告</td></tr>
+    <tr><td>true</td><td><code>-Xlint:removal</code></td><td>更强警告（标记为待移除）</td></tr>
+  </tbody>
+</table>
+
+<div class="mermaid">
+flowchart TD
+    A["@Deprecated"] --> B{"是否指定属性?"}
+    B -->|"无属性"| C["传统废弃标记<br/>等同 since='' forRemoval=false"]
+    B -->|"since='9'"| D["普通废弃警告<br/>-Xlint:deprecation"]
+    B -->|"since='9', forRemoval=true"| E["待移除警告<br/>-Xlint:removal"]
+    D --> F["提示：将来可能移除"]
+    E --> G["提示：尽快迁移"]
+    style D fill:#fff8e1,stroke:#f5a623
+    style E fill:#fdf2f2,stroke:#e74c3c
+</div>
+
+<div class="tip">
+  <div class="tip-title">迁移实践</div>
+  库作者应该在废弃 API 时同时标注 <code>since</code> 和 <code>forRemoval</code>：
+  <ul>
+    <li>如果只是想引导用户用新 API，用 <code>forRemoval=false</code></li>
+    <li>如果确定下个大版本要删除，用 <code>forRemoval=true</code>，让用户提前准备</li>
+    <li>不要滥用 <code>forRemoval=true</code>——过早标记会让用户恐慌</li>
+  </ul>
+</div>
+
+---
+
+<!-- =================================================================== -->
+
+<h2>三、JVM 底层与工具链</h2>
+
+<h3>3.1 多版本 JAR（Multi-Release JAR）</h3>
+
+<div class="feature-box">
+  <div class="why">库开发者面临两难：用新 API 编译则旧 JDK 无法运行；用旧 API 编译则无法利用新特性。多版本 JAR 让同一个 JAR 包含多个版本的实现，JVM 根据运行时版本自动选择。</div>
+
+  <div class="principle">JAR 中 <code>META-INF/versions/N/</code> 目录下存放 Java N 的类文件。清单文件加 <code>Multi-Release: true</code>。JVM 加载类时优先从版本特定目录查找。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code># 目录结构
+# mrjar/
+#   src/main/java/com/example/Util.java
+#   src/main/java9/com/example/Util.java      # Java 9 版本
+#   src/main/java11/com/example/Util.java     # Java 11 版本
+
+mkdir -p mrjar/src/main/java/com/example
+mkdir -p mrjar/src/main/java9/com/example
+mkdir -p mrjar/src/main/java11/com/example
+
+# --- 基础版本（Java 8）---
+cat > mrjar/src/main/java/com/example/Util.java << 'EOF'
+package com.example;
+
+public class Util {
+    public static String version() {
+        return "Java 8 baseline";
+    }
+}
+EOF
+
+# --- Java 9 版本 ---
+cat > mrjar/src/main/java9/com/example/Util.java << 'EOF'
+package com.example;
+
+import java.util.List;
+
+public class Util {
+    public static String version() {
+        List&lt;String&gt; list = List.of("a", "b", "c");
+        return "Java 9 (List.of: " + list + ")";
+    }
+}
+EOF
+
+# --- Java 11 版本 ---
+cat > mrjar/src/main/java11/com/example/Util.java << 'EOF'
+package com.example;
+
+public class Util {
+    public static String version() {
+        String s = "=".repeat(10);
+        return "Java 11 " + s;
+    }
+}
+EOF
+
+# --- 编译 ---
+cd mrjar
+mkdir -p build/classes build/classes9 build/classes11
+
+javac -d build/classes src/main/java/com/example/Util.java
+javac --release 9 -d build/classes9 src/main/java9/com/example/Util.java
+javac --release 11 -d build/classes11 src/main/java11/com/example/Util.java
+
+# --- 打包 ---
+mkdir -p build/jar/META-INF/versions/9
+mkdir -p build/jar/META-INF/versions/11
+
+cp -r build/classes/com build/jar/
+cp -r build/classes9/com build/jar/META-INF/versions/9/
+cp -r build/classes11/com build/jar/META-INF/versions/11/
+
+cat > build/jar/MANIFEST.MF << 'EOF'
+Manifest-Version: 1.0
+Multi-Release: true
+EOF
+
+cd build/jar
+jar cfm ../multi-release.jar META-INF/MANIFEST.MF .
+
+# --- 验证 ---
+cd ..
+unzip -l multi-release.jar | grep -E "Util.class|versions|MANIFEST"</code></pre>
+
+<div class="mermaid">
+flowchart TD
+    A["multi-release.jar"] --> B["META-INF/"]
+    A --> C["com/example/Util.class<br/>(Java 8 基础版)"]
+    B --> D["MANIFEST.MF<br/>Multi-Release: true"]
+    B --> E["versions/"]
+    E --> F["9/com/example/Util.class<br/>(Java 9 版)"]
+    E --> G["11/com/example/Util.class<br/>(Java 11 版)"]
+    style D fill:#fef0f0,stroke:#ea6f5a
+    style F fill:#e8f5e9
+    style G fill:#f3e5f5
+</div>
+
+<h4>运行时选择逻辑</h4>
+
+<div class="mermaid">
+flowchart TD
+    A["JVM 加载类"] --> B{"MANIFEST 有<br/>Multi-Release: true?"}
+    B -->|"否"| C["使用基础版本"]
+    B -->|"是"| D{"查找 META-INF/versions/<br/>与当前 JDK 版本匹配?"}
+    D -->|"找到 11/"| E["使用 versions/11/ 实现"]
+    D -->|"找到 9/"| F["使用 versions/9/ 实现"]
+    D -->|"未找到"| G{"降级查找<br/>更低的版本?"}
+    G -->|"找到"| E
+    G -->|"未找到"| C
+    style E fill:#e8f5e9,stroke:#42c02e
+    style F fill:#e8f5e9,stroke:#42c02e
+</div>
+
+---
+
+<h3>3.2 序列化过滤（Serialization Filtering）</h3>
+
+<div class="feature-box">
+  <div class="why">Java 反序列化是<strong>最著名的安全漏洞来源</strong>（Apache Commons Collections、WebLogic、Jenkins 等）。攻击者可以构造恶意序列化数据，在反序列化时执行任意代码。Java 9 引入 <code>ObjectInputFilter</code> 机制，允许在反序列化时白名单/黑名单过滤类。</div>
+
+  <div class="principle"><code>ObjectInputFilter</code> 在反序列化每个类时被调用，返回 <code>ALLOWED</code> / <code>REJECTED</code> / <code>UNDECIDED</code>。可以设置 JVM 级全局过滤器、线程级过滤器、或流级过滤器。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.io.*;
+import java.util.*;
+
+public class SerializationFilterDemo {
+
+    static class SafeData implements Serializable {
+        private static final long serialVersionUID = 1L;
+        String value;
+        SafeData(String v) { this.value = v; }
+        @Override public String toString() { return "SafeData{" + value + "}"; }
+    }
+
+    public static void main(String[] args) throws Exception {
+        // ===== 1. 设置 JVM 级全局过滤器（白名单模式）=====
+        ObjectInputFilter globalFilter = ObjectInputFilter.Config.createFilter(
+            "com.example.SerializationFilterDemo$SafeData;" +
+            "java.lang.*;" +
+            "java.util.*;" +
+            "!*"
+        );
+        ObjectInputFilter.Config.setSerialFilter(globalFilter);
+
+        System.out.println("Global filter set: " +
+            ObjectInputFilter.Config.getSerialFilter());
+
+        // ===== 2. 序列化安全对象 =====
+        SafeData data = new SafeData("hello");
+        byte[] bytes = serialize(data);
+        System.out.println("Serialized: " + bytes.length + " bytes");
+
+        // ===== 3. 反序列化（通过过滤器）=====
+        Object restored = deserialize(bytes);
+        System.out.println("Restored: " + restored);
+
+        // ===== 4. 流级过滤器 =====
+        System.out.println("\n=== Stream-level filter ===");
+        byte[] data2 = serialize(new ArrayList&lt;&gt;(List.of("a", "b")));
+
+        try (ObjectInputStream ois = new ObjectInputStream(
+                new ByteArrayInputStream(data2))) {
+            ois.setObjectInputFilter(info -&gt; {
+                Class&lt;?&gt; clazz = info.serialClass();
+                if (clazz == null) return ObjectInputFilter.Status.UNDECIDED;
+                String name = clazz.getName();
+                System.out.println("  Filter check: " + name);
+                if (name.startsWith("java.util.")) {
+                    return ObjectInputFilter.Status.ALLOWED;
+                }
+                return ObjectInputFilter.Status.REJECTED;
+            });
+
+            Object obj = ois.readObject();
+            System.out.println("Deserialized: " + obj);
+        }
+
+        // ===== 5. 拒绝场景 =====
+        System.out.println("\n=== Reject demo ===");
+        try (ObjectInputStream ois = new ObjectInputStream(
+                new ByteArrayInputStream(bytes))) {
+            ois.setObjectInputFilter(info -&gt; ObjectInputFilter.Status.REJECTED);
+            ois.readObject();
+        } catch (InvalidClassException e) {
+            System.out.println("Rejected: " + e.getMessage());
+        }
+
+        // ===== 6. 启动参数方式 =====
+        System.out.println("\n=== JVM 启动参数方式 ===");
+        System.out.println("java -Djdk.serialFilter='com.example.*;java.base/*;!*' MyApp");
+    }
+
+    static byte[] serialize(Object obj) throws IOException {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+             ObjectOutputStream oos = new ObjectOutputStream(baos)) {
+            oos.writeObject(obj);
+            return baos.toByteArray();
+        }
+    }
+
+    static Object deserialize(byte[] data) throws Exception {
+        try (ObjectInputStream ois = new ObjectInputStream(
+                new ByteArrayInputStream(data))) {
+            return ois.readObject();
+        }
+    }
+}</code></pre>
+
+<h4>过滤器语法</h4>
+
+<table>
+  <thead><tr><th>模式</th><th>含义</th><th>示例</th></tr></thead>
+  <tbody>
+    <tr><td><code>package.*</code></td><td>允许该包及子包下所有类</td><td><code>com.example.*</code></td></tr>
+    <tr><td><code>ClassName</code></td><td>精确匹配类名</td><td><code>java.lang.String</code></td></tr>
+    <tr><td><code>!pattern</code></td><td>拒绝匹配</td><td><code>!*</code> 拒绝所有</td></tr>
+    <tr><td><code>module/package.*</code></td><td>按模块限定</td><td><code>java.base/java.lang.*</code></td></tr>
+  </tbody>
+</table>
+
+<div class="mermaid">
+flowchart TD
+    A["ObjectInputStream.readObject()"] --> B["读类名"]
+    B --> C["调用 ObjectInputFilter"]
+    C --> D{"过滤器返回?"}
+    D -->|"ALLOWED"| E["加载并实例化"]
+    D -->|"REJECTED"| F["抛 InvalidClassException"]
+    D -->|"UNDECIDED"| G["使用默认策略<br/>(通常 ALLOWED)"]
+    E --> H["继续读下一个类"]
+    style F fill:#fdf2f2,stroke:#e74c3c
+    style E fill:#e8f5e9,stroke:#42c02e
+</div>
+
+<div class="production-note">
+  <div class="header">生产环境强制建议</div>
+  所有接受外部序列化数据的应用（RMI、JMS、JMX、Hessian 等）都应该设置序列化过滤器。启动参数：
+  <code>-Djdk.serialFilter="com.mycompany.*;java.base/*;!*"</code>
+</div>
+
+---
+
+<h3>3.3 统一 JVM 日志</h3>
+
+<div class="feature-box">
+  <div class="why">Java 9 之前，不同 JVM 组件使用不同日志机制：GC 用 <code>-Xloggc</code>，类加载用 <code>-XX:+TraceClassLoading</code>，JIT 用 <code>-XX:+PrintCompilation</code>。格式不统一，无法集中过滤。</div>
+
+  <div class="principle">引入 <code>-Xlog</code> 选项，用标签系统统一所有 JVM 日志。标签如 <code>gc</code>、<code>class</code>、<code>os</code>、<code>safepoint</code>、<code>exceptions</code>。支持按标签、级别、输出目标过滤。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code># 1. 基础用法：GC 日志到文件
+java -Xlog:gc*:file=gc.log:time,uptime,level,tags -jar app.jar
+
+# 2. 选择性输出：只输出 gc 和 class loading 的 info 级别
+java -Xlog:gc+class=info -jar app.jar
+
+# 3. 输出到 stdout
+java -Xlog:gc:stdout -jar app.jar
+
+# 4. 按标签过滤 + 按级别过滤
+java -Xlog:gc*=debug:file=gc-debug.log -jar app.jar
+
+# 5. 多标签组合
+java -Xlog:gc+heap=debug,gc+ergo=debug -jar app.jar
+
+# 6. 查看所有可用标签
+java -Xlog:help
+
+# 7. 输出示例（GC + 类加载）
+java -Xlog:gc,class+load=info -jar app.jar
+# [0.123s][info][gc] GC(0) Pause Young (G1 Evacuation Pause) 8M->2M(512M) 3.456ms
+# [0.456s][info][class,load] java.lang.Object source: jrt:/java.base
+# [0.457s][info][class,load] java.lang.String source: jrt:/java.base
+
+# 8. 生产环境推荐配置
+java -Xlog:gc*=info,safepoint=info,class+load=info:file=/var/log/app/gc.log:time,uptime,level,tags:filecount=5,filesize=100m \
+     -jar app.jar</code></pre>
+
+<h4>标签体系</h4>
+
+<table>
+  <thead><tr><th>标签</th><th>含义</th><th>常用级别</th></tr></thead>
+  <tbody>
+    <tr><td><code>gc</code></td><td>垃圾回收</td><td>info</td></tr>
+    <tr><td><code>gc+heap</code></td><td>GC 堆信息</td><td>debug</td></tr>
+    <tr><td><code>gc+ergo</code></td><td>GC 启发式决策</td><td>debug</td></tr>
+    <tr><td><code>class</code></td><td>类加载</td><td>info</td></tr>
+    <tr><td><code>class+load</code></td><td>类加载详情</td><td>info</td></tr>
+    <tr><td><code>os</code></td><td>操作系统</td><td>info</td></tr>
+    <tr><td><code>safepoint</code></td><td>安全点</td><td>info</td></tr>
+    <tr><td><code>exceptions</code></td><td>异常</td><td>info</td></tr>
+    <tr><td><code>jit</code></td><td>JIT 编译</td><td>info</td></tr>
+  </tbody>
+</table>
+
+<div class="mermaid">
+flowchart TD
+    A["JVM 组件"] --> B["GC"]
+    A --> C["ClassLoader"]
+    A --> D["JIT"]
+    A --> E["OS"]
+    A --> F["Safepoint"]
+    B --> G["统一日志框架<br/>-Xlog"]
+    C --> G
+    D --> G
+    E --> G
+    F --> G
+    G --> H{"过滤配置"}
+    H -->|"按标签"| I["gc, class, os..."]
+    H -->|"按级别"| J["trace/debug/info/warning/error"]
+    H -->|"按输出"| K["stdout / file / stderr"]
+    I --> L["统一格式输出"]
+    J --> L
+    K --> L
+    style G fill:#fef0f0,stroke:#ea6f5a,stroke-width:2px
+</div>
+
+---
+
+<h3>3.4 Javadoc 增强</h3>
+
+<div class="feature-box">
+  <div class="why">Java 8 的 Javadoc 输出 HTML 4，不支持现代浏览器特性。生成的文档没有内置搜索，用户只能通过目录页手动导航。</div>
+
+  <div class="principle">Java 9 的 Javadoc 支持 HTML5 输出和内置搜索。搜索索引在生成时构建，输出为 JS 文件，浏览器端实时搜索。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code># 项目结构
+# src/
+#   com/example/api/
+#     Greeter.java
+#     package-info.java
+
+mkdir -p src/com/example/api
+mkdir -p docs
+
+cat > src/com/example/api/Greeter.java << 'EOF'
+package com.example.api;
+
+/**
+ * 问候服务接口。
+ *
+ * &lt;p&gt;这个接口定义了向用户问候的契约。实现类可以是：
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@link SimpleGreeter} 简单实现&lt;/li&gt;
+ *   &lt;li&gt;本地化实现&lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ * @since 9
+ */
+public interface Greeter {
+    /**
+     * 向指定用户问候。
+     *
+     * @param name 用户名称，不能为 {@code null}
+     * @return 问候语
+     * @throws IllegalArgumentException 如果 name 为 null
+     */
+    String greet(String name);
+}
+EOF
+
+cat > src/com/example/api/package-info.java << 'EOF'
+/**
+ * Java 9 Javadoc 演示包。
+ *
+ * @since 9
+ */
+package com.example.api;
+EOF
+
+# --- 生成 Javadoc（HTML5 + 搜索）---
+javadoc -d docs \
+        -html5 \
+        -search \
+        -sourcepath src \
+        -subpackages com.example
+
+# --- 验证输出 ---
+ls docs/
+# index.html     (HTML5)
+# search.js      (搜索索引)
+# allclasses-index.html
+# ...
+
+# --- 浏览器打开 ---
+# open docs/index.html
+# 顶部有搜索框，可实时搜索类/方法</code></pre>
+
+<table>
+  <thead><tr><th>维度</th><th>Java 8</th><th>Java 9</th></tr></thead>
+  <tbody>
+    <tr><td>HTML 版本</td><td>HTML 4</td><td>HTML 5</td></tr>
+    <tr><td>搜索</td><td>无</td><td>内置 JS 搜索</td></tr>
+    <tr><td>响应式</td><td>无</td><td>部分支持</td></tr>
+    <tr><td>生成命令</td><td>javadoc -d docs</td><td>javadoc -html5 -search -d docs</td></tr>
+  </tbody>
+</table>
+
+<div class="mermaid">
+flowchart LR
+    A["源文件<br/>(.java)"] --> B["javadoc 工具"]
+    B --> C{"选项"}
+    C -->|"-html5"| D["HTML5 输出"]
+    C -->|"-search"| E["生成 search.js"]
+    C -->|"-subpackages"| F["递归处理包"]
+    D --> G["docs/"]
+    E --> G
+    F --> G
+    G --> H["浏览器打开<br/>实时搜索"]
+    style E fill:#e8f5e9,stroke:#42c02e
+</div>
+
+---
+
+<h3>3.5 CompletableFuture 改进</h3>
+
+<div class="feature-box">
+  <div class="why">Java 8 的 CompletableFuture 缺少几个实用功能：① 没有超时控制；② 没有延迟执行器；③ 不能与 ProcessHandle 联动。Java 9 补充了这些。</div>
+
+  <div class="principle">新增 <code>delayedExecutor()</code>、<code>orTimeout()</code>、<code>completeOnTimeout()</code>，以及支持 <code>ProcessHandle.onExit()</code> 返回的 CompletableFuture。</div>
+</div>
+
+<h4>可执行示例</h4>
+
+<pre><code>import java.util.concurrent.*;
+
+public class CompletableFutureEnhancement {
+    public static void main(String[] args) throws Exception {
+
+        // ===== 1. orTimeout：超时后抛 TimeoutException =====
+        System.out.println("=== orTimeout ===");
+        CompletableFuture&lt;String&gt; slow = CompletableFuture.supplyAsync(() -&gt; {
+            try { Thread.sleep(5000); } catch (InterruptedException e) {}
+            return "done";
+        });
+        try {
+            slow.orTimeout(1, TimeUnit.SECONDS).join();
+        } catch (CompletionException e) {
+            System.out.println("Timeout: " + e.getCause().getClass().getSimpleName());
+        }
+
+        // ===== 2. completeOnTimeout：超时后用默认值 =====
+        System.out.println("\n=== completeOnTimeout ===");
+        CompletableFuture&lt;String&gt; withDefault =
+            CompletableFuture.supplyAsync(() -&gt; {
+                try { Thread.sleep(5000); } catch (InterruptedException e) {}
+                return "real";
+            }).completeOnTimeout("default", 1, TimeUnit.SECONDS);
+        System.out.println("Result: " + withDefault.join()); // default
+
+        // ===== 3. delayedExecutor：延迟执行器 =====
+        System.out.println("\n=== delayedExecutor ===");
+        Executor delayed = CompletableFuture.delayedExecutor(
+            1, TimeUnit.SECONDS
+        );
+        long start = System.currentTimeMillis();
+        CompletableFuture&lt;String&gt; delayedTask = CompletableFuture.supplyAsync(
+            () -&gt; "delayed result",
+            delayed
+        );
+        System.out.println("Result: " + delayedTask.join()
+            + " (after " + (System.currentTimeMillis() - start) + "ms)");
+
+        // 带自定义线程池的延迟执行器
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        Executor delayedOnPool = CompletableFuture.delayedExecutor(
+            500, TimeUnit.MILLISECONDS, pool
+        );
+        CompletableFuture.supplyAsync(() -&gt; "on pool", delayedOnPool).join();
+        pool.shutdown();
+
+        // ===== 4. 与 ProcessHandle.onExit 联动 =====
+        System.out.println("\n=== ProcessHandle.onExit ===");
+        Process p = new ProcessBuilder("sleep", "2").start();
+        ProcessHandle handle = p.toHandle();
+
+        CompletableFuture&lt;ProcessHandle&gt; onExit = handle.onExit();
+        onExit.thenAccept(h -&gt;
+            System.out.println("Process " + h.pid() + " exited")
+        );
+        System.out.println("Waiting for process...");
+        onExit.join();
+
+        // ===== 5. 组合使用 =====
+        System.out.println("\n=== 组合使用 ===");
+        CompletableFuture&lt;String&gt; combo = CompletableFuture
+            .supplyAsync(() -&gt; {
+                try { Thread.sleep(3000); } catch (InterruptedException e) {}
+                return "slow";
+            })
+            .completeOnTimeout("timeout-fallback", 1, TimeUnit.SECONDS)
+            .thenApply(s -&gt; "final: " + s);
+        System.out.println(combo.join()); // final: timeout-fallback
+
+        System.out.println("\n=== 完成 ===");
+    }
+}</code></pre>
+
+<h4>新增方法对照</h4>
+
+<table>
+  <thead><tr><th>方法</th><th>作用</th><th>返回值</th></tr></thead>
+  <tbody>
+    <tr><td><code>orTimeout(timeout, unit)</code></td><td>超时后以 TimeoutException 完成</td><td>CompletableFuture</td></tr>
+    <tr><td><code>completeOnTimeout(value, timeout, unit)</code></td><td>超时后用默认值完成</td><td>CompletableFuture</td></tr>
+    <tr><td><code>delayedExecutor(delay, unit)</code></td><td>创建延迟执行的 Executor</td><td>Executor</td></tr>
+    <tr><td><code>delayedExecutor(delay, unit, executor)</code></td><td>延迟执行器（指定底层线程池）</td><td>Executor</td></tr>
+  </tbody>
+</table>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Main as 主线程
+    participant CF as CompletableFuture
+    participant Pool as ForkJoinPool
+
+    Main->>CF: supplyAsync(slowTask)
+    CF->>Pool: 提交任务
+    Main->>CF: orTimeout(1, SECONDS)
+    Note over CF: 启动超时计时器
+
+    alt 任务 1 秒内完成
+        Pool-->>CF: 结果
+        CF-->>Main: 正常返回
+    else 超过 1 秒
+        CF->>CF: 抛 TimeoutException
+        CF-->>Main: CompletionException
+    end
+</div>
+
+---
+
+<h2>完整覆盖清单（26 项确认）</h2>
+
+<table>
+  <thead><tr><th>#</th><th>分类</th><th>特性</th><th>覆盖位置</th><th>状态</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>模块化</td><td>JPMS</td><td>L2 · JPMS 模块系统原理</td><td><span class="skip-badge">已覆盖</span></td></tr>
+    <tr><td>2</td><td>模块化</td><td>强封装机制</td><td>L2 · JPMS 模块系统原理</td><td><span class="skip-badge">已覆盖</span></td></tr>
+    <tr><td>3</td><td>模块化</td><td>JDK 模块化</td><td>L2 · JPMS 模块系统原理</td><td><span class="skip-badge">已覆盖</span></td></tr>
+    <tr><td>4</td><td>模块化</td><td>jlink</td><td>L2 · JPMS 模块系统原理</td><td><span class="skip-badge">已覆盖</span></td></tr>
+    <tr><td>5</td><td>语言</td><td>JShell (REPL)</td><td>本课 1.1</td><td>✅</td></tr>
+    <tr><td>6</td><td>语言</td><td>接口私有方法</td><td>本课 1.2</td><td>✅</td></tr>
+    <tr><td>7</td><td>语言</td><td>try-with-resources 增强</td><td>本课 1.3</td><td>✅</td></tr>
+    <tr><td>8</td><td>语言</td><td>钻石操作符扩展</td><td>本课 1.4</td><td>✅</td></tr>
+    <tr><td>9</td><td>语言</td><td>@SafeVarargs 扩展</td><td>本课 1.5</td><td>✅ <span class="new-badge">NEW</span></td></tr>
+    <tr><td>10</td><td>API</td><td>集合工厂方法</td><td>本课 2.1</td><td>✅</td></tr>
+    <tr><td>11</td><td>API</td><td>Stream API 增强</td><td>本课 2.2</td><td>✅</td></tr>
+    <tr><td>12</td><td>API</td><td>Optional 类增强</td><td>本课 2.3</td><td>✅</td></tr>
+    <tr><td>13</td><td>API</td><td>HTTP Client API</td><td>本课 2.4</td><td>✅</td></tr>
+    <tr><td>14</td><td>API</td><td>Compact Strings</td><td>L3 · Compact Strings 源码走读</td><td><span class="skip-badge">已覆盖</span></td></tr>
+    <tr><td>15</td><td>API</td><td>ProcessHandle</td><td>本课 2.5</td><td>✅</td></tr>
+    <tr><td>16</td><td>API</td><td>Stack-Walking API</td><td>本课 2.6</td><td>✅</td></tr>
+    <tr><td>17</td><td>API</td><td>VarHandle</td><td>本课 2.7</td><td>✅</td></tr>
+    <tr><td>18</td><td>API</td><td>多分辨率图像 API</td><td>本课 2.8</td><td>✅ <span class="new-badge">NEW</span></td></tr>
+    <tr><td>19</td><td>API</td><td>@Deprecated 注解增强</td><td>本课 2.9</td><td>✅ <span class="new-badge">NEW</span></td></tr>
+    <tr><td>20</td><td>JVM</td><td>G1 成为默认 GC</td><td>L4 · G1 GC 边界与 Trade-off</td><td><span class="skip-badge">已覆盖</span></td></tr>
+    <tr><td>21</td><td>JVM</td><td>多版本 JAR</td><td>本课 3.1</td><td>✅</td></tr>
+    <tr><td>22</td><td>JVM</td><td>序列化过滤</td><td>本课 3.2</td><td>✅</td></tr>
+    <tr><td>23</td><td>JVM</td><td>统一 JVM 日志</td><td>本课 3.3</td><td>✅</td></tr>
+    <tr><td>24</td><td>JVM</td><td>Javadoc 增强</td><td>本课 3.4</td><td>✅</td></tr>
+    <tr><td>25</td><td>JVM</td><td>CompletableFuture 改进</td><td>本课 3.5</td><td>✅</td></tr>
+  </tbody>
+</table>
+
+<div class="tip">
+  <div class="tip-title">去重结果</div>
+  <ul>
+    <li><strong>6 个特性</strong>已在 L2/L3/L4 深入讲透，本课<strong>不重复</strong>（标记为「已覆盖」）</li>
+    <li><strong>19 个特性</strong>本课补充，每个含「为什么 / 示例 / 原理图」</li>
+    <li>其中 <strong>3 个特性</strong>是原始内容里存在但之前完全遗漏的（@SafeVarargs / 多分辨率图像 / @Deprecated）</li>
+  </ul>
+</div>
+
+<h2>本课 Deep-Grill 就绪度</h2>
+
+<div class="deep-grill-readiness">
+  <h4>学完本课后，检查以下能力：</h4>
+  <ul>
+    <li class="done">能用 JShell 快速验证 API 行为（对应 instructor 角度）</li>
+    <li class="done">能写出接口私有方法的适用场景（对应 code reviewer 角度）</li>
+    <li class="done">能解释 @SafeVarargs 在 Java 9 中新增 private 方法的原因（对应 interviewer 角度）</li>
+    <li class="done">能说出 takeWhile 和 filter 的本质区别（对应 interviewer 角度）</li>
+    <li class="done">能用 HTTP Client 做同步/异步/WebSocket（对应 code reviewer 角度）</li>
+    <li class="done">能解释 MultiResolutionImage 的 getResolutionVariant 逻辑（对应 interviewer 角度）</li>
+    <li class="done">能说出 @Deprecated 的 forRemoval 属性对警告的影响（对应 code reviewer 角度）</li>
+    <li class="done">能配置序列化过滤器防御反序列化漏洞（对应 incident responder 角度）</li>
+    <li class="done">能用 -Xlog 统一配置 JVM 日志（对应 incident responder 角度）</li>
+    <li class="done">能写出 4 个新 CompletableFuture 方法的使用（对应 code reviewer 角度）</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <a href="./0004-g1-gc-boundaries.html">← 上一课：G1 GC 边界与 Trade-off</a>
+  <a href="../interview/0001-java9-interview.html">面试题库 →</a>
+</div>
+
+    </div>
+  </main>
+</div>
+
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){b.classList.toggle('visible',window.scrollY>400);});})();
+(function(){
+  var t=document.getElementById('toc');
+  var hs=document.querySelectorAll('.article-body h2, .article-body h3, .article-body h4');
+  hs.forEach(function(h){
+    var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();
+    h.id=id;
+    var a=document.createElement('a');
+    a.href='#'+id;
+    a.textContent=h.textContent;
+    a.className='toc-'+h.tagName.toLowerCase();
+    t.appendChild(a);
+  });
+  var ls=t.querySelectorAll('a');
+  var es=[];
+  ls.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)es.push({el:e,link:l});});
+  window.addEventListener('scroll',function(){var y=window.scrollY+120;var c=null;es.forEach(function(i){if(i.el.offsetTop<=y)c=i;});ls.forEach(function(l){l.classList.remove('active');});if(c)c.link.classList.add('active');});
+})();
+</script>
+
+</body>
+</html>

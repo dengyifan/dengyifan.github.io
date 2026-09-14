@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>G1 GC 边界与 Trade-off</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'base',
+      themeVariables: { primaryColor: '#fef0f0', primaryBorderColor: '#ea6f5a', lineColor: '#999', fontSize: '14px' } });
+  </script>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 9</span></div></nav>
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>L4 · G1 GC 边界与 Trade-off</h1>
+      <div class="article-meta">
+        <span>📚 层模型 L4 边界层</span>
+        <span>🔬 OpenJDK jdk9</span>
+        <span>⏱ 预计 35 分钟</span>
+      </div>
+    </div>
+    <div class="article-body">
+
+<h2>为什么 Java 9 换成 G1：CMS 的结构性缺陷</h2>
+
+<p>Java 8 的默认 GC 是 CMS（Concurrent Mark Sweep）。CMS 有两个无法通过调参解决的结构性缺陷：</p>
+
+<table>
+  <thead><tr><th>缺陷</th><th>根因</th><th>后果</th></tr></thead>
+  <tbody>
+    <tr><td><strong>碎片化</strong></td><td>标记-清除算法不移动对象</td><td>长时间运行后无法分配大对象 → Full GC / Concurrent Mode Failure</td></tr>
+    <tr><td><strong>暂停不可预测</strong></td><td>暂停时间随堆大小和碎片程度波动</td><td>无法设定 <code>-XX:MaxGCPauseMillis</code> 目标</td></tr>
+    <tr><td><strong>并发失败惩罚重</strong></td><td>并发收集期间应用分配过快 → 退化到单线程 Full GC</td><td>可能停顿数秒</td></tr>
+  </tbody>
+</table>
+
+<div class="warning">
+  <div class="warning-title">常见误区</div>
+  “G1 一定比 CMS 快”是错的。<strong>G1 的目标不是最大化吞吐量，而是在可控暂停下尽量高吞吐</strong>。对于小堆（&lt;4GB）且追求最大吞吐的场景，Parallel GC 可能更合适。G1 的价值在于<strong>可预测的暂停</strong>和<strong>可调的目标</strong>。
+</div>
+
+<h2>G1 的 Region 化堆布局</h2>
+
+<div class="mermaid">
+flowchart TD
+    subgraph heap["G1 堆内存（约2048个Region）"]
+        R1["Eden<br/>(新对象)"]
+        R2["Eden"]
+        R3["Survivor<br/>(存活对象)"]
+        R4["Old<br/>(老年代)"]
+        R5["Old"]
+        R6["Humongous<br/>(大对象 ≥ Region/2)"]
+        R7["Free<br/>(空闲)"]
+        R8["Free"]
+    end
+    style R1 fill:#e8f5e9
+    style R2 fill:#e8f5e9
+    style R3 fill:#fff8e1
+    style R4 fill:#fdf2f2
+    style R5 fill:#fdf2f2
+    style R6 fill:#f3e5f5
+    style R7 fill:#f5f5f5
+    style R8 fill:#f5f5f5
+</div>
+
+<p><strong>Region 大小</strong>：<code>-XX:G1HeapRegionSize</code>，默认 1-32MB，根据堆大小自动计算，目标是 2048 个 Region 左右。</p>
+
+<p><strong>核心设计</strong>：物理上堆是连续的，逻辑上被划分为等大小的 Region。每个 Region 可以在不同时刻扮演 Eden / Survivor / Old / Humongous 角色。这打破了传统分代的物理隔离。</p>
+
+<h3>Humongous 对象的特殊处理</h3>
+
+<p>大小 ≥ Region 一半的对象被标记为 <strong>Humongous</strong>，分配在连续的 Region 中。这类对象直接进入 Old 区，且在 Region 回收时粒度更粗，容易造成碎片。</p>
+
+<div class="production-note">
+  <div class="header">生产环境：Humongous 是 G1 性能杀手</div>
+  如果应用频繁分配接近 Region 一半的大对象（如大数组、大字符串），会频繁触发 Humongous 分配。诊断方法：<code>-Xlog:gc+heap=debug</code> 输出中搜索 "Humongous"。优化方向：增大 Region 大小（<code>-XX:G1HeapRegionSize=32m</code>）或减少大对象分配。
+</div>
+
+<h2>G1 的三类回收</h2>
+
+<div class="mermaid">
+flowchart TD
+    A["G1 回收周期"] --> B["Young GC<br/>(Eden + Survivor)"]
+    A --> C["并发标记周期<br/>(Concurrent Marking)"]
+    A --> D["Mixed GC<br/>(Young + 部分 Old)"]
+    A --> E["Full GC<br/>(兜底，单线程)"]
+
+    B --> B1["存活对象复制到新 Survivor"]
+    C --> C1["全局标记活跃对象<br/>计算各 Region 垃圾比例"]
+    D --> D1["优先回收垃圾最多的 Region<br/>(Garbage First!)"]
+    E --> E1["类似 Serial GC<br/>整堆整理"]
+
+    style D fill:#e8f5e9,stroke:#42c02e,stroke-width:2px
+    style E fill:#fdf2f2,stroke:#e74c3c
+</div>
+
+<h3>Mixed GC 的 Region 选择策略</h3>
+
+<p>Mixed GC 是 G1 的核心创新。它每次回收时：</p>
+
+<pre><code>// 伪代码：Mixed GC 的 Region 选择
+function selectRegionsForMixedGC() {
+    // 1. 收集所有候选 Old Region（并发标记阶段已标记）
+    candidates = getOldRegionsWithMarkedObjects();
+
+    // 2. 按垃圾比例从高到低排序
+    //    垃圾比例 = 已死对象大小 / Region 总大小
+    candidates.sortBy(region -> region.deadRatio, DESC);
+
+    // 3. 从垃圾最多的开始，累加回收时间估计
+    selected = [];
+    totalPauseEstimate = 0;
+    for (region in candidates) {
+        regionPause = estimateCopyTime(region);
+        if (totalPauseEstimate + regionPause > maxGCPauseMillis) {
+            break;  // 达到暂停目标，停止
+        }
+        selected.add(region);
+        totalPauseEstimate += regionPause;
+    }
+    return selected;   // 这就是 "Garbage First" 的含义
+}</code></pre>
+
+<p><strong>关键</strong>：Mixed GC 每次回收的 Old Region 数量由 <code>-XX:MaxGCPauseMillis</code> 和实际垃圾比例动态决定。这让 G1 能够<strong>在暂停时间和回收效率之间动态权衡</strong>。</p>
+
+<h2>什么时候不该用 G1</h2>
+
+<table>
+  <thead><tr><th>场景</th><th>推荐 GC</th><th>原因</th></tr></thead>
+  <tbody>
+    <tr><td>堆 &lt; 4GB，追求最大吞吐</td><td>Parallel GC</td><td>G1 的分区管理和并发标记有开销，小堆上不如 Parallel 直接</td></tr>
+    <tr><td>单核 CPU 或小容器</td><td>Serial GC</td><td>G1 的并发线程需要多核才能发挥作用</td></tr>
+    <tr><td>极端低延迟（&lt;10ms）</td><td>ZGC / Shenandoah</td><td>G1 的暂停通常在 10-200ms，无法达到亚毫秒级</td></tr>
+    <tr><td>超大堆（&gt;64GB）</td><td>ZGC</td><td>G1 在超大堆上 Region 数量多，管理开销上升</td></tr>
+    <tr><td>大量 Humongous 对象</td><td>Parallel / ZGC</td><td>G1 的 Humongous 碎片问题严重</td></tr>
+    <tr><td>批量计算，暂停不敏感</td><td>Parallel GC</td><td>G1 的并发开销换来的低暂停没有价值</td></tr>
+  </tbody>
+</table>
+
+<div class="info">
+  <div class="info-title">Java 9 时代的现实</div>
+  Java 9 时 ZGC（Java 11 引入）和 Shenandoah 尚未可用。因此 Java 9 的 G1 默认化是在 CMS 和 Parallel 之间的折中。如果你在 Java 11+ 环境，超低延迟场景应该考虑 ZGC。
+</div>
+
+<h2>G1 调优参数</h2>
+
+<table>
+  <thead><tr><th>参数</th><th>默认</th><th>作用</th><th>建议</th></tr></thead>
+  <tbody>
+    <tr><td><code>-XX:MaxGCPauseMillis</code></td><td>200ms</td><td>目标暂停时间</td><td>不要设太小（&lt;50ms 会导致 Region 回收不足，退化到 Full GC）</td></tr>
+    <tr><td><code>-XX:G1HeapRegionSize</code></td><td>自动</td><td>Region 大小</td><td>Humongous 多时增大</td></tr>
+    <tr><td><code>-XX:InitiatingHeapOccupancyPercent</code></td><td>45%</td><td>触发并发标记的堆占用率</td><td>频繁 Mixed GC 时降低</td></tr>
+    <tr><td><code>-XX:G1MixedGCLiveThresholdPercent</code></td><td>85%</td><td>Old Region 存活对象超过此比例则不回收</td><td>降低可回收更多 Region，但成本上升</td></tr>
+    <tr><td><code>-XX:G1MixedGCCountTarget</code></td><td>8</td><td>Mixed GC 分几次完成</td><td>增大可降低单次暂停</td></tr>
+    <tr><td><code>-XX:G1NewSizePercent</code></td><td>5%</td><td>Young 区最小占比</td><td>Young GC 频繁时增大</td></tr>
+    <tr><td><code>-XX:G1MaxNewSizePercent</code></td><td>60%</td><td>Young 区最大占比</td><td>控制 Young GC 频率</td></tr>
+  </tbody>
+</table>
+
+<h2>并发语义与异常容错（L4 必查维度）</h2>
+
+<h3>并发语义</h3>
+
+<table>
+  <thead><tr><th>阶段</th><th>与应用线程的关系</th><th>是否 STW</th></tr></thead>
+  <tbody>
+    <tr><td>Young GC</td><td>并行（多 GC 线程）</td><td>是（短暂停）</td></tr>
+    <tr><td>并发标记</td><td>并发（与用户线程同时运行）</td><td>否（仅初始标记和最终标记 STW）</td></tr>
+    <tr><td>Mixed GC</td><td>并行（多 GC 线程）</td><td>是（可控暂停）</td></tr>
+    <tr><td>Full GC</td><td>单线程或并行</td><td>是（长暂停）</td></tr>
+    <tr><td>Refinement（卡表更新）</td><td>并发（写屏障）</td><td>否</td></tr>
+  </tbody>
+</table>
+
+<h3>异常容错</h3>
+
+<table>
+  <thead><tr><th>问题</th><th>触发条件</th><th>G1 的行为</th></tr></thead>
+  <tbody>
+    <tr><td>Concurrent Mode Failure</td><td>并发标记期间应用分配过快，Old 区满</td><td>退化到 Full GC（单线程整理，长暂停）</td></tr>
+    <tr><td>Evacuation Failure</td><td>Young GC 时 Survivor 空间不足</td><td>对象晋升到 Old 区，可能触发 Full GC</td></tr>
+    <tr><td>Humongous 分配失败</td><td>连续 Region 不足</td><td>触发 Full GC 释放空间</td></tr>
+    <tr><td>To-space Exhausted</td><td>复制目标 Region 不足</td><td>回退：保留原对象，标记待下次处理</td></tr>
+  </tbody>
+</table>
+
+<h3>边界判断</h3>
+
+<table>
+  <thead><tr><th>边界</th><th>阈值</th><th>影响</th></tr></thead>
+  <tbody>
+    <tr><td>Humongous 判定</td><td>对象 ≥ Region 大小 / 2</td><td>直接进入 Old 区，碎片风险</td></tr>
+    <tr><td>Region 大小</td><td>1-32MB，2048 个为目标</td><td>太小 → Humongous 多；太大 → 回收粒度粗</td></tr>
+    <tr><td>并发标记触发</td><td>堆占用 45%</td><td>太高 → 来不及标记就满；太低 → 频繁标记</td></tr>
+    <tr><td>Mixed GC 触发</td><td>并发标记完成后</td><td>标记周期长度影响回收及时性</td></tr>
+  </tbody>
+</table>
+
+<h3>性能开销</h3>
+
+<table>
+  <thead><tr><th>维度</th><th>开销</th><th>对比 CMS</th></tr></thead>
+  <tbody>
+    <tr><td>写屏障</td><td>每次引用赋值额外检查</td><td>类似</td></tr>
+    <tr><td>卡表（Card Table）</td><td>每 Region 一张卡表</td><td>更细粒度</td></tr>
+    <tr><td>记忆集（RSet）</td><td>每个 Region 维护跨 Region 引用</td><td>CMS 无此开销</td></tr>
+    <tr><td>并发标记线程</td><td>占用 CPU（约 1/4 核心数）</td><td>类似</td></tr>
+    <tr><td>Young GC</td><td>并行复制</td><td>类似</td></tr>
+    <tr><td>内存占用</td><td>RSet 约占堆 5-10%</td><td>CMS 约 1%</td></tr>
+  </tbody>
+</table>
+
+<h2>完整可执行示例：观察 G1 行为</h2>
+
+<pre><code>/**
+ * G1 GC 行为观察示例
+ *
+ * 运行方式：
+ *   javac G1Demo.java
+ *   java -XX:+UseG1GC \
+ *        -Xms512m -Xmx512m \
+ *        -XX:MaxGCPauseMillis=100 \
+ *        -Xlog:gc*:file=gc.log:time,uptime,level,tags \
+ *        G1Demo
+ *
+ * 观察 gc.log 中的：
+ *   - Pause Young (G1 Evacuation Pause)
+ *   - Pause Concurrent Mark (CMS-like)
+ *   - Pause Remark
+ *   - Pause Cleanup
+ *   - Pause Mixed (G1 Evacuation Pause)
+ *   - Pause Full (G1 Compaction Pause)
+ */
+public class G1Demo {
+
+    static final int OBJECT_SIZE = 1024;         // 1KB
+    static final int ALLOC_RATE = 5000;          // 每次循环分配5000个对象
+    static final int ITERATIONS = 200;
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("=== G1 GC 行为观察 ===");
+        System.out.println("Max heap: " + Runtime.getRuntime().maxMemory()
+            / 1024 / 1024 + " MB");
+        System.out.println("GC: " + java.lang.management.ManagementFactory
+            .getGarbageCollectorMXBeans());
+
+        // 保留一些长期存活对象，制造 Old 区压力
+        java.util.List&lt;byte[]&gt; longLived = new java.util.ArrayList&lt;&gt;();
+
+        for (int iter = 0; iter &lt; ITERATIONS; iter++) {
+            // 短命对象：大部分会被 Young GC 回收
+            for (int i = 0; i &lt; ALLOC_RATE; i++) {
+                byte[] temp = new byte[OBJECT_SIZE];
+                temp[0] = (byte) i;
+            }
+
+            // 每 10 轮保留一批对象，制造 Old 区增长
+            if (iter % 10 == 0) {
+                for (int i = 0; i &lt; 100; i++) {
+                    byte[] survivor = new byte[OBJECT_SIZE * 10];
+                    longLived.add(survivor);
+                }
+                System.out.println("Iter " + iter
+                    + " | heap used: "
+                    + (Runtime.getRuntime().totalMemory()
+                       - Runtime.getRuntime().freeMemory())
+                    / 1024 / 1024 + " MB"
+                    + " | retained: " + longLived.size());
+            }
+
+            Thread.sleep(50);
+        }
+
+        System.out.println("\n=== 完成 ===");
+        System.out.println("Final retained objects: " + longLived.size());
+        System.out.println("Check gc.log for G1 behavior");
+    }
+}</code></pre>
+
+<p><strong>运行观察</strong>：在 <code>gc.log</code> 中，你会看到：</p>
+
+<pre><code>[0.123s][info][gc] GC(0) Pause Young (G1 Evacuation Pause) 8M->2M(512M) 3.456ms
+[0.456s][info][gc] GC(1) Pause Young (G1 Evacuation Pause) 15M->4M(512M) 4.123ms
+...
+[2.345s][info][gc] GC(10) Pause Concurrent Mark (CMS-like) 100M->90M(512M) 0.123ms
+[2.456s][info][gc] GC(10) Pause Remark 90M->88M(512M) 1.234ms
+[2.567s][info][gc] GC(10) Pause Cleanup 88M->88M(512M) 0.234ms
+[2.678s][info][gc] GC(11) Pause Mixed (G1 Evacuation Pause) 88M->60M(512M) 8.765ms
+...</code></pre>
+
+<p><strong>关键观察点</strong>：</p>
+<ul>
+  <li><strong>Pause Young</strong>：短暂停，回收 Young 区。</li>
+  <li><strong>Pause Concurrent Mark</strong>：全局标记，与应用并发。</li>
+  <li><strong>Pause Remark</strong>：标记收尾，STW 短暂停。</li>
+  <li><strong>Pause Mixed</strong>：回收 Young + 部分 Old，暂停时间可控。</li>
+  <li>如果看到 <strong>Pause Full</strong>，说明退化到 Full GC，需要调优。</li>
+</ul>
+
+<h2>生产环境常见问题诊断</h2>
+
+<table>
+  <thead><tr><th>症状</th><th>根因</th><th>诊断</th><th>优化</th></tr></thead>
+  <tbody>
+    <tr><td>频繁 Full GC</td><td>Mixed GC 回收不足 / Humongous 过多</td><td><code>-Xlog:gc+heap=debug</code> 看 Humongous</td><td>增大 Region / 降低 IHOP</td></tr>
+    <tr><td>Young GC 频繁</td><td>Eden 太小</td><td>日志中 Young GC 间隔</td><td>增大 <code>-XX:G1NewSizePercent</code></td></tr>
+    <tr><td>Mixed GC 单次过长</td><td>一次回收 Region 太多</td><td>Mixed GC 暂停时间</td><td>增大 <code>G1MixedGCCountTarget</code></td></tr>
+    <tr><td>暂停时间超目标</td><td>Region 复制成本估计不准</td><td>实际暂停 vs MaxGCPauseMillis</td><td>放宽目标 / 减小 Region</td></tr>
+    <tr><td>吞吐量下降</td><td>并发标记线程占用 CPU</td><td>CPU 使用率</td><td>减少 <code>ConcGCThreads</code></td></tr>
+  </tbody>
+</table>
+
+<h2>关键设计决策</h2>
+
+<table>
+  <thead><tr><th>决策</th><th>为什么</th><th>代价</th></tr></thead>
+  <tbody>
+    <tr><td>Region 化替代物理分代</td><td>可灵活调整各代大小，适应不同负载</td><td>需要记忆集维护跨 Region 引用</td></tr>
+    <tr><td>优先回收垃圾最多的 Region</td><td>最大化单次回收收益</td><td>回收顺序依赖并发标记准确性</td></tr>
+    <tr><td>用暂停目标驱动回收量</td><td>可预测暂停</td><td>目标过严导致回收不足，退化 Full GC</td></tr>
+    <tr><td>Humongous 直接进 Old</td><td>避免大对象复制成本</td><td>碎片化风险，连续 Region 不足</td></tr>
+    <tr><td>Full GC 作为兜底</td><td>保证最终能回收</td><td>单线程长暂停，是 G1 最差场景</td></tr>
+    <tr><td>并发标记 + 写屏障</td><td>减少 STW 时间</td><td>写屏障开销，记忆集内存</td></tr>
+  </tbody>
+</table>
+
+<h2>本课 Deep-Grill 就绪度</h2>
+
+<div class="deep-grill-readiness">
+  <h4>学完本课后，检查以下能力：</h4>
+  <ul>
+    <li class="done">能说出 CMS 的两个结构性缺陷（对应 interviewer 角度）</li>
+    <li class="done">能画出 G1 的 Region 布局和三类回收（对应 instructor 角度）</li>
+    <li class="done">能解释 "Garbage First" 的 Region 选择策略（对应 interviewer 角度）</li>
+    <li class="done">能判断什么场景不该用 G1（对应 architect 角度）</li>
+    <li class="done">能诊断频繁 Full GC 的根因（对应 incident responder 角度）</li>
+    <li class="done">能写出 G1 调优参数的取舍（对应 architect 角度）</li>
+    <li>能说出 Humongous 对象的问题和解决方案（对应 code reviewer 角度）</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <a href="./0003-compact-strings-source.html">← 上一课：Compact Strings 源码走读</a>
+  <a href="../interview/0001-java9-interview.html">下一课：Java 9 面试题库 →</a>
+</div>
+
+    </div>
+  </main>
+</div>
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){b.classList.toggle('visible',window.scrollY>400);});})();
+(function(){var t=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2, .article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();t.appendChild(a);});var ls=t.querySelectorAll('a');var es=[];ls.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)es.push({el:e,link:l});});window.addEventListener('scroll',function(){var y=window.scrollY+120;var c=null;es.forEach(function(i){if(i.el.offsetTop<=y)c=i;});ls.forEach(function(l){l.classList.remove('active');});if(c)c.link.classList.add('active');});})();
+</script>
+</body>
+</html>

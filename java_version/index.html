@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Java 9 — Deep Mastery Course</title>
+  <link rel="stylesheet" href="../style/shared.css">
+</head>
+<body>
+
+<nav class="top-nav">
+  <div class="logo">Deep&#8203;Mastery <span>/ Java 9</span></div>
+</nav>
+
+<div class="container">
+
+  <div class="hero">
+    <h1>Java 9 — Deep Mastery Course</h1>
+    <p class="subtitle">从模块化系统到源码级实现，掌握 Java 平台工程化的真正起点。</p>
+    <div class="meta">
+      <span>📚 5-layer deep-mastery model</span>
+      <span>🔬 Source-verified (OpenJDK jdk9)</span>
+      <span>🌐 中文</span>
+      <span>🧪 Aligned with deep-grill interview angles</span>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card"><div class="number">4+1</div><div class="label">Lessons (L1–L4 + S1)</div></div>
+    <div class="stat-card"><div class="number">15</div><div class="label">Interview Questions</div></div>
+    <div class="stat-card"><div class="number">6</div><div class="label">Source Files Walked</div></div>
+    <div class="stat-card"><div class="number">5</div><div class="label">Supporting Docs</div></div>
+  </div>
+
+  <div class="roadmap">
+    <h2>📖 Recommended Learning Path</h2>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-title">L1: Concepts</div><div class="step-desc">Java 9 全景与动机</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-title">L2: Principles</div><div class="step-desc">JPMS 模块系统机制</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-title">L3: Source</div><div class="step-desc">Compact Strings 源码走读</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-title">L4: Boundaries</div><div class="step-desc">G1 GC 边界与 trade-off</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-title">L5: Interview</div><div class="step-desc">五角度面试题库</div></div>
+      <div class="step"><div class="step-num">6</div><div class="step-title">S1: Supplementary</div><div class="step-desc">19 个补充特性详解</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>🎓 Core Lessons</h2><span class="badge core">REQUIRED</span></div>
+    <div class="item-list">
+      <a class="item" href="./lessons/0001-java9-overview.html">
+        <div class="icon l1">L1</div>
+        <div class="info">
+          <div class="title">Java 9 全景：模块化与工程化的起点</div>
+          <div class="desc">从 JAR 地狱到 JPMS，理解 Java 9 要解决的根本问题与整体设计</div>
+          <div class="tags"><span class="tag">JPMS 动机</span><span class="tag">JDK 模块化</span><span class="tag">工程化</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0002-jpms-module-system.html">
+        <div class="icon l2">L2</div>
+        <div class="info">
+          <div class="title">JPMS 模块系统：原理与机制</div>
+          <div class="desc">module-info 指令语义、强封装实现、模块图解析、jlink 链接流程</div>
+          <div class="tags"><span class="tag">requires/exports</span><span class="tag">强封装</span><span class="tag">jlink</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0003-compact-strings-source.html">
+        <div class="icon l3">L3</div>
+        <div class="info">
+          <div class="title">Compact Strings 源码走读</div>
+          <div class="desc">String 从 char[] 到 byte[]+coder 的实现细节，OpenJDK 源码逐行分析</div>
+          <div class="tags"><span class="tag">String.java</span><span class="tag">coder</span><span class="tag">StringLatin1</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0004-g1-gc-boundaries.html">
+        <div class="icon l4">L4</div>
+        <div class="info">
+          <div class="title">G1 GC 边界与 Trade-off</div>
+          <div class="desc">Region 机制、Mixed GC 选择策略、何时不该用 G1、调优参数</div>
+          <div class="tags"><span class="tag">Region</span><span class="tag">Mixed GC</span><span class="tag">暂停目标</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>📎 Supplementary Lessons</h2><span class="badge support">SUPPLEMENT</span></div>
+    <div class="item-list">
+      <a class="item" href="./lessons/0005-java9-supplementary-features.html">
+        <div class="icon l2">S1</div>
+        <div class="info">
+          <div class="title">L2/L3 补充：Java 9 其余特性详解</div>
+          <div class="desc">语言语法、核心API、JVM工具链共 19 个特性，与 L2/L3/L4 互补不重叠</div>
+          <div class="tags"><span class="tag">JShell</span><span class="tag">集合工厂</span><span class="tag">HTTP Client</span><span class="tag">VarHandle</span><span class="tag">多版本JAR</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>🧪 Interview Question Bank</h2><span class="badge core">REQUIRED</span></div>
+    <div class="item-list">
+      <a class="item" href="./interview/0001-java9-interview.html">
+        <div class="icon l5">L5</div>
+        <div class="info">
+          <div class="title">Java 9 面试题库（五角度）</div>
+          <div class="desc">面试官 / 架构师 / 代码审查 / 故障排查 / 技术讲师 五角度共 15 题</div>
+          <div class="tags"><span class="tag">JPMS</span><span class="tag">Compact Strings</span><span class="tag">G1</span><span class="tag">jlink</span><span class="tag">追问链</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header"><h2>📋 Supporting Documents</h2><span class="badge support">REFERENCE</span></div>
+    <div class="item-list">
+      <a class="item" href="./TOPIC-MAP.md">
+        <div class="icon doc">📖</div>
+        <div class="info"><div class="title">TOPIC-MAP.md</div><div class="desc">知识地图：Java 9 概念图谱与优先级</div></div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./RESOURCES.md">
+        <div class="icon doc">📚</div>
+        <div class="info"><div class="title">RESOURCES.md</div><div class="desc">权威资源：JEP 索引、OpenJDK 源码、官方文档</div></div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./GLOSSARY.md">
+        <div class="icon doc">📝</div>
+        <div class="info"><div class="title">GLOSSARY.md</div><div class="desc">术语表：JPMS、Region、coder、VarHandle 等</div></div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./spaced-repetition.md">
+        <div class="icon doc">🔁</div>
+        <div class="info"><div class="title">spaced-repetition.md</div><div class="desc">间隔复习队列（1/3/7/21 天调度）</div></div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./common-misconceptions.md">
+        <div class="icon doc">⚠️</div>
+        <div class="info"><div class="title">common-misconceptions.md</div><div class="desc">常见误区知识库：JPMS/Compact Strings/G1 易错点</div></div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Generated by Deep Mastery Skill · <code>OpenJDK jdk9</code> · 中文</p>
+    <p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JPMS 模块系统：原理与机制</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'base',
+      themeVariables: { primaryColor: '#fef0f0', primaryBorderColor: '#ea6f5a', lineColor: '#999', fontSize: '14px' } });
+  </script>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 9</span></div></nav>
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>L2 · JPMS 模块系统：原理与机制</h1>
+      <div class="article-meta">
+        <span>📚 层模型 L2 原理层</span>
+        <span>🔬 OpenJDK jdk9</span>
+        <span>⏱ 预计 45 分钟</span>
+      </div>
+    </div>
+    <div class="article-body">
+
+<h2>模块描述符：module-info.java 全解</h2>
+
+<p><code>module-info.java</code> 是 JPMS 的核心——一个编译期描述文件，编译后生成 <code>module-info.class</code>，被 JVM 在启动时读取。</p>
+
+<pre><code>module com.example.myapp {
+    requires java.base;                       // 依赖模块
+    requires transitive java.sql;             // 传递依赖
+    requires static java.compiler;            // 编译期依赖，运行期可选
+
+    exports com.example.api;                  // 导出包
+    exports com.example.spi to com.example.plugin;  // 限定导出
+
+    opens com.example.internal;               // 运行期反射开放
+    opens com.example.model to com.fasterxml.jackson.databind;
+
+    uses com.example.spi.Service;             // 声明服务消费者
+    provides com.example.spi.Service
+        with com.example.impl.ServiceImpl;    // 声明服务实现
+}</code></pre>
+
+<h3>指令语义对照表</h3>
+
+<table>
+  <thead><tr><th>指令</th><th>作用</th><th>生命周期</th><th>典型场景</th></tr></thead>
+  <tbody>
+    <tr><td><code>requires</code></td><td>声明编译期+运行期依赖</td><td>编译+运行</td><td>依赖另一个模块</td></tr>
+    <tr><td><code>requires transitive</code></td><td>传递依赖：依赖本模块的模块自动获得此依赖</td><td>编译+运行</td><td>API 中暴露的类型来自此模块</td></tr>
+    <tr><td><code>requires static</code></td><td>编译期必须，运行期可选</td><td>编译期</td><td>注解处理器</td></tr>
+    <tr><td><code>exports</code></td><td>导出包，编译期可见</td><td>编译+运行</td><td>公开 API 包</td></tr>
+    <tr><td><code>exports ... to</code></td><td>限定导出，只对指定模块</td><td>编译+运行</td><td>内部 API 给特定合作方</td></tr>
+    <tr><td><code>opens</code></td><td>运行期反射开放</td><td>仅运行</td><td>框架反射访问</td></tr>
+    <tr><td><code>opens ... to</code></td><td>限定反射开放</td><td>仅运行</td><td>给特定框架开放</td></tr>
+    <tr><td><code>uses</code></td><td>声明服务消费者</td><td>运行</td><td>SPI 消费</td></tr>
+    <tr><td><code>provides...with</code></td><td>声明服务实现</td><td>运行</td><td>SPI 提供</td></tr>
+  </tbody>
+</table>
+
+<div class="warning">
+  <div class="warning-title">常见误区</div>
+  <strong>exports 和 opens 不是一回事</strong>。一个包可以 <code>exports</code> 但不开 <code>opens</code>——编译期可见但反射不可达。Spring 需要在启动时反射注入字段，所以你必须在 module-info 里 <code>opens</code> 相关包，否则会抛 <code>InaccessibleObjectException</code>。
+</div>
+
+<h2>模块图的解析流程</h2>
+
+<p>JVM 启动时，模块系统按以下步骤构建模块图：</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant JVM as JVM 启动
+    participant Finder as ModuleFinder
+    participant Resolver as Resolver
+    participant Graph as Module Graph
+    participant Loader as ModuleLayer
+
+    JVM->>Finder: 扫描模块路径<br/>(--module-path)
+    Finder-->>JVM: 发现所有模块
+    JVM->>Resolver: resolve(rootModules)
+    Resolver->>Resolver: 从根模块开始<br/>BFS 解析 requires
+    Resolver->>Graph: 构建依赖图
+    Graph->>Graph: 检查一致性<br/>(缺失/冲突/循环)
+    Graph-->>Resolver: 解析完成
+    Resolver-->>JVM: 模块图就绪
+    JVM->>Loader: 创建 ModuleLayer
+    Loader-->>JVM: 开始加载类
+</div>
+
+<p><strong>关键点</strong>：模块图在<strong>启动时</strong>完整解析。如果某个 <code>requires</code> 的模块缺失，JVM 在启动时抛 <code>FindException</code>，而不是等到运行时。这就是“可靠配置”的含义。</p>
+
+<h3>模块图的三类节点</h3>
+
+<table>
+  <thead><tr><th>类型</th><th>来源</th><th>能力</th></tr></thead>
+  <tbody>
+    <tr><td><strong>命名模块</strong></td><td>有 module-info.class 的 JAR</td><td>完整 JPMS 能力</td></tr>
+    <tr><td><strong>自动模块</strong></td><td>放在模块路径但无 module-info 的 JAR</td><td>自动 requires 所有模块，自动 exports 所有包</td></tr>
+    <tr><td><strong>未命名模块</strong></td><td>类路径上的所有代码</td><td>可读所有模块，但只能被自动模块读取</td></tr>
+  </tbody>
+</table>
+
+<div class="info">
+  <div class="info-title">自动模块的命名规则</div>
+  自动模块名由 JAR 文件名推导：去掉版本号、把 <code>-</code> 换成 <code>.</code>。例如 <code>commons-lang3-3.12.0.jar</code> → 模块名 <code>commons.lang3</code>。这个规则不稳定，因此生产环境建议库作者显式提供 <code>Automatic-Module-Name</code> 清单条目。
+</div>
+
+<h2>强封装的实现原理</h2>
+
+<p>强封装是 JPMS 最核心的语义变化。JVM 在类加载时执行以下检查：</p>
+
+<div class="mermaid">
+flowchart TD
+    A["ClassLoader.loadClass(name)"] --> B{"类属于哪个模块?"}
+    B -->|"当前模块"| C["允许加载"]
+    B -->|"其他模块"| D{"目标模块被<br/>当前模块 requires?"}
+    D -->|"否"| E["抛 IllegalAccessError"]
+    D -->|"是"| F{"目标包被<br/>exports?"}
+    F -->|"否"| G["抛 IllegalAccessError"]
+    F -->|"是"| H{"exports ... to<br/>限定?"}
+    H -->|"是且当前模块不在列表"| E
+    H -->|"否 或 在列表中"| C
+    style E fill:#fdf2f2,stroke:#e74c3c
+    style C fill:#e8f5e9,stroke:#42c02e
+</div>
+
+<p><strong>实现位置</strong>：OpenJDK 中的 <code>jdk.internal.module.Modules</code> 和 <code>java.lang.Module</code> 负责此检查。<code>Module</code> 类维护三个关键集合：</p>
+
+<table>
+  <thead><tr><th>集合</th><th>含义</th><th>对应指令</th></tr></thead>
+  <tbody>
+    <tr><td><code>Module.exports</code></td><td>导出的包及目标模块</td><td><code>exports</code></td></tr>
+    <tr><td><code>Module.opens</code></td><td>反射开放的包及目标模块</td><td><code>opens</code></td></tr>
+    <tr><td><code>Module.reads</code></td><td>本模块可读的其他模块</td><td><code>requires</code></td></tr>
+  </tbody>
+</table>
+
+<h3>反射访问的检查链</h3>
+
+<p>当代码调用 <code>setAccessible(true)</code> 时，JDK 内部会走以下检查链（简化版）：</p>
+
+<pre><code>// 伪代码：setAccessible 的模块检查
+function checkReflectiveAccess(Class<?> target, Class<?> caller) {
+    Module targetModule = target.getModule();
+    Module callerModule = caller.getModule();
+
+    // 1. 同一个模块，直接通过
+    if (targetModule == callerModule) return ALLOW;
+
+    // 2. 目标模块是否 opens 了目标包给 caller?
+    if (targetModule.isOpen(target.getPackageName(), callerModule)) {
+        return ALLOW;
+    }
+
+    // 3. 目标模块是否无条件 opens 了目标包?
+    if (targetModule.isOpen(target.getPackageName())) {
+        return ALLOW;
+    }
+
+    // 4. 检查启动参数 --add-opens
+    if (isAddOpens(targetModule, target.getPackageName(), callerModule)) {
+        return ALLOW;
+    }
+
+    // 5. 未命名模块且目标是 JDK 内部 API
+    if (callerModule.isNamed() == false && isJdkInternal(target)) {
+        throw new InaccessibleObjectException(...);
+    }
+
+    throw new InaccessibleObjectException(...);
+}</code></pre>
+
+<div class="production-note">
+  <div class="header">生产环境：--add-opens 是常见逃生舱</div>
+  大型框架（Spring 5.x 早期版本、Hibernate 5.x、Jackson）在 JPMS 下需要 <code>opens</code> 才能反射。当无法修改第三方库的 module-info 时，启动参数 <code>--add-opens java.base/java.lang=ALL-UNNAMED</code> 是标准做法。Java 17 起对 JDK 内部 API 的反射访问进一步收紧，<code>--add-opens</code> 使用会更普遍。
+</div>
+
+<h2>jlink：模块化的直接产物</h2>
+
+<p>jlink 是 JDK 9 随模块化一起提供的工具，它把应用模块 + JDK 模块打包成一个<strong>自定义运行时镜像</strong>。</p>
+
+<h3>工作流程</h3>
+
+<div class="mermaid">
+flowchart LR
+    A["应用模块<br/>(mods/)"] --> B["依赖解析器"]
+    C["JDK jmods<br/>(JDK_HOME/jmods)"] --> B
+    B --> D["模块图<br/>(传递闭包)"]
+    D --> E["jlink 链接器"]
+    E --> F["优化与压缩"]
+    F --> G["自定义运行时镜像<br/>(bin/ conf/ lib/)"]
+    style G fill:#e8f5e9,stroke:#42c02e,stroke-width:2px
+</div>
+
+<h3>完整可执行示例</h3>
+
+<pre><code># 1. 目录结构
+# src/
+#   com.example.app/
+#     module-info.java
+#     com/example/app/Main.java
+
+# 2. module-info.java
+cat > src/com.example.app/module-info.java << 'EOF'
+module com.example.app {
+    requires java.base;
+    requires java.logging;
+}
+EOF
+
+# 3. Main.java
+mkdir -p src/com.example.app/com/example/app
+cat > src/com.example.app/com/example/app/Main.java << 'EOF'
+package com.example.app;
+
+import java.util.logging.Logger;
+
+public class Main {
+    private static final Logger LOG = Logger.getLogger(Main.class.getName());
+
+    public static void main(String[] args) {
+        LOG.info("Hello from custom runtime!");
+        System.out.println("Runtime: " + Runtime.version());
+        System.out.println("Modules: " + ModuleLayer.boot().modules().size());
+    }
+}
+EOF
+
+# 4. 编译
+javac -d mods/com.example.app \
+      src/com.example.app/module-info.java \
+      src/com.example.app/com/example/app/Main.java
+
+# 5. 运行（模块路径）
+java --module-path mods --module com.example.app/com.example.app.Main
+
+# 6. 分析依赖
+jdeps --module-path mods --module com.example.app
+
+# 7. 用 jlink 创建自定义运行时
+jlink --module-path mods:$JAVA_HOME/jmods \
+      --add-modules com.example.app \
+      --output my-runtime \
+      --strip-debug \
+      --compress 2 \
+      --no-header-files \
+      --no-man-pages
+
+# 8. 使用自定义运行时（体积约为完整 JDK 的 1/4）
+du -sh my-runtime
+./my-runtime/bin/java --module com.example.app/com.example.app.Main</code></pre>
+
+<h3>jlink 的优化选项</h3>
+
+<table>
+  <thead><tr><th>选项</th><th>作用</th><th>收益</th></tr></thead>
+  <tbody>
+    <tr><td><code>--strip-debug</code></td><td>移除调试信息</td><td>减少约 20%</td></tr>
+    <tr><td><code>--compress 2</code></td><td>压缩资源（0/1/2，2最激进）</td><td>减少约 30%</td></tr>
+    <tr><td><code>--no-header-files</code></td><td>移除 C 头文件</td><td>减少少量</td></tr>
+    <tr><td><code>--no-man-pages</code></td><td>移除 man 手册</td><td>减少少量</td></tr>
+    <tr><td><code>--bind-services</code></td><td>自动绑定 uses/provides</td><td>方便但增大体积</td></tr>
+  </tbody>
+</table>
+
+<h2>并发语义与异常容错（L2 必查维度）</h2>
+
+<h3>并发语义</h3>
+
+<table>
+  <thead><tr><th>场景</th><th>行为</th></tr></thead>
+  <tbody>
+    <tr><td>模块图解析</td><td>单线程启动阶段完成，无并发问题</td></tr>
+    <tr><td>类加载</td><td>每个模块由独立的 ClassLoader 加载（或共享 bootstrap）</td></tr>
+    <tr><td>jlink 链接</td><td>单线程，但可对多个模块并行处理</td></tr>
+    <tr><td>服务加载</td><td><code>ServiceLoader.load()</code> 是线程安全的</td></tr>
+  </tbody>
+</table>
+
+<h3>异常容错</h3>
+
+<table>
+  <thead><tr><th>异常</th><th>触发场景</th><th>处理方式</th></tr></thead>
+  <tbody>
+    <tr><td><code>FindException</code></td><td>模块路径上找不到某模块</td><td>检查 <code>--module-path</code> 和 module-info</td></tr>
+    <tr><td><code>ResolutionException</code></td><td>依赖冲突或循环依赖</td><td>用 <code>jdeps</code> 分析依赖树</td></tr>
+    <tr><td><code>IllegalAccessError</code></td><td>访问未 exports 的包</td><td>添加 exports 或改用公开 API</td></tr>
+    <tr><td><code>InaccessibleObjectException</code></td><td>反射访问未 opens 的包</td><td>添加 opens 或 --add-opens</td></tr>
+    <tr><td><code>LayerInstantiationException</code></td><td>模块层创建失败</td><td>检查模块图一致性</td></tr>
+  </tbody>
+</table>
+
+<h3>性能开销</h3>
+
+<table>
+  <thead><tr><th>维度</th><th>开销</th><th>优化</th></tr></thead>
+  <tbody>
+    <tr><td>启动时模块解析</td><td>O(模块数)，通常 &lt;10ms</td><td>jlink 预解析</td></tr>
+    <tr><td>类加载检查</td><td>每次加载做 exports 检查</td><td>JIT 内联后影响可忽略</td></tr>
+    <tr><td>反射访问</td><td>比未命名模块慢</td><td>用 MethodHandle 替代</td></tr>
+    <tr><td>运行时体积</td><td>jlink 可减 50-70%</td><td>--strip-debug --compress 2</td></tr>
+  </tbody>
+</table>
+
+<h2>本课 Deep-Grill 就绪度</h2>
+
+<div class="deep-grill-readiness">
+  <h4>学完本课后，检查以下能力：</h4>
+  <ul>
+    <li class="done">能解释 exports 和 opens 的区别（对应 interviewer 角度）</li>
+    <li class="done">能写出 module-info.java 的完整指令（对应 code reviewer 角度）</li>
+    <li class="done">能说出模块图解析的流程（对应 interviewer 角度）</li>
+    <li class="done">能判断一个反射异常是 exports 还是 opens 问题（对应 incident responder 角度）</li>
+    <li class="done">能画出 jlink 的工作流程图（对应 instructor 角度）</li>
+    <li class="done">能用 jlink 创建自定义运行时并测量体积（对应 architect 角度）</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <a href="./0001-java9-overview.html">← 上一课：Java 9 全景</a>
+  <a href="./0003-compact-strings-source.html">下一课：Compact Strings 源码走读 →</a>
+</div>
+
+    </div>
+  </main>
+</div>
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){b.classList.toggle('visible',window.scrollY>400);});})();
+(function(){var t=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2, .article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();t.appendChild(a);});var ls=t.querySelectorAll('a');var es=[];ls.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)es.push({el:e,link:l});});window.addEventListener('scroll',function(){var y=window.scrollY+120;var c=null;es.forEach(function(i){if(i.el.offsetTop<=y)c=i;});ls.forEach(function(l){l.classList.remove('active');});if(c)c.link.classList.add('active');});})();
+</script>
+</body>
+</html>

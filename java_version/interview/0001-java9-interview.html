@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Java 9 面试题库（五角度）</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'base',
+      themeVariables: { primaryColor: '#fef0f0', primaryBorderColor: '#ea6f5a', lineColor: '#999', fontSize: '14px' } });
+  </script>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 9</span></div></nav>
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>L5 · Java 9 面试题库（五角度）</h1>
+      <div class="article-meta">
+        <span>📚 层模型 L5 面试层</span>
+        <span>🔬 OpenJDK jdk9</span>
+        <span>⏱ 预计 60 分钟</span>
+        <span>🧪 15 题 · 五角度</span>
+      </div>
+    </div>
+    <div class="article-body">
+
+<h2>面试官角度</h2>
+
+<h3>JPMS 模块系统</h3>
+
+<div class="qa-block">
+  <div class="question">Q1: 什么是 JPMS？它要解决什么问题？</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>：JPMS（Java Platform Module System）是 Java 9 引入的模块化系统，核心目标是解决类路径时代的三个根本问题：</p>
+    <ol>
+      <li><strong>可靠配置</strong>：类路径是扁平列表，无法在编译期或启动时验证依赖完整性。JPMS 用模块图在启动时解析依赖，缺失模块直接启动失败。</li>
+      <li><strong>强封装</strong>：类路径时代 public 类只要在路径上就可访问。JPMS 中未 exports 的包即使类是 public 也无法跨模块访问。</li>
+      <li><strong>可定制运行时</strong>：JDK 拆分为 90+ 模块，用 jlink 可以只打包应用需要的模块。</li>
+    </ol>
+    <div class="key-point"><strong>关键点</strong>：JPMS 不是语法糖，是平台级的依赖契约重构。回答时要强调“运行期契约”而非“构建期依赖”——这是和 Maven/Gradle 的本质区别。</div>
+  </div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q2: 追问：exports 和 opens 有什么区别？为什么需要两个指令？</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>：<code>exports</code> 和 <code>opens</code> 控制两个不同生命周期的可见性：</p>
+    <table>
+      <thead><tr><th>指令</th><th>控制什么</th><th>生效时机</th><th>典型场景</th></tr></thead>
+      <tbody>
+        <tr><td><code>exports</code></td><td>编译期访问（import / 引用）</td><td>编译+运行</td><td>公开 API 包</td></tr>
+        <tr><td><code>opens</code></td><td>运行期反射访问（setAccessible）</td><td>仅运行</td><td>框架反射（Spring/Hibernate）</td></tr>
+      </tbody>
+    </table>
+    <p>为什么需要两个：<strong>编译期可见不等于反射可达</strong>。一个包可以 exports 但不 opens——编译器允许你 import 类，但反射调用 <code>setAccessible(true)</code> 会抛 <code>InaccessibleObjectException</code>。这给了模块作者精细控制：公开 API 可以编译访问但禁止框架深度反射。</p>
+    <div class="key-point"><strong>关键点</strong>：能说出“exports 控制编译期，opens 控制运行期反射”就抓住了本质。如果只说“都是开放包”则不得分。</div>
+  </div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q3: 追问：写出模块图解析的伪代码，核心判断条件是什么？</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>：</p>
+    <pre><code>// 伪代码：模块图解析
+function resolveModules(rootModules, modulePath) {
+    graph = new ModuleGraph();
+
+    // 1. BFS 从根模块开始
+    queue = new Queue(rootModules);
+    while (!queue.isEmpty()) {
+        module = queue.dequeue();
+        if (graph.contains(module)) continue;
+        graph.add(module);
+
+        // 2. 遍历 module-info 中的 requires
+        for (req in module.requires) {
+            // 核心判断条件：目标模块是否在模块路径上？
+            target = findModule(modulePath, req.name);
+            if (target == null) {
+                // 可靠配置：立即失败
+                throw new FindException("Module not found: " + req.name);
+            }
+            // 核心判断条件：传递依赖
+            if (req.isTransitive) {
+                graph.addEdge(module, target, TRANSITIVE);
+            } else {
+                graph.addEdge(module, target, NORMAL);
+            }
+            queue.enqueue(target);
+        }
+    }
+
+    // 3. 一致性检查
+    checkCycles(graph);      // 循环依赖
+    checkConflicts(graph);   // 版本冲突
+
+    return graph;
+}</code></pre>
+    <p><strong>核心判断条件</strong>：</p>
+    <ul>
+      <li><code>findModule(path, name) == null</code> → 立即抛 FindException（可靠配置）</li>
+      <li><code>req.isTransitive</code> → 决定是否传递给依赖本模块的模块</li>
+      <li><code>graph.contains(module)</code> → 去重，避免重复解析</li>
+    </ul>
+    <div class="key-point"><strong>关键点</strong>：能写出「依赖缺失时立即失败」和「transitive 的传递语义」就是掌握的核心。</div>
+  </div>
+</div>
+
+<h3>Compact Strings</h3>
+
+<div class="qa-block">
+  <div class="question">Q4: Compact Strings 是什么？为什么 Java 9 要引入它？</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>：Compact Strings 是 JEP 254 引入的优化，把 <code>String</code> 内部存储从 <code>char[]</code>（每字符 2 字节）改为 <code>byte[] + coder</code>：</p>
+    <ul>
+      <li>如果字符串全是 Latin-1 字符（0-255），用 1 字节/字符，<code>coder = LATIN1(0)</code></li>
+      <li>如果含非 Latin-1 字符，用 2 字节/字符，<code>coder = UTF16(1)</code></li>
+    </ul>
+    <p>引入原因：<strong>绝大多数实际字符串只包含 Latin-1 字符</strong>（URL、JSON key、日志、配置文件），但 Java 8 之前一律用 2 字节存储，一半内存被浪费。JDK 6 曾尝试 <code>-XX:+UseCompressedStrings</code>，但因每次操作需要解包导致性能下降，JDK 7 被移除。Java 9 的方案用 coder 分发到 StringLatin1/StringUTF16 静态方法，避免运行时转换。</p>
+    <div class="key-point"><strong>关键点</strong>：必须提到「JDK 6 失败的历史」——这说明为什么 Java 9 的方案不同（coder 分发，无解包）。</div>
+  </div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q5: 追问：<code>length()</code> 方法怎么实现的？为什么用位移而不是 if-else？</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>：</p>
+    <pre><code>public int length() {
+    return value.length >> coder;
+}</code></pre>
+    <p><code>coder</code> 取值 0（LATIN1）或 1（UTF16）：</p>
+    <ul>
+      <li>LATIN1：<code>value.length >> 0</code> = 字节数 = 字符数</li>
+      <li>UTF16：<code>value.length >> 1</code> = 字节数 / 2 = 字符数</li>
+    </ul>
+    <p>用位移而非 if-else 的原因：<code>length()</code> 是极高频方法（字符串遍历、循环边界都用），if-else 会有分支预测开销。位移在 JIT 编译后通常是 2-3 条机器指令，无分支。<strong>这是用数据表示替代控制流的经典优化</strong>。</p>
+    <div class="key-point"><strong>关键点</strong>：能说出「coder 只有 0/1，正好对应右移 0/1 位」和「避免分支预测」是关键。</div>
+  </div>
+</div>
+
+<h3>G1 GC</h3>
+
+<div class="qa-block">
+  <div class="question">Q6: 为什么 Java 9 用 G1 替代 CMS 作为默认 GC？</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>：CMS 有两个结构性缺陷，无法通过调参解决：</p>
+    <ol>
+      <li><strong>碎片化</strong>：CMS 用标记-清除，不移动对象。长时间运行后堆碎片化，大对象分配失败 → Concurrent Mode Failure → Full GC。</li>
+      <li><strong>暂停不可预测</strong>：CMS 的暂停随堆大小和碎片程度波动，无法设定 <code>-XX:MaxGCPauseMillis</code> 目标。</li>
+    </ol>
+    <p>G1 的设计优势：</p>
+    <ul>
+      <li>Region 化堆布局，可动态调整各代大小</li>
+      <li>标记-复制/整理，消除碎片</li>
+      <li>Mixed GC 优先回收垃圾最多的 Region（Garbage First），配合暂停目标动态决定回收量</li>
+      <li>可设定 <code>-XX:MaxGCPauseMillis</code> 暂停目标</li>
+    </ul>
+    <div class="key-point"><strong>关键点</strong>：必须提到「碎片」和「暂停不可预测」两个词。只说「G1 更新更快」不得分。</div>
+  </div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q7: 追问：G1 的 "Garbage First" 具体指什么？写出 Region 选择的伪代码。</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>："Garbage First" 指 Mixed GC 时<strong>优先回收垃圾比例最高的 Region</strong>。</p>
+    <pre><code>// 伪代码：Mixed GC 的 Region 选择
+function selectRegionsForMixedGC() {
+    // 1. 并发标记阶段已标记哪些 Region 有活跃对象
+    candidates = oldRegions.filter(r -> r.hasMarkedObjects());
+
+    // 2. 按垃圾比例从高到低排序
+    //    垃圾比例 = 已死对象大小 / Region 总大小
+    candidates.sortBy(r -> r.deadRatio, DESC);
+
+    // 3. 从垃圾最多的开始，累加暂停时间估计
+    selected = [];
+    totalPause = 0;
+    for (region in candidates) {
+        regionPause = estimateCopyTime(region);
+        if (totalPause + regionPause > maxGCPauseMillis) {
+            break;    // 达到暂停目标，停止
+        }
+        selected.add(region);
+        totalPause += regionPause;
+    }
+    return selected;
+}</code></pre>
+    <p><strong>核心判断条件</strong>：</p>
+    <ul>
+      <li><code>r.deadRatio</code> 排序 → 决定回收顺序</li>
+      <li><code>totalPause + regionPause > maxGCPauseMillis</code> → 决定停止条件</li>
+    </ul>
+    <div class="key-point"><strong>关键点</strong>：能写出「按垃圾比例排序 + 暂停目标约束回收量」就是核心。这说明 G1 的动态权衡机制。</div>
+  </div>
+</div>
+
+<h2>架构师角度</h2>
+
+<div class="qa-block">
+  <div class="question">Q8: 一个已有的大型 Spring 应用要迁移到 JPMS，你会怎么规划？</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>：迁移决策应基于收益而非技术难度。</p>
+    <p><strong>第一步：评估收益</strong></p>
+    <ul>
+      <li>是否需要 jlink 定制运行时？（容器化部署时体积收益大）</li>
+      <li>是否需要强封装保护内部 API？（多团队协作时有价值）</li>
+      <li>如果都不是，迁移收益有限，建议暂缓。</li>
+    </ul>
+    <p><strong>第二步：分层迁移</strong></p>
+    <ol>
+      <li><strong>依赖升级</strong>：Spring 5+、Hibernate 5.2+ 才支持 JPMS。</li>
+      <li><strong>自动模块过渡</strong>：把 JAR 放到模块路径但暂不写 module-info。自动模块自动 requires 所有模块，可以让旧代码先跑起来。</li>
+      <li><strong>逐模块迁移</strong>：从底层库开始，写 module-info.java，用 <code>jdeps</code> 分析依赖。</li>
+      <li><strong>反射开放</strong>：为框架需要的包加 <code>opens</code>，或启动参数加 <code>--add-opens</code>。</li>
+    </ol>
+    <p><strong>第三步：回归验证</strong></p>
+    <ul>
+      <li>用 <code>jdeps --jdk-internals</code> 检查是否用了 JDK 内部 API</li>
+      <li>集成测试必须覆盖反射场景（Spring 依赖注入、Jackson 序列化）</li>
+    </ul>
+    <div class="key-point"><strong>关键点</strong>：能说出「自动模块过渡」和「反射 opens」两个关键点。直接说「全部重写 module-info」是错误答案。</div>
+  </div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q9: 你的应用堆大小 2GB，延迟敏感，选 G1 还是 Parallel GC？为什么？</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>：<strong>需要看具体延迟目标</strong>。</p>
+    <table>
+      <thead><tr><th>场景</th><th>推荐</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td>延迟目标 100-200ms，可接受</td><td>G1</td><td>G1 在此区间表现好，Region 化管理降低碎片</td></tr>
+        <tr><td>延迟目标 &lt;50ms</td><td>ZGC（Java 11+）</td><td>G1 无法稳定达到 &lt;50ms，尤其堆 2GB 以上</td></tr>
+        <tr><td>吞吐优先，延迟不敏感</td><td>Parallel GC</td><td>2GB 小堆上 Parallel 吞吐更高，无 G1 的 RSet/写屏障开销</td></tr>
+        <tr><td>容器化，CPU 有限</td><td>Parallel 或 Serial</td><td>G1 的并发线程需要多核</td></tr>
+      </tbody>
+    </table>
+    <p><strong>关键分析</strong>：G1 在小堆（&lt;4GB）上有额外开销：</p>
+    <ul>
+      <li>RSet（记忆集）占堆约 5-10%</li>
+      <li>写屏障每次引用赋值额外检查</li>
+      <li>并发标记线程占用 CPU</li>
+    </ul>
+    <p>如果应用吞吐优先且延迟不敏感，Parallel GC 在 2GB 堆上可能比 G1 快 10-20%。</p>
+    <div class="key-point"><strong>关键点</strong>：不能简单说「G1 更好」，要说出「G1 在小堆上有额外开销，需权衡延迟目标和吞吐」。这是架构师的判断标准。</div>
+  </div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q10: 用 jlink 能把运行时从 200MB 降到多少？有什么限制？</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>：典型应用可以降到 40-60MB（减少 70-80%）。</p>
+    <p><strong>完整流程</strong>：</p>
+    <pre><code># 分析依赖
+jdeps --module-path mods --module com.example.app
+
+# 创建自定义运行时
+jlink --module-path mods:$JAVA_HOME/jmods \
+      --add-modules com.example.app \
+      --output my-runtime \
+      --strip-debug --compress 2 \
+      --no-header-files --no-man-pages
+
+# 结果：约 40-60MB（取决于应用模块复杂度）</code></pre>
+    <p><strong>限制</strong>：</p>
+    <ol>
+      <li><strong>依赖必须模块化</strong>：jlink 只处理模块路径上的模块。自动模块和未命名模块无法参与链接（自动模块可以，但有限制）。</li>
+      <li><strong>动态加载限制</strong>：运行时无法加载链接时未包含的模块。用反射加载模块会失败。</li>
+      <li><strong>Java Agent 兼容性</strong>：某些 agent（如字节码增强）可能不兼容链接后的运行时。</li>
+      <li><strong>库生态限制</strong>：依赖的第三方库如果没有 module-info，可能无法完全 jlink。</li>
+    </ol>
+    <div class="key-point"><strong>关键点</strong>：能说出「依赖必须模块化」和「运行时无法加载未链接的模块」两个限制。</div>
+  </div>
+</div>
+
+<h2>代码审查者角度</h2>
+
+<div class="qa-block">
+  <div class="question">Q11: 以下 module-info.java 有什么问题？</div>
+  <div class="answer">
+    <pre><code>module com.example.app {
+    requires java.base;
+    requires java.sql;
+    exports com.example.internal;
+    opens com.example.api;
+}</code></pre>
+    <p><strong>参考答案</strong>：</p>
+    <p><strong>问题 1：exports 和 opens 用反了</strong></p>
+    <ul>
+      <li><code>exports com.example.internal</code>：导出内部包，破坏了封装目的。内部包不应该 exports。</li>
+      <li><code>opens com.example.api</code>：API 包不应该 opens，因为 API 通过编译期引用访问，不需要反射。</li>
+      <li>正确写法：<code>exports com.example.api; opens com.example.internal to framework.module;</code></li>
+    </ul>
+    <p><strong>问题 2：requires java.base 是冗余的</strong></p>
+    <ul>
+      <li>所有模块隐式 requires java.base，显式声明是多余但无害。</li>
+      <li>如果代码审查要求简洁，可以删除。</li>
+    </ul>
+    <p><strong>问题 3：缺少 transitive 声明</strong></p>
+    <ul>
+      <li>如果 com.example.api 中暴露了 java.sql 的类型（如 <code>public Connection getConnection()</code>），则 java.sql 应该 <code>requires transitive</code>。否则调用方必须自己也 requires java.sql。</li>
+    </ul>
+    <pre><code>// 正确写法
+module com.example.app {
+    requires transitive java.sql;   // API 暴露 java.sql 类型时
+    exports com.example.api;
+    opens com.example.internal to com.fasterxml.jackson.databind;
+}</code></pre>
+    <div class="key-point"><strong>关键点</strong>：能指出「exports 和 opens 用反」是核心。很多开发者以为「opens 就是更彻底的 exports」。</div>
+  </div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q12: 以下代码在 Java 9 + JPMS 下有什么问题？</div>
+  <div class="answer">
+    <pre><code>// 假设 com.example.framework 是命名模块
+// com.example.app 也是命名模块
+public class MyService {
+    public void process() throws Exception {
+        Class<?> clazz = Class.forName("com.example.internal.SecretImpl");
+        Object instance = clazz.getDeclaredConstructor().newInstance();
+        Field field = clazz.getDeclaredField("secret");
+        field.setAccessible(true);       // 问题在这里
+        Object value = field.get(instance);
+        System.out.println(value);
+    }
+}</code></pre>
+    <p><strong>参考答案</strong>：</p>
+    <p><strong>问题 1：跨模块反射访问未 opens 的包</strong></p>
+    <ul>
+      <li><code>com.example.internal</code> 如果不是 <code>opens</code> 状态，<code>setAccessible(true)</code> 会抛 <code>InaccessibleObjectException</code>。</li>
+      <li>即使 <code>com.example.internal</code> 被 <code>exports</code>，也不足以支持反射——<code>exports</code> 只管编译期，<code>opens</code> 才管反射。</li>
+    </ul>
+    <p><strong>问题 2：Class.forName 的模块归属</strong></p>
+    <ul>
+      <li>命名模块中 <code>Class.forName("com.example.internal.SecretImpl")</code> 会从当前模块的 ClassLoader 查找。如果 com.example.framework 是不同模块，可能找不到。</li>
+      <li>正确写法：<code>Class.forName(module, "com.example.internal.SecretImpl")</code></li>
+    </ul>
+    <p><strong>问题 3：应该通过 SPI 或公开 API 访问</strong></p>
+    <ul>
+      <li>跨模块用反射访问内部实现违反了模块化设计的初衷。正确做法是通过 <code>exports</code> 的公开 API 或 <code>uses/provides</code> SPI 机制。</li>
+    </ul>
+    <pre><code>// 正确做法 1：通过公开 API
+// module-info: exports com.example.api;
+import com.example.api.SecretService;
+SecretService service = new SecretServiceImpl();
+
+// 正确做法 2：通过 SPI
+// module-info: uses com.example.api.SecretService;
+ServiceLoader&lt;SecretService&gt; loader = ServiceLoader.load(SecretService.class);</code></pre>
+    <div class="key-point"><strong>关键点</strong>：能指出「setAccessible 需要 opens 而非 exports」是关键。同时能建议「改用 SPI 或公开 API」体现架构意识。</div>
+  </div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q13: 以下 G1 GC 配置有什么问题？</div>
+  <div class="answer">
+    <pre><code>java -XX:+UseG1GC \
+     -Xms512m -Xmx512m \
+     -XX:MaxGCPauseMillis=20 \
+     -XX:G1HeapRegionSize=1m \
+     -XX:InitiatingHeapOccupancyPercent=80 \
+     -jar app.jar</code></pre>
+    <p><strong>参考答案</strong>：</p>
+    <p><strong>问题 1：MaxGCPauseMillis=20 过于激进</strong></p>
+    <ul>
+      <li>20ms 暂停目标对 G1 来说很难稳定达到，尤其堆 512MB 有并发标记开销。</li>
+      <li>目标设太小会导致每次 Mixed GC 只回收很少 Region，回收跟不上分配，最终触发 Full GC（长暂停）。</li>
+      <li>建议：≥50ms，通常 100-200ms。</li>
+    </ul>
+    <p><strong>问题 2：G1HeapRegionSize=1m 太小</strong></p>
+    <ul>
+      <li>512MB 堆 / 1MB Region = 512 个 Region，Region 数量太多，管理开销上升。</li>
+      <li>更大问题是 Humongous 判定阈值 = Region 大小 / 2 = 512KB。任何 ≥512KB 的对象都变成 Humongous，碎片风险高。</li>
+      <li>建议：让 G1 自动计算（512MB 堆通常 1-2MB Region），或明确设置为 2-4MB。</li>
+    </ul>
+    <p><strong>问题 3：InitiatingHeapOccupancyPercent=80 太高</strong></p>
+    <ul>
+      <li>默认 45%。设 80% 意味着堆占用 80% 才启动并发标记。但并发标记需要时间，标记完成时堆可能已满，触发 Full GC。</li>
+      <li>建议：保持默认 45%，或根据实际调整到 40-50%。</li>
+    </ul>
+    <pre><code>// 推荐配置
+java -XX:+UseG1GC \
+     -Xms512m -Xmx512m \
+     -XX:MaxGCPauseMillis=100 \
+     -XX:InitiatingHeapOccupancyPercent=45 \
+     -jar app.jar</code></pre>
+    <div class="key-point"><strong>关键点</strong>：能指出「MaxGCPauseMillis 过小反而导致 Full GC」是核心。这是 G1 调优最常见的反直觉点。</div>
+  </div>
+</div>
+
+<h2>故障排查者角度</h2>
+
+<div class="qa-block">
+  <div class="question">Q14: 生产环境：G1 频繁 Full GC，暂停长达 3 秒。怎么排查？</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>：</p>
+    <p><strong>第一步：开启详细 GC 日志</strong></p>
+    <pre><code>java -Xlog:gc*:file=gc.log:time,uptime,level,tags \
+     -XX:+UseG1GC -jar app.jar</code></pre>
+    <p><strong>第二步：看日志找根因</strong></p>
+    <table>
+      <thead><tr><th>日志关键词</th><th>根因</th><th>优化方向</th></tr></thead>
+      <tbody>
+        <tr><td>Humongous</td><td>大对象频繁分配</td><td>增大 Region / 减少大对象</td></tr>
+        <tr><td>Concurrent Mode Failure</td><td>并发标记未完成堆就满了</td><td>降低 IHOP</td></tr>
+        <tr><td>Evacuation Failure</td><td>Young GC 时 Survivor 不足</td><td>增大 Young 区 / 降低晋升阈值</td></tr>
+        <tr><td>To-space Exhausted</td><td>复制目标 Region 不足</td><td>增大堆 / 降低 Mixed GC 目标</td></tr>
+      </tbody>
+    </table>
+    <p><strong>第三步：针对性诊断</strong></p>
+    <ul>
+      <li><code>-Xlog:gc+heap=debug</code> 看 Humongous 分配频率</li>
+      <li><code>-Xlog:gc+ergo=debug</code> 看 G1 的启发式决策</li>
+      <li><code>jmap -histo:live &lt;pid&gt;</code> 看大对象类型分布</li>
+    </ul>
+    <p><strong>第四步：降级与优化</strong></p>
+    <ol>
+      <li><strong>短期</strong>：增大堆（<code>-Xmx</code>）缓解压力</li>
+      <li><strong>中期</strong>：调整 <code>-XX:InitiatingHeapOccupancyPercent=35</code> 提前触发并发标记</li>
+      <li><strong>中期</strong>：增大 <code>-XX:G1HeapRegionSize=4m</code> 降低 Humongous 概率</li>
+      <li><strong>长期</strong>：代码层面减少大对象分配（分页、流式处理）</li>
+    </ol>
+    <div class="key-point"><strong>关键点</strong>：能说出「先看 gc.log 找根因」而不是「直接调参数」。诊断路径比答案更重要。</div>
+  </div>
+</div>
+
+<div class="qa-block">
+  <div class="question">Q15: 生产环境：Spring 应用升级到 Java 9 后启动失败，报 InaccessibleObjectException。怎么排查？</div>
+  <div class="answer">
+    <p><strong>参考答案</strong>：</p>
+    <p><strong>第一步：看异常信息</strong></p>
+    <pre><code>java.lang.reflect.InaccessibleObjectException:
+Unable to make field private final java.lang.String
+java.lang.String.value accessible:
+module java.base does not "opens java.lang" to unnamed module @1234abcd</code></pre>
+    <p>异常信息告诉你三件事：</p>
+    <ul>
+      <li>访问的字段：<code>java.lang.String.value</code></li>
+      <li>被访问模块：<code>java.base</code></li>
+      <li>调用方模块：<code>unnamed module</code>（类路径代码）</li>
+    </ul>
+    <p><strong>第二步：判断问题类型</strong></p>
+    <table>
+      <thead><tr><th>异常信息</th><th>问题类型</th><th>解决方案</th></tr></thead>
+      <tbody>
+        <tr><td>module X does not "opens pkg"</td><td>反射访问未 opens 的包</td><td>加 <code>--add-opens X/pkg=ALL-UNNAMED</code></td></tr>
+        <tr><td>module X does not "exports pkg"</td><td>编译期访问未 exports 的包</td><td>改用公开 API 或加 <code>--add-exports</code></td></tr>
+        <tr><td>package X is not visible</td><td>依赖缺失</td><td>检查 module-info 的 requires</td></tr>
+      </tbody>
+    </table>
+    <p><strong>第三步：定位是哪个框架在反射</strong></p>
+    <ul>
+      <li>异常栈会显示调用方类。常见：Spring、Hibernate、Jackson、CGLIB。</li>
+      <li>如果是 Spring，检查 Spring 版本（需要 5+ 才支持 Java 9）。</li>
+    </ul>
+    <p><strong>第四步：修复</strong></p>
+    <ol>
+      <li><strong>首选</strong>：升级框架版本，让框架自己声明 opens。</li>
+      <li><strong>次选</strong>：在自己模块的 module-info 加 <code>opens</code>。</li>
+      <li><strong>兜底</strong>：启动参数加 <code>--add-opens java.base/java.lang=ALL-UNNAMED</code>。</li>
+    </ol>
+    <pre><code># 兜底启动参数示例
+java --add-opens java.base/java.lang=ALL-UNNAMED \
+     --add-opens java.base/java.util=ALL-UNNAMED \
+     --add-opens java.base/java.lang.reflect=ALL-UNNAMED \
+     -jar app.jar</code></pre>
+    <div class="key-point"><strong>关键点</strong>：能读懂异常信息中「which module / which package / which target」三要素，并选择正确的解决方案（opens vs exports vs add-opens）。</div>
+  </div>
+</div>
+
+<h2>本课 Deep-Grill 就绪度总结</h2>
+
+<div class="deep-grill-readiness">
+  <h4>完成本课后，你应该能：</h4>
+  <ul>
+    <li class="done">回答 JPMS 的动机、exports/opens 区别、模块图解析（对应 interviewer 角度）</li>
+    <li class="done">解释 Compact Strings 的 coder 机制和历史教训（对应 interviewer 角度）</li>
+    <li class="done">判断 G1 vs Parallel vs ZGC 的选型（对应 architect 角度）</li>
+    <li class="done">规划 Spring 应用的 JPMS 迁移路径（对应 architect 角度）</li>
+    <li class="done">审查 module-info.java 和反射代码的问题（对应 code reviewer 角度）</li>
+    <li class="done">诊断 G1 Full GC 和 InaccessibleObjectException（对应 incident responder 角度）</li>
+    <li class="done">用大白话讲清 JPMS / Compact Strings / G1（对应 instructor 角度）</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <a href="../lessons/0004-g1-gc-boundaries.html">← 上一课：G1 GC 边界与 Trade-off</a>
+  <span></span>
+</div>
+
+    </div>
+  </main>
+</div>
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){b.classList.toggle('visible',window.scrollY>400);});})();
+(function(){var t=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2, .article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();t.appendChild(a);});var ls=t.querySelectorAll('a');var es=[];ls.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)es.push({el:e,link:l});});window.addEventListener('scroll',function(){var y=window.scrollY+120;var c=null;es.forEach(function(i){if(i.el.offsetTop<=y)c=i;});ls.forEach(function(l){l.classList.remove('active');});if(c)c.link.classList.add('active');});})();
+</script>
+</body>
+</html>

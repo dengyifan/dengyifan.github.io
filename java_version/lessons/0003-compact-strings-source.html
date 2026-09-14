@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Compact Strings 源码走读</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'base',
+      themeVariables: { primaryColor: '#fef0f0', primaryBorderColor: '#ea6f5a', lineColor: '#999', fontSize: '14px' } });
+  </script>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 9</span></div></nav>
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>L3 · Compact Strings 源码走读</h1>
+      <div class="article-meta">
+        <span>📚 层模型 L3 源码层</span>
+        <span>🔬 OpenJDK jdk9 · java.base</span>
+        <span>⏱ 预计 40 分钟</span>
+      </div>
+    </div>
+    <div class="article-body">
+
+<h2>走读元信息</h2>
+
+<table>
+  <thead><tr><th>项</th><th>值</th></tr></thead>
+  <tbody>
+    <tr><td>仓库</td><td><code>hg.openjdk.org/jdk9/jdk9</code></td></tr>
+    <tr><td>版本</td><td>jdk9 GA (build 181)</td></tr>
+    <tr><td>主要文件</td><td><code>java.base/share/classes/java/lang/String.java</code></td></tr>
+    <tr><td>辅助文件</td><td><code>java.base/share/classes/java/lang/StringLatin1.java</code>、<code>StringUTF16.java</code></td></tr>
+    <tr><td>JEP</td><td>JEP 254: Compact Strings</td></tr>
+  </tbody>
+</table>
+
+<h2>背景：为什么 String 要改</h2>
+
+<p>Java 8 之前，<code>String</code> 内部使用 <code>char[]</code> 存储，每个 char 占 2 字节（UTF-16）。但绝大多数字符串只包含 Latin-1 字符（ASCII 的扩展），高 8 位都是 0——<strong>平均一半内存被浪费</strong>。</p>
+
+<table>
+  <thead><tr><th>字符串</th><th>Java 8 内存</th><th>Java 9 内存</th><th>节省</th></tr></thead>
+  <tbody>
+    <tr><td><code>"Hello"</code></td><td>10 字节 (5 char × 2)</td><td>5 字节 (5 byte × 1)</td><td>50%</td></tr>
+    <tr><td><code>"你好"</code></td><td>4 字节 (2 char × 2)</td><td>4 字节 (2 byte × 2)</td><td>0%</td></tr>
+    <tr><td><code>"Hello你好"</code></td><td>14 字节</td><td>14 字节 (7 char × 2)</td><td>0%</td></tr>
+  </tbody>
+</table>
+
+<div class="warning">
+  <div class="warning-title">历史教训</div>
+  JDK 6 曾尝试过 <code>-XX:+UseCompressedStrings</code>，通过 <code>byte[]</code> 存储 ASCII 字符串。但因为每次操作都要判断编码并可能<strong>解包（unpack）</strong>，性能反而下降，JDK 7 被移除。Java 9 的方案解决了这个问题——用 <code>coder</code> 标志分发到不同的静态实现类，避免运行时转换。
+</div>
+
+<h2>关键数据结构</h2>
+
+<table>
+  <thead><tr><th>字段/方法</th><th>作用</th><th>文件</th><th>行号</th></tr></thead>
+  <tbody>
+    <tr><td><code>byte[] value</code></td><td>字符串的字节存储</td><td>String.java</td><td>~110</td></tr>
+    <tr><td><code>byte coder</code></td><td>编码标志：LATIN1=0, UTF16=1</td><td>String.java</td><td>~120</td></tr>
+    <tr><td><code>static final byte LATIN1</code></td><td>常量 0</td><td>String.java</td><td>~100</td></tr>
+    <tr><td><code>static final byte UTF16</code></td><td>常量 1</td><td>String.java</td><td>~101</td></tr>
+    <tr><td><code>StringLatin1</code></td><td>Latin-1 编码的 String 操作静态方法</td><td>StringLatin1.java</td><td>全文</td></tr>
+    <tr><td><code>StringUTF16</code></td><td>UTF-16 编码的 String 操作静态方法</td><td>StringUTF16.java</td><td>全文</td></tr>
+    <tr><td><code>COMPACT_STRINGS</code></td><td>编译期/运行期开关（默认 true）</td><td>String.java</td><td>~95</td></tr>
+  </tbody>
+</table>
+
+<h2>核心调用链</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Caller as 调用方
+    participant String as String 构造器
+    participant CL as StringLatin1/UTF16
+    participant Arr as byte[]
+
+    Caller->>String: new String("Hello")
+    String->>String: 判断是否全是 Latin-1
+    alt 全是 Latin-1
+        String->>CL: StringLatin1.compress(bytes)
+        CL-->>String: byte[] (每个字符1字节)
+        String->>String: coder = LATIN1
+    else 含非 Latin-1
+        String->>CL: StringUTF16.compress(bytes)
+        CL-->>String: byte[] (每个字符2字节)
+        String->>String: coder = UTF16
+    end
+    String->>Arr: this.value = result
+    String-->>Caller: String 实例
+</div>
+
+<h2>逐段源码分析</h2>
+
+<h3>3.1 String 类的核心字段（String.java:110-125）</h3>
+
+<pre><code>public final class String
+    implements java.io.Serializable, Comparable&lt;String&gt;, CharSequence {
+
+    /**
+     * The value is used for character storage.
+     *
+     * @implNote This field is trusted by the VM, and is a subject to
+     * constant folding if String instance is constant. Overwriting this
+     * field after construction will cause problems.
+     *
+     * Additionally, it is marked with {@link Stable} to trust the contents
+     * of the array. No other facility in JDK provides this functionality (yet).
+     * {@link Stable} is safe here, because value is never null.
+     */
+    @Stable
+    private final byte[] value;   // 关键行: char[] → byte[]
+
+    /**
+     * The identifier of the encoding used to encode the bytes in
+     * {@link #value}. The supported values in this implementation are
+     *
+     * LATIN1
+     * UTF16
+     *
+     * @implNote This field is trusted by the VM, and is a subject to
+     * constant folding if String instance is constant. Overwriting this
+     * field after construction will cause problems.
+     */
+    private final byte coder;    // 关键行: 新增 coder 标志
+
+    /** Cache the hash code for the string */
+    private int hash; // Default to 0
+}</code></pre>
+
+<p><strong>分析</strong>：</p>
+<ul>
+  <li><code>value</code> 从 <code>char[]</code> 改为 <code>byte[]</code>，这是 Compact Strings 的物理基础。</li>
+  <li><code>coder</code> 是新增的 byte 字段，取值 <code>LATIN1(0)</code> 或 <code>UTF16(1)</code>。</li>
+  <li><code>@Stable</code> 注解告诉 JIT：这个字段在初始化后不会变（虽然 <code>value</code> 是 final，但 <code>@Stable</code> 是更强的保证），这让 JIT 可以放心做常量折叠和逃逸分析。</li>
+  <li>注意字段声明顺序：<code>value</code> → <code>coder</code> → <code>hash</code>，JVM 会按此顺序分配内存，对齐后有轻微性能优化。</li>
+</ul>
+
+<h3>3.2 length() 方法的分发（String.java）</h3>
+
+<pre><code>public int length() {
+    return value.length >> coder;   // 关键行
+}</code></pre>
+
+<p><strong>分析</strong>：</p>
+<ul>
+  <li><code>coder</code> 是 <code>0</code>（LATIN1）时，<code>value.length >> 0</code> = 字节数 = 字符数。</li>
+  <li><code>coder</code> 是 <code>1</code>（UTF16）时，<code>value.length >> 1</code> = 字节数 / 2 = 字符数。</li>
+  <li>这是极高效的分发：没有 if-else 判断，没有方法调用，只是一个位移操作。JIT 编译后通常是 2-3 条机器指令。</li>
+</ul>
+
+<div class="tip">
+  <div class="tip-title">设计智慧</div>
+  用位移替代 if-else 是一个经典优化：<code>coder</code> 只有 0/1 两个值，正好对应“不移位”和“右移 1 位”。这种设计让 <code>length()</code> 这个高频方法几乎无开销。
+</div>
+
+<h3>3.3 isEmpty() 与 coder 的关系</h3>
+
+<pre><code>public boolean isEmpty() {
+    return value.length == 0;
+}</code></pre>
+
+<p><strong>分析</strong>：不需要考虑 coder，因为空字符串的字节数组长度为 0，无论编码是什么，<code>value.length == 0</code> 都成立。</p>
+
+<h3>3.4 构造函数：编码判定逻辑</h3>
+
+<p>在 Java 9 中，字符串构造时通过 <code>StringUTF16.compress()</code> 或直接拷贝决定编码。核心判定逻辑在 <code>StringUTF16.compress()</code>：</p>
+
+<pre><code>// StringUTF16.java
+public static byte[] compress(char[] val, int off, int len) {
+    byte[] ret = new byte[len];
+    if (compress(val, off, ret, 0, len) == 0) {
+        return ret;    // 全部 Latin-1，返回压缩后的字节数组
+    }
+    return null;       // 含非 Latin-1 字符，无法压缩
+}
+
+// 核心压缩循环
+public static int compress(char[] src, int srcOff, byte[] dst, int dstOff, int len) {
+    for (int i = 0; i &lt; len; i++) {
+        char c = src[srcOff];
+        if (c &gt; 0xFF) {
+            // 关键行: 有字符超过 Latin-1 范围 (0xFF)
+            // 立即返回非 0，表示无法压缩为 LATIN1
+            return 1;
+        }
+        dst[dstOff] = (byte)c;
+        srcOff++;
+        dstOff++;
+    }
+    return 0;   // 全部压缩成功
+}</code></pre>
+
+<p><strong>关键设计</strong>：</p>
+<ul>
+  <li>压缩是<strong>快速失败</strong>的——一旦遇到 &gt; 0xFF 的字符，立即返回 1，不再继续扫描。</li>
+  <li>返回 0 表示成功，返回非 0 表示失败。调用方根据返回值决定用 LATIN1 还是 UTF16。</li>
+  <li><code>(byte)c</code> 是安全的窄化转换——因为前面已保证 <code>c &lt;= 0xFF</code>，丢弃高 8 位不丢信息。</li>
+</ul>
+
+<h3>3.5 coder() 方法</h3>
+
+<pre><code>byte coder() {
+    return COMPACT_STRINGS ? coder : UTF16;
+}</code></pre>
+
+<p><strong>分析</strong>：</p>
+<ul>
+  <li><code>COMPACT_STRINGS</code> 是 JVM 启动参数 <code>-XX:-CompactStrings</code> 控制的开关。</li>
+  <li>如果关闭 Compact Strings，<code>coder()</code> 永远返回 UTF16，所有字符串按 2 字节/字符处理。</li>
+  <li>这个设计允许运行期切换——虽然默认开启，但极端性能场景可以关闭。</li>
+</ul>
+
+<h2>coder 分发流程图</h2>
+
+<div class="mermaid">
+flowchart TD
+    A["String 方法被调用<br/>(如 length/charAt/indexOf)"] --> B{"coder == LATIN1?"}
+    B -->|"是 (coder=0)"| C["StringLatin1.xxx()<br/>每字符1字节"]
+    B -->|"否 (coder=1)"| D["StringUTF16.xxx()<br/>每字符2字节"]
+    C --> E["返回结果"]
+    D --> E
+    style C fill:#e8f5e9,stroke:#42c02e
+    style D fill:#fff8e1,stroke:#f5a623
+</div>
+
+<p>所有涉及字符操作的方法（<code>charAt</code>、<code>indexOf</code>、<code>substring</code>、<code>equals</code>、<code>hashCode</code>、<code>compareTo</code>）都走这个分发。</p>
+
+<h2>charAt 的两种实现对比</h2>
+
+<h3>StringLatin1.charAt（1 字节/字符）</h3>
+
+<pre><code>public static char charAt(byte[] value, int index) {
+    if (index &lt; 0 || index &gt;= value.length) {
+        throw new StringIndexOutOfBoundsException(index);
+    }
+    return (char)(value[index] &amp; 0xff);   // 关键行: & 0xff 转无符号
+}</code></pre>
+
+<h3>StringUTF16.charAt（2 字节/字符）</h3>
+
+<pre><code>public static char charAt(byte[] value, int index) {
+    checkIndex(index, value);
+    // 关键行: 高低字节组合
+    int hi = value[index * 2] &amp; 0xff;
+    int lo = value[index * 2 + 1] &amp; 0xff;
+    return (char)((hi &lt;&lt; 8) | lo);
+}</code></pre>
+
+<p><strong>对比</strong>：</p>
+<ul>
+  <li>Latin1 版本只需一次数组访问 + 位与操作。</li>
+  <li>UTF16 版本需要两次数组访问 + 位运算组合。所以在处理 ASCII 字符串时，Latin1 版本天然更快。</li>
+  <li>这就是 Compact Strings 的双重收益：<strong>省内存 + 部分操作更快</strong>。</li>
+</ul>
+
+<h2>Compact Strings 的整体数据流</h2>
+
+<div class="mermaid">
+flowchart LR
+    A["输入字符序列<br/>(char[] / byte[] / String)"] --> B{"包含 &gt;0xFF<br/>的字符?"}
+    B -->|"否"| C["StringLatin1<br/>coder = LATIN1(0)"]
+    B -->|"是"| D["StringUTF16<br/>coder = UTF16(1)"]
+    C --> E["value: byte[]<br/>每字符1字节"]
+    D --> F["value: byte[]<br/>每字符2字节"]
+    E --> G["String 实例"]
+    F --> G
+    G --> H["方法调用"]
+    H --> I{"coder 检查"}
+    I -->|"LATIN1"| J["StringLatin1.xxx()"]
+    I -->|"UTF16"| K["StringUTF16.xxx()"]
+    style C fill:#e8f5e9
+    style D fill:#fff8e1
+</div>
+
+<h2>完整可执行示例</h2>
+
+<pre><code>public class CompactStringsDemo {
+    public static void main(String[] args) throws Exception {
+        // ===== 1. 观察内存占用差异 =====
+        // 通过反射访问 String 内部字段验证 coder
+
+        java.lang.reflect.Field valueField =
+            String.class.getDeclaredField("value");
+        java.lang.reflect.Field coderField =
+            String.class.getDeclaredField("coder");
+        valueField.setAccessible(true);
+        coderField.setAccessible(true);
+
+        String ascii = "Hello, Java 9!";
+        String chinese = "你好，Java 9！";
+
+        byte[] asciiValue = (byte[]) valueField.get(ascii);
+        byte[] chineseValue = (byte[]) valueField.get(chinese);
+        byte asciiCoder = (byte) coderField.get(ascii);
+        byte chineseCoder = (byte) coderField.get(chinese);
+
+        System.out.println("=== ASCII String ===");
+        System.out.println("Content: " + ascii);
+        System.out.println("Length: " + ascii.length());
+        System.out.println("byte[] length: " + asciiValue.length);
+        System.out.println("coder: " + asciiCoder + " (0=LATIN1)");
+        System.out.println("Memory: " + asciiValue.length + " bytes");
+
+        System.out.println("\n=== Chinese String ===");
+        System.out.println("Content: " + chinese);
+        System.out.println("Length: " + chinese.length());
+        System.out.println("byte[] length: " + chineseValue.length);
+        System.out.println("coder: " + chineseCoder + " (1=UTF16)");
+        System.out.println("Memory: " + chineseValue.length + " bytes");
+
+        // ===== 2. 验证 length() 的位移原理 =====
+        System.out.println("\n=== length() 位移验证 ===");
+        System.out.println("ASCII: value.length=" + asciiValue.length
+            + ", coder=" + asciiCoder
+            + ", length()=" + (asciiValue.length >> asciiCoder));
+        System.out.println("Chinese: value.length=" + chineseValue.length
+            + ", coder=" + chineseCoder
+            + ", length()=" + (chineseValue.length >> chineseCoder));
+
+        // ===== 3. 混合字符串使用 UTF16 =====
+        String mixed = "Hello你好";
+        byte[] mixedValue = (byte[]) valueField.get(mixed);
+        byte mixedCoder = (byte) coderField.get(mixed);
+        System.out.println("\n=== Mixed String ===");
+        System.out.println("Content: " + mixed);
+        System.out.println("Length: " + mixed.length());
+        System.out.println("byte[] length: " + mixedValue.length);
+        System.out.println("coder: " + mixedCoder);
+        System.out.println("内存: " + mixedValue.length + " bytes"
+            + " (长度 " + mixed.length() + " × 2)");
+
+        // ===== 4. 运行期开关：-XX:-CompactStrings 时 coder 强制 UTF16 =====
+        System.out.println("\n=== COMPACT_STRINGS 开关 ===");
+        java.lang.reflect.Field compactField =
+            String.class.getDeclaredField("COMPACT_STRINGS");
+        compactField.setAccessible(true);
+        System.out.println("COMPACT_STRINGS = " + compactField.get(null));
+        System.out.println("(用 -XX:-CompactStrings 运行时此值为 false)");
+
+        // ===== 5. 性能对比：ASCII 字符串长度计算 =====
+        System.out.println("\n=== 性能对比 ===");
+        String bigAscii = "a".repeat(1_000_000);
+        String bigChinese = "字".repeat(500_000);
+        // repeat 是 Java 11 引入的，Java 9 用 StringBuilder 替代
+
+        StringBuilder sb1 = new StringBuilder();
+        for (int i = 0; i < 1_000_000; i++) sb1.append('a');
+        String bigAscii2 = sb1.toString();
+
+        StringBuilder sb2 = new StringBuilder();
+        for (int i = 0; i < 500_000; i++) sb2.append('字');
+        String bigChinese2 = sb2.toString();
+
+        long t1 = System.nanoTime();
+        for (int i = 0; i < 1000; i++) bigAscii2.length();
+        long t2 = System.nanoTime();
+        System.out.println("ASCII length() 1000次: " + (t2-t1)/1000 + " ns");
+
+        long t3 = System.nanoTime();
+        for (int i = 0; i < 1000; i++) bigChinese2.length();
+        long t4 = System.nanoTime();
+        System.out.println("Chinese length() 1000次: " + (t4-t3)/1000 + " ns");
+    }
+}</code></pre>
+
+<div class="note">
+  <div class="note-title">反射访问的注意事项</div>
+  上述代码用反射访问了 String 的私有字段。在 Java 9 JPMS 下，需要：
+  <ul>
+    <li>启动参数加 <code>--add-opens java.base/java.lang=ALL-UNNAMED</code></li>
+    <li>或在 module-info.java 中写 <code>opens java.lang</code>（不可能，因为 java.base 是 JDK 模块）</li>
+    <li>如果用类路径运行（未命名模块），加 <code>--add-opens</code> 即可</li>
+  </ul>
+</div>
+
+<h2>关键设计决策</h2>
+
+<table>
+  <thead><tr><th>决策</th><th>为什么</th><th>代价</th></tr></thead>
+  <tbody>
+    <tr><td>byte[] + coder 而非 char[]</td><td>Latin-1 字符串省一半内存</td><td>所有 String 操作需 coder 分发</td></tr>
+    <tr><td>用位移而非 if-else</td><td>length() 等高频方法零分支开销</td><td>可读性略降</td></tr>
+    <tr><td>静态方法分发到 StringLatin1/StringUTF16</td><td>避免运行时解包，每个实现独立优化</td><td>代码量翻倍（String.java 类膨胀）</td></tr>
+    <tr><td>快速失败压缩</td><td>遇到 &gt;0xFF 立即返回，不浪费扫描</td><td>需要两次扫描（第一次判断，第二次构造）</td></tr>
+    <tr><td>保留 COMPACT_STRINGS 开关</td><td>极端性能场景可关闭</td><td>增加分支判断（但 JIT 可内联常量）</td></tr>
+  </tbody>
+</table>
+
+<h2>与 Java 8 的性能对比</h2>
+
+<table>
+  <thead><tr><th>场景</th><th>Java 8</th><th>Java 9 (Compact Strings)</th><th>变化</th></tr></thead>
+  <tbody>
+    <tr><td>ASCII 字符串内存</td><td>2 字节/字符</td><td>1 字节/字符</td><td>-50%</td></tr>
+    <tr><td>中文/emoji 内存</td><td>2 字节/字符</td><td>2 字节/字符</td><td>无变化</td></tr>
+    <tr><td>charAt (ASCII)</td><td>1 次数组访问</td><td>1 次数组访问 + 位与</td><td>基本持平</td></tr>
+    <tr><td>length()</td><td>value.length</td><td>value.length >> coder</td><td>增加 1 条指令</td></tr>
+    <tr><td>hashCode() (ASCII)</td><td>遍历 char[]</td><td>遍历 byte[]</td><td>更快（缓存友好）</td></tr>
+    <tr><td>GC 压力</td><td>基准</td><td>降低约 25-50%</td><td>显著改善</td></tr>
+  </tbody>
+</table>
+
+<h2>本课 Deep-Grill 就绪度</h2>
+
+<div class="deep-grill-readiness">
+  <h4>学完本课后，检查以下能力：</h4>
+  <ul>
+    <li class="done">能写出 String 内部字段的变化（char[] → byte[] + coder）（对应 code reviewer 角度）</li>
+    <li class="done">能解释 <code>value.length >> coder</code> 的原理（对应 interviewer 角度）</li>
+    <li class="done">能说出 JDK 6 的 -XX:+UseCompressedStrings 为什么失败（对应 interviewer 角度）</li>
+    <li class="done">能画出 coder 分发的流程图（对应 instructor 角度）</li>
+    <li class="done">能用反射验证 coder 的值并测量内存（对应 code reviewer 角度）</li>
+    <li>能说出 Compact Strings 不适用的场景（对应 architect 角度）</li>
+  </ul>
+</div>
+
+<div class="page-nav">
+  <a href="./0002-jpms-module-system.html">← 上一课：JPMS 模块系统</a>
+  <a href="./0004-g1-gc-boundaries.html">下一课：G1 GC 边界与 Trade-off →</a>
+</div>
+
+    </div>
+  </main>
+</div>
+<div class="back-to-top" id="backToTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</div>
+<script>
+(function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){b.classList.toggle('visible',window.scrollY>400);});})();
+(function(){var t=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2, .article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();t.appendChild(a);});var ls=t.querySelectorAll('a');var es=[];ls.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)es.push({el:e,link:l});});window.addEventListener('scroll',function(){var y=window.scrollY+120;var c=null;es.forEach(function(i){if(i.el.offsetTop<=y)c=i;});ls.forEach(function(l){l.classList.remove('active');});if(c)c.link.classList.add('active');});})();
+</script>
+</body>
+</html>

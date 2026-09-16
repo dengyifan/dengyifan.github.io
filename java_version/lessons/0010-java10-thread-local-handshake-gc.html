@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thread-Local Handshakes 与 GC 接口 · Java 10</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 10 · Safepoint 与 GC 接口</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Thread-Local Handshakes 与 GC 接口 — JVM 运行时的两项底层改进</h1>
+<div class="article-meta"><span>📚 L2-L3 · 原理与源码</span><span>🔬 JEP 312 / JEP 304 · OpenJDK 10</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 10 / Safepoint 与 GC 接口</div>
+
+<h2>L1 · 概念层：两个底层机制</h2>
+
+<h3>Thread-Local Handshakes（JEP 312）</h3>
+
+<p>传统的 Safepoint 机制要求<strong>所有线程</strong>停下来才能执行某些全局操作。但很多场景其实只需要操作<strong>单个线程</strong>——比如撤销某个线程的偏向锁、获取某个线程的 stack trace、执行栈采样[reference:17]。让所有线程停下来做这些事，代价太高。</p>
+
+<p>Thread-Local Handshakes 允许 JVM 在不执行全局 Safepoint 的情况下，对单个线程执行回调。</p>
+
+<h3>GC 接口（JEP 304）</h3>
+
+<p>在 Java 10 之前，GC 实现代码散落在 HotSpot 各处——屏障代码在解释器/C1/C2 中，诊断代码在 MemoryMXBeans 中，大量 if-else 分支区分不同 GC。JEP 304 引入干净的 GC 接口（<code>CollectedHeap</code> 抽象），使每个 GC 的实现尽可能收敛到自己的目录中[reference:18]。</p>
+
+<h2>L2 · 原理层</h2>
+
+<h3>Safepoint 机制回顾</h3>
+
+<div class="mermaid">
+flowchart TD
+    A[JVM 需要执行全局安全操作] --> B[设置全局 Safepoint 标志]
+    B --> C[所有应用线程轮询检查标志]
+    C --> D[线程在最近的 Safepoint 点停下]
+    D --> E[VM Thread 执行操作]
+    E --> F[恢复所有线程]
+    style A fill:#fef0f0
+    style F fill:#e8f5e9
+</div>
+
+<p>问题：线程轮询和停止的过程需要时间，且让所有线程都停下做<strong>单个线程</strong>的操作是资源浪费[reference:19]。</p>
+
+<h3>Thread-Local Handshake 机制</h3>
+
+<div class="mermaid">
+flowchart LR
+    A[VM Thread 需要操作<br/>单个线程 X] --> B[在线程 X 的<br/>Safepoint 轮询页设置标志]
+    B --> C[线程 X 执行回调]
+    C --> D[其他线程不受影响]
+    style A fill:#fef0f0
+    style D fill:#e8f5e9
+</div>
+
+<p>核心变化：从<strong>全局轮询页</strong>改为<strong>每线程独立的轮询页</strong>。VM Thread 只修改目标线程的轮询页标志，该线程在下次轮询时执行回调，其他线程继续运行[reference:20]。</p>
+
+<h3>GC 接口的抽象层次</h3>
+
+<div class="mermaid">
+flowchart TD
+    A[CollectedHeap<br/>抽象基类] --> B[G1CollectedHeap]
+    A --> C[ParallelScavengeHeap]
+    A --> D[GenCollectedHeap]
+    A --> E[ZCollectedHeap<br/>后续版本]
+    subgraph Barrier[屏障接口]
+        F[GCBarrierSet]
+        G[GCInterpreterSupport]
+        H[GCC1Support]
+        I[GCC2Support]
+    end
+    B --> Barrier
+    C --> Barrier
+</div>
+
+<h2>L3 · 源码层</h2>
+
+<h3>Handshake 的关键类</h3>
+
+<table>
+<tr><th>类</th><th>作用</th><th>文件</th></tr>
+<tr><td><code>Handshake</code></td><td>握手操作的门面类</td><td><code>runtime/handshake.hpp</code></td></tr>
+<tr><td><code>HandshakeState</code></td><td>跟踪每个 JavaThread 的握手状态</td><td><code>runtime/handshake.hpp</code></td></tr>
+<tr><td><code>SafepointMechanism</code></td><td>轮询机制，支持线程本地轮询</td><td><code>runtime/safepointMechanism.hpp</code></td></tr>
+</table>
+
+<h3>HandshakeState 的源码结构</h3>
+
+<pre><code>// OpenJDK · runtime/handshake.hpp
+// A handshake operation is a callback that is executed for each JavaThread
+// while that thread is in a safepoint safe state.
+
+class HandshakeState {
+    HandshakeOperation* volatile _operation;
+    Semaphore _semaphore;
+    bool _vmthread_holds_semaphore;
+    bool _thread_in_process_handshake;
+
+    bool claim_handshake_for_vmthread();
+    bool vmthread_can_process_handshake(JavaThread* target);
+    void clear_handshake(JavaThread* thread);
+    void process_self_inner(JavaThread* thread);
+public:
+    void set_operation(JavaThread* thread, HandshakeOperation* op);
+    bool has_operation() const { return _operation != NULL; }
+    void cancel(JavaThread* thread);
+};</code></pre>
+
+<p><strong>关键设计</strong>：<code>HandshakeState</code> 使用信号量（<code>Semaphore</code>）来序列化 VM Thread 和目标 JavaThread 之间的握手操作——确保操作只被其中一方执行，不会重复[reference:21]。</p>
+
+<h3>GC 接口的 CollectedHeap 抽象</h3>
+
+<pre><code>// OpenJDK · gc/shared/collectedHeap.hpp
+// The GC interface would be defined by the existing class CollectedHeap
+// which every garbage collector needs to implement.
+
+class CollectedHeap : public CHeapObj&lt;mtInternal&gt; {
+public:
+    // 所有 GC 必须实现的纯虚函数
+    virtual Name kind() const = 0;
+    virtual bool is_maximal_no_gc() const = 0;
+    virtual size_t capacity() const = 0;
+    virtual size_t used() const = 0;
+
+    // 垃圾回收入口
+    virtual void collect(GCCause::Cause cause) = 0;
+    virtual void do_full_collection(bool clear_all_soft_refs) = 0;
+
+    // 屏障相关（由 GC 特定的 BarrierSet 提供）
+    virtual BarrierSet* barrier_set() const = 0;
+};</code></pre>
+
+<p>JEP 304 的目标不是<strong>添加或移除</strong> GC，而是<strong>整理代码结构</strong>，使 GC 实现尽可能隔离在自己的目录中，减少跨模块的耦合[reference:22]。</p>
+
+<div class="java-comparison">
+<div class="header">从 Java 视角看：与 .NET GC 的对比</div>
+<p>.NET 的 GC 是<strong>单体式</strong>的——Workstation GC 和 Server GC 在同一套代码中，通过配置切换。HotSpot 选择了<strong>多实现</strong>路线：Serial、Parallel、CMS、G1、ZGC、Shenandoah 各自独立。JEP 304 的 GC 接口正是这条路线的基础设施——让新增 GC 的实现者只需关注自己的接口实现，不需要理解整个 HotSpot 代码库。</p>
+</div>
+
+<h2>L4 · 边界层</h2>
+
+<table>
+<tr><th>机制</th><th>局限</th><th>后续演进</th></tr>
+<tr><td>Thread-Local Handshakes</td><td>仅支持 x64 和 SPARC 架构；偏向锁撤销等场景受益，但 GC 的 STW 阶段仍需全局 Safepoint</td><td>成为 Loom 虚拟线程调度的基础机制</td></tr>
+<tr><td>GC 接口</td><td>只是代码整理，不提供运行时插件能力（不能在不重新编译 JVM 的情况下插入新 GC）</td><td>为 ZGC (JEP 333) 和 Epsilon (JEP 318) 的实现铺路</td></tr>
+</table>
+
+<div class="production-note">
+<div class="header">JVM 调优参数</div>
+<p>Thread-Local Handshakes 默认开启（在支持的架构上）。可通过 <code>-XX:+ThreadLocalHandshakes</code> 显式启用，<code>-XX:-ThreadLocalHandshakes</code> 禁用。GC 接口无运行时参数，它是 HotSpot 的内部重构。</p>
+</div>
+
+<h2>L5 · 面试层</h2>
+
+<div class="qa-block">
+<div class="question">Q1: Thread-Local Handshakes 解决了 Safepoint 的什么问题？</div>
+<div class="answer">
+<p>传统 Safepoint 需要<strong>所有线程</strong>停止才能执行操作。但偏向锁撤销、stack trace 获取等操作只需要<strong>单个线程</strong>暂停。Thread-Local Handshakes 将全局轮询页改为每线程独立的轮询页，VM Thread 只修改目标线程的轮询标志，其他线程不受影响。</p>
+<div class="key-point"><strong>关键点</strong>：从「全体暂停」到「按需暂停」，减少不必要的 STW。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — HandshakeState 如何保证操作的唯一性？</div>
+<div class="answer">
+<p>通过信号量（<code>Semaphore</code>）序列化。VM Thread 和 JavaThread 通过 <code>claim_handshake_for_vmthread()</code> 和 <code>process_self_inner()</code> 竞争信号量，确保握手操作只被其中一方执行。如果 VM Thread 先获取信号量，它代表 JavaThread 执行回调；否则 JavaThread 自己执行[reference:23]。</p>
+<div class="key-point"><strong>关键点</strong>：信号量确保「恰好一次」语义，不会重复执行也不会遗漏。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — GC 接口（JEP 304）实际做了什么？只是整理代码吗？</div>
+<div class="answer">
+<p>表面上是代码整理，实质是<strong>架构解耦</strong>。在 JEP 304 之前，添加新 GC 需要修改解释器、C1、C2、MemoryMXBeans 等多处代码。JEP 304 将 GC 特定的屏障实现、诊断代码等收敛到 <code>CollectedHeap</code> 接口和 GC 各自的目录中。这直接使得 Java 11 的 ZGC 和 Epsilon 能够以较小的代码侵入性落地。</p>
+<div class="key-point"><strong>关键点</strong>：JEP 304 是「基础设施投资」——本身不提供用户可见的新功能，但为后续 GC 创新铺平了道路。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能解释 Thread-Local Handshakes 与 Safepoint 的区别（interviewer 角度）</li>
+<li class="done">能说出 HandshakeState 的信号量设计（code reviewer 角度）</li>
+<li class="done">能解释 GC 接口如何为 ZGC 铺路（architect 角度）</li>
+<li>能排查 Safepoint 导致的延迟问题（incident responder 角度）</li>
+<li>能用大白话解释「握手」vs「全局暂停」（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="./0004-g1-parallel-full-gc.html">← 上一课：G1 并行 Full GC</a></span>
+<span><a href="../index.html">返回首页</a></span>
+</div>
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 10 面试题库 · Deep Mastery</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<style>
+:root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-muted:#999;--accent:#ea6f5a;--accent-blue:#3194d0;--accent-light:#fef0f0;--border:#f0f0f0;--code-bg:#f7f7f7;--green:#42c02e;--orange:#f5a623;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace;--content-width:1020px;--toc-width:220px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}
+.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans)}
+.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}
+.layout{display:flex;justify-content:center;margin-top:56px;padding:0 16px;min-height:100vh}
+.toc-sidebar{position:fixed;left:calc(50% - var(--content-width)/2 - var(--toc-width) - 40px);top:96px;width:var(--toc-width);max-height:calc(100vh - 140px);overflow-y:auto;z-index:100;font-family:var(--font-sans);font-size:13px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);padding:16px 0}
+.toc-title{padding:0 16px 12px;font-size:13px;font-weight:700;border-bottom:1px solid var(--border);margin-bottom:8px}
+.toc-sidebar a{display:block;padding:5px 16px;color:var(--text-muted);text-decoration:none;border-left:2px solid transparent;transition:all .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toc-sidebar a:hover{color:var(--accent);background:#fafafa}.toc-sidebar a.active{color:var(--accent);font-weight:600;border-left-color:var(--accent);background:var(--accent-light)}
+.toc-sidebar a.toc-h3{padding-left:28px;font-size:12px}
+@media(max-width:1200px){.toc-sidebar{display:none}}
+.content{width:100%;max-width:var(--content-width);padding:32px 0 80px}
+.article-header{background:var(--card-bg);border-radius:4px;padding:36px 40px 28px;margin-bottom:16px;border-bottom:1px solid var(--border)}
+.article-header h1{font-size:30px;font-weight:700;line-height:1.4;font-family:var(--font-sans);margin-bottom:16px}
+.article-meta{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:20px;flex-wrap:wrap}
+.article-body{background:var(--card-bg);border-radius:4px;padding:32px 40px 48px}
+.article-body h2{font-size:22px;font-weight:700;margin:40px 0 16px;font-family:var(--font-sans);padding-bottom:8px;border-bottom:1px solid var(--border)}.article-body h2:first-child{margin-top:0}
+.article-body h3{font-size:18px;font-weight:600;margin:28px 0 12px;font-family:var(--font-sans);color:#333}
+.article-body p{margin:14px 0;text-align:justify}.article-body a{color:var(--accent);text-decoration:none}
+code{font-family:var(--font-mono);font-size:.88em;background:var(--code-bg);padding:2px 6px;border-radius:3px;color:#c7254e}
+pre{font-family:var(--font-mono);font-size:13px;background:#282c34;color:#abb2bf;padding:18px 22px;border-radius:6px;overflow-x:auto;margin:18px 0;line-height:1.6}
+pre code{background:transparent;color:inherit;padding:0;font-size:inherit}
+blockquote{margin:18px 0;padding:12px 18px;border-left:4px solid var(--accent);background:#fafafa;color:#555;font-size:.95em}
+table{border-collapse:collapse;width:100%;margin:18px 0;font-size:14px;font-family:var(--font-sans)}
+th,td{border:1px solid var(--border);padding:10px 14px;text-align:left}th{background:#fafafa;font-weight:600;font-size:13px}tr:hover{background:#fafafa}
+.qa-block{background:#fafafa;border:1px solid var(--border);border-radius:6px;padding:1.2rem 1.5rem;margin:1.2rem 0}
+.qa-block .question{font-weight:600;color:var(--accent);margin-bottom:.6rem;font-size:1.05em}
+.qa-block .key-point{margin-top:.5rem;padding:.4rem .8rem;background:#fef9f0;border-left:3px solid var(--accent);border-radius:0 4px 4px 0;font-size:.9em;color:var(--text-muted)}
+.deep-grill-readiness{background:#f5f5f5;border:1px solid var(--border);border-radius:6px;padding:1rem 1.5rem;margin:2rem 0 1rem;font-size:.95em}
+.deep-grill-readiness h4{margin-top:0;font-family:var(--font-sans)}.deep-grill-readiness ul{list-style:none}
+.deep-grill-readiness li{padding:.25rem 0;color:var(--text-muted)}.deep-grill-readiness li.done{color:var(--text)}.deep-grill-readiness li.done::before{content:"☑ ";color:#5cb85c}.deep-grill-readiness li::before{content:"☐ ";color:var(--text-muted)}
+.page-nav{display:flex;justify-content:space-between;margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border);font-size:.95em}.page-nav a{color:var(--accent)}
+.breadcrumb{color:var(--text-muted);font-size:.9rem;margin-bottom:1.5rem;font-family:var(--font-sans)}
+@media(max-width:600px){.article-header{padding:24px 20px}.article-header h1{font-size:22px}.article-body{padding:20px 20px 32px}body{font-size:16px}}
+</style>
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 10 · 面试题库</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Java 10 面试题库</h1>
+<div class="article-meta"><span>🧪 L5 · 面试层</span><span>20 题 · 5 角度</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 10 / 面试题库</div>
+
+<h2>var 类型推断（4 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q1: var 是关键字吗？它改变了 Java 的静态类型系统吗？</div>
+<div class="answer"><p>var 是<strong>保留类型名</strong>（reserved type name），不是关键字。它没有改变 Java 的静态类型本质——变量在编译后仍有确定的静态类型。var 是 100% 的编译期语法糖，字节码中不存在 var。</p>
+<div class="key-point">区分「保留类型名」与「关键字」：var 不能用作类名，但可以用作变量名和方法名。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — var 为什么不能用于方法参数和字段？</div>
+<div class="answer"><p>方法参数和字段是接口契约的一部分。调用方和子类需要看到稳定的类型声明，而 var 的推断结果是编译器内部决定的，对调用方不可见。JEP 286 的设计原则是「局部性」——var 只影响变量声明所在的局部作用域。</p>
+<div class="key-point">「局部性」是 var 设计的第一原则。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — 写出 var 推断的核心伪代码，什么情况下会编译失败？</div>
+<div class="answer"><pre><code>function processVarDeclaration(node):
+    if node.vartype != null: return  // 显式类型
+    if node.init == null:
+        error("var requires initializer"); return
+    inferredType = attribExpr(node.init, Type.noType)
+    if inferredType.isErroneous():
+        error("cannot infer type"); return
+    node.vartype = inferredType</code></pre>
+<p>编译失败的情况：(1) 无初始化表达式；(2) 初始化表达式是 poly expression（数组初始化器、lambda），无法独立推导类型。</p>
+<div class="key-point">poly expression 是 var 拒绝的核心场景。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 代码审查 — 以下代码有什么问题？</div>
+<div class="answer"><pre><code>var result = service.process(input);
+// ... 50 行之后 ...
+return result.getData();</code></pre>
+<p>问题：<code>result</code> 的类型对读者不可见。50 行之后，读者无法通过类型声明判断 <code>result</code> 是什么，只能回溯到第 1 行去查看 <code>service.process</code> 的返回类型。<strong>建议</strong>：当变量跨越多行使用时，显式声明类型。</p>
+<div class="key-point">var 的可读性风险：跨行使用时应显式声明。</div>
+</div>
+</div>
+
+<h2>不可变集合 API（4 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q1: List.copyOf() 和 Collections.unmodifiableList() 有什么区别？</div>
+<div class="answer"><p>三个核心区别：(1) <strong>副本 vs 视图</strong>——copyOf 创建独立副本，原列表修改不影响；unmodifiableList 是视图，原列表修改会影响。(2) <strong>null 处理</strong>——copyOf 拒绝 null，unmodifiableList 允许。(3) <strong>幂等性</strong>——copyOf 传入不可变集合时直接返回原引用。</p>
+<div class="key-point">防御性编程用 copyOf，只读视图用 unmodifiableList。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — copyOf 为什么设计成幂等的？</div>
+<div class="answer"><p>幂等性避免多次防御性拷贝的开销。在方法链中每层都调用 <code>copyOf()</code> 时，传入的如果是不可变集合，后续调用零成本。这是「零成本防御」设计哲学——鼓励开发者在不牺牲性能的前提下防御性编程。</p>
+<div class="key-point">幂等性是防御性编程性能友好的关键。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — Collectors.toUnmodifiableList() 的累加器类型是什么？为什么？</div>
+<div class="answer"><p>累加器是 <code>ArrayList</code>（可变），最终通过 <code>listFromTrustedArray</code> 转为不可变列表。如果累加器本身是不可变类型，每次 <code>add</code> 都要创建新对象，导致 O(n²) 复杂度。</p>
+<div class="key-point">Stream Collector 的通用模式：收集用可变，结果用不可变。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 故障排查 — 生产环境出现 List.copyOf 抛 NullPointerException，怎么排查？</div>
+<div class="answer"><p>排查步骤：(1) 确认入参集合是否包含 null 元素——copyOf 拒绝 null，unmodifiableList 不拒绝；(2) 检查数据来源——上游是否有 null 值注入；(3) 如果确实需要允许 null，改用 <code>Collections.unmodifiableList(new ArrayList&lt;&gt;(input))</code>。</p>
+<div class="key-point">copyOf 的 null 拒绝是设计选择，不是 bug。排查时首先检查数据源。</div>
+</div>
+</div>
+
+<h2>AppCDS（3 题）</h2>
+
+<div class="qa-block">
+<div class="question">Q1: AppCDS 为什么能减少内存占用？</div>
+<div class="answer"><p>归档文件被 mmap 为只读映射。操作系统对同一文件的只读 mmap 在不同进程间共享物理页——多个 JVM 进程看到的归档内容映射到同一块物理内存。类元数据只在内存中保留一份。</p>
+<div class="key-point">共享的是物理内存页，不是虚拟地址空间。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — JDK 升级后 AppCDS 归档会怎样？</div>
+<div class="answer"><p>JVM 启动时检查归档的 JDK 版本。不匹配时<strong>静默忽略</strong>，回退到文件系统加载。不报错，但加速效果消失。这是生产环境最易踩的坑——升级 JDK 后必须重新生成归档。</p>
+<div class="key-point">静默回退保证兼容性，但需要监控启动时间来发现。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 架构师角度 — 在 K8s 中如何设计 AppCDS 方案？</div>
+<div class="answer"><p>(1) 在 Docker 镜像构建阶段生成 AppCDS 归档（与运行时 JDK 版本一致）；(2) 归档文件作为只读层放入镜像；(3) 多个 Pod 的 JVM 进程 mmap 同一归档，共享物理内存；(4) 在 CI/CD 中验证归档版本匹配，避免静默失效。</p>
+<div class="key-point">AppCDS 在容器化场景的收益最大：启动时间 + 内存双优化。</div>
+</div>
+</div>
+
+<h2>G1 并行 Full GC（4 题）</h2>
+
+<div class="qa-block">
+<div class="question">Q1: Java 10 之前 G1 的 Full GC 为什么是单线程的？</div>
+<div class="answer"><p>历史原因。G1 从 CMS/Parallel GC 代码基础演进而来，Full GC 选择了更简单的串行算法——设计假设是「尽量避免 Full GC」。但实际生产中 Full GC 仍会发生，单线程成为严重瓶颈。Bazel 曾报告 JDK 9 下 G1 导致构建性能回退 30%。</p>
+<div class="key-point">不是设计失误，是优先级权衡。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — 并行化的核心改动是什么？</div>
+<div class="answer"><p>引入 <code>G1FullCollector</code> 替代 <code>G1SerialFullCollector</code>。四个阶段（标记、准备压缩、调整指针、压缩）全部通过 <code>WorkGang</code> 并行执行。关键入参：<code>mark_bitmap</code> 和 <code>active_workers</code>。</p>
+<div class="key-point">不是简单循环改并行，而是重新设计了任务划分和数据共享。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — 画出并行 Full GC 的阶段伪代码。</div>
+<div class="answer"><pre><code>function fullGC():
+    collector = new G1FullCollector(active_workers)
+    collector.prepare_collection()
+    workers.runTask(G1FullGCMarkTask)       // Phase 1
+    workers.runTask(G1FullGCPrepareTask)    // Phase 2
+    workers.runTask(G1FullGCAdjustTask)     // Phase 3
+    workers.runTask(G1FullGCCompactTask)    // Phase 4
+    collector.complete_collection()</code></pre>
+<p>四个阶段串行，每个阶段内部并行。</p>
+<div class="key-point">分阶段并行：阶段间串行，阶段内并行。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 故障排查 — Full GC 频繁触发，暂停时间仍然很长，怎么排查？</div>
+<div class="answer"><p>(1) 检查 GC 日志确认 Full GC 的触发原因（并发模式失败/晋升失败/疏散失败）；(2) 如果暂停时间仍长，检查引用处理阶段——该阶段可能仍是单线程；(3) 检查堆大小和 Region 大小配置；(4) 如果对象分配速率过高，考虑增大堆或优化对象生命周期。</p>
+<div class="key-point">并行 Full GC 优化了标记-压缩阶段，但引用处理仍是潜在瓶颈。</div>
+</div>
+</div>
+
+<h2>Thread-Local Handshakes 与 GC 接口（5 题）</h2>
+
+<div class="qa-block">
+<div class="question">Q1: Thread-Local Handshakes 解决了 Safepoint 的什么问题？</div>
+<div class="answer"><p>传统 Safepoint 需要所有线程停止。但偏向锁撤销、stack trace 获取等操作只需单个线程暂停。Thread-Local Handshakes 将全局轮询页改为每线程独立轮询页，VM Thread 只修改目标线程的标志，其他线程不受影响。</p>
+<div class="key-point">从「全体暂停」到「按需暂停」。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — HandshakeState 如何保证操作的唯一性？</div>
+<div class="answer"><p>通过信号量（<code>Semaphore</code>）序列化。VM Thread 和 JavaThread 通过 <code>claim_handshake_for_vmthread()</code> 和 <code>process_self_inner()</code> 竞争信号量，确保操作只被一方执行。</p>
+<div class="key-point">信号量确保「恰好一次」语义。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — 画出 Thread-Local Handshake 的执行伪代码。</div>
+<div class="answer"><pre><code>function requestHandshake(targetThread, callback):
+    op = new HandshakeOperation(callback)
+    targetThread.handshake_state.set_operation(op)
+    // 在 targetThread 的轮询页设置标志
+    SafepointMechanism.arm_local_poll(targetThread)
+
+// 目标线程在执行过程中轮询到标志
+function targetThread.poll():
+    if localPollArmed():
+        if handshake_state.has_operation():
+            // 尝试自己执行
+            if handshake_state.process_self_inner():
+                return  // 自己执行成功
+            // 否则由 VM Thread 代为执行</code></pre>
+<div class="key-point">轮询页是每线程独立的——这是「本地」握手的核心。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: GC 接口（JEP 304）实际做了什么？</div>
+<div class="answer"><p>表面是代码整理，实质是<strong>架构解耦</strong>。将 GC 特定的屏障实现、诊断代码收敛到 <code>CollectedHeap</code> 接口和 GC 各自目录中。这直接使得 ZGC 和 Epsilon 能以较小侵入性落地。</p>
+<div class="key-point">JEP 304 是「基础设施投资」——为后续 GC 创新铺路。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: 讲师角度 — 用大白话解释 Thread-Local Handshake 和全局 Safepoint 的区别。</div>
+<div class="answer"><p>想象一个教室。全局 Safepoint 是「全班同学起立」——老师要发通知，所有人都要站起来。Thread-Local Handshake 是「老师走到某个同学桌前单独说话」——其他同学继续做题，不受影响。很多操作其实只需要找一个人，却让全班起立，太浪费了。Handshake 就是「走过去悄悄说」。</p>
+<div class="key-point">类比记忆：「全班起立」vs「走到桌前单独说」。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能回答 var / copyOf / AppCDS / G1 / Handshake 的核心问题（interviewer 角度）</li>
+<li class="done">能写出各机制的伪代码（追问链要求）</li>
+<li class="done">能设计 AppCDS 容器化方案、评估 GC 选型（architect 角度）</li>
+<li>能审查 var 可读性、copyOf null 边界（code reviewer 角度）</li>
+<li>能排查 Full GC 频繁、AppCDS 失效、Safepoint 延迟（incident responder 角度）</li>
+<li>能用类比向新人解释所有核心概念（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="../lessons/0005-thread-local-handshakes.html">← 上一课</a></span>
+<span><a href="../index.html">返回首页</a></span>
+</div>
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

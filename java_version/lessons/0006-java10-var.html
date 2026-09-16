@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>var — 局部变量类型推断 · Java 10 Deep Mastery</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'base',
+      themeVariables: { primaryColor: '#fef0f0', primaryBorderColor: '#ea6f5a', lineColor: '#999', fontSize: '14px' }
+    });
+  </script>
+  <link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 10 · var</span></div></nav>
+<div class="layout">
+  <nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+  <main class="content">
+    <div class="article-header">
+      <h1>var — 局部变量类型推断</h1>
+      <div class="article-meta">
+        <span>📚 L1 · 概念层</span>
+        <span>🔬 JEP 286 · OpenJDK 10</span>
+        <span>🌐 中文</span>
+      </div>
+    </div>
+    <div class="article-body">
+
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 10 / var 类型推断</div>
+
+<h2>L1 · 概念层：var 是什么，不是什么</h2>
+
+<p>Java 10 引入 <code>var</code> 作为<strong>局部变量类型推断</strong>的保留类型名（reserved type name），不是关键字。它在编译期根据初始化表达式的类型来推断变量的静态类型，字节码层面与显式声明完全一致[reference:0]。</p>
+
+<pre><code>// Java 10 之前
+List&lt;String&gt; list = new ArrayList&lt;String&gt;();
+// Java 10
+var list = new ArrayList&lt;String&gt;();  // 推断为 ArrayList&lt;String&gt;
+
+// 增强 for 循环
+for (var entry : map.entrySet()) { ... }
+
+// 传统 for 循环
+for (var i = 0; i &lt; 10; i++) { ... }
+
+// try-with-resources
+try (var reader = new BufferedReader(...)) { ... }</code></pre>
+
+<div class="warning">
+<div class="warning-title">常见误区：var 不是动态类型</div>
+<p>var 不会改变 Java 的静态类型本质。变量在编译后仍然有确定的静态类型，只是<strong>声明时省略了</strong>。一旦推断完成，赋值给其他类型会编译报错——与显式声明完全一致[reference:1]。</p>
+</div>
+
+<h3>var 的适用范围</h3>
+
+<table>
+<tr><th>场景</th><th>支持</th><th>原因</th></tr>
+<tr><td>带初始化的局部变量</td><td>✅</td><td>编译器可以推断</td></tr>
+<tr><td>增强 for 循环索引</td><td>✅</td><td>从集合元素类型推断</td></tr>
+<tr><td>传统 for 循环索引</td><td>✅</td><td>从初始化表达式推断</td></tr>
+<tr><td>try-with-resources 资源变量</td><td>✅</td><td>从资源表达式推断</td></tr>
+<tr><td>方法参数 / 返回类型 / 字段</td><td>❌</td><td>接口契约的一部分，不能隐藏</td></tr>
+<tr><td>数组初始化器 <code>var a = {1,2,3}</code></td><td>❌</td><td>数组初始化器是 poly expression，需要目标类型</td></tr>
+<tr><td>无初始化声明 <code>var x;</code></td><td>❌</td><td>无表达式可推断</td></tr>
+<tr><td>Lambda 参数（Java 10）</td><td>❌</td><td>Java 11 JEP 323 才允许</td></tr>
+</table>
+
+<h2>L2 · 原理层：编译器如何推断</h2>
+
+<h3>推断算法</h3>
+
+<p>var 的推断规则非常直接：<strong>将初始化表达式视为独立表达式，推导其类型</strong>，然后把这个类型作为变量的静态类型[reference:2]。</p>
+
+<div class="mermaid">
+flowchart LR
+    A[var x = expr] --> B[将 expr 作为独立表达式<br/>进行类型检查]
+    B --> C{expr 是 poly expression?}
+    C -->|否| D[推导出具体类型 T]
+    C -->|是| E[编译错误<br/>缺少目标类型]
+    D --> F[变量 x 的类型 = T]
+    E --> G[如数组初始化器<br/>lambda 表达式]
+</div>
+
+<p>这意味着：</p>
+
+<pre><code>var list = new ArrayList&lt;String&gt;();
+// 推断为 ArrayList&lt;String&gt;，不是 List&lt;String&gt;
+
+// 如果初始化表达式是 poly expression
+var ints = {1, 2, 3};  // 编译错误：数组初始化器需要目标类型
+var f = () -&gt; "hello";  // 编译错误：lambda 需要目标类型</code></pre>
+
+<div class="note">
+<div class="note-title">为什么推断为 ArrayList 而不是 List？</div>
+<p>JEP 286 FAQ 中明确回应：「That would be confusing type inference with mind reading.」编译器只做它能看到的事——初始化表达式是什么类型，变量就是什么类型[reference:3]。开发者如果想要 List 接口类型，需要显式声明。</p>
+</div>
+
+<h3>关键限制背后的设计逻辑</h3>
+
+<table>
+<tr><th>限制</th><th>设计理由</th></tr>
+<tr><td>不能用于方法参数</td><td>方法签名是接口契约，必须稳定可读。调用方看不到方法体，无法理解 var 推断的结果</td></tr>
+<tr><td>不能用于字段</td><td>字段是对象状态的一部分，其类型影响序列化、反射和子类设计</td></tr>
+<tr><td>不能用于返回类型</td><td>返回类型是方法的 API 边界</td></tr>
+<tr><td>必须初始化</td><td>没有初始化表达式就无法推断——这不是限制，而是逻辑必然</td></tr>
+</table>
+
+<h2>L3 · 源码层：编译器实现</h2>
+
+<h3>关键数据结构</h3>
+
+<table>
+<tr><th>类/方法</th><th>作用</th><th>所属文件</th></tr>
+<tr><td><code>Infer</code></td><td>javac 的类型推断核心引擎</td><td><code>jdk.compiler/.../comp/Infer.java</code></td></tr>
+<tr><td><code>Attr</code></td><td>属性归因阶段，处理 var 的推断入口</td><td><code>jdk.compiler/.../comp/Attr.java</code></td></tr>
+<tr><td><code>JCVariableDecl</code></td><td>AST 中变量声明的节点表示</td><td><code>jdk.compiler/.../tree/JCTree.java</code></td></tr>
+<tr><td><code>Type.ClassType</code></td><td>推断出的具体类型</td><td><code>jdk.compiler/.../code/Type.java</code></td></tr>
+</table>
+
+<h3>核心调用链</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Parser as Parser
+    participant Attr as Attr
+    participant Infer as Infer
+    participant Check as Check
+
+    Parser->>Attr: 遇到 JCVariableDecl<br/>vartype = none, init = expr
+    Attr->>Attr: 检测到 var 声明
+    Attr->>Infer: 推断 init 的类型
+    Infer->>Infer: 对 init 执行独立类型检查
+    Infer-->>Attr: 返回推导类型 T
+    Attr->>Attr: 设置 vartype = T
+    Attr->>Check: 后续类型检查按 T 执行
+    Check-->>Attr: 通过
+</div>
+
+<h3>源码片段：Infer.java 中的推断入口</h3>
+
+<pre><code>// OpenJDK jdk10 · Infer.java
+// 版本：metropolis/dev 48ec75306997
+// 路径：src/jdk.compiler/share/classes/com/sun/tools/javac/comp/Infer.java
+
+// var 的推断复用了 Java 8 引入的泛型推断引擎。
+// 核心逻辑在 Attr.java 的 visitVarDef 中：
+// 1. 检测到变量声明没有显式类型（vartype == null）
+// 2. 将初始化表达式交给 Infer 推导类型
+// 3. 将推导结果设置为变量的类型
+
+// Infer 中的推断方法（简化示意）：
+Type inferVarType(JCTree init) {
+    // 将 init 视为独立表达式进行类型检查
+    // 不提供任何目标类型约束
+    Type inferredType = attribExpr(init, env, Type.noType);
+    // 检查推断结果的有效性
+    if (inferredType.isErroneous()) {
+        log.error(pos, "cannot.infer.type");
+    }
+    return inferredType;
+}</code></pre>
+
+<p><strong>关键设计点</strong>：var 的推断不引入新的类型系统机制，而是复用已有的泛型推断引擎。这意味着 Java 8 中对泛型推断的改进（如嵌套调用链推断）直接让 var 受益。</p>
+
+<h3>Lambda 参数的扩展（JEP 323，Java 11）</h3>
+
+<pre><code>// Java 11 允许：
+(var x, var y) -&gt; x.process(y)
+
+// 等价于：
+(x, y) -&gt; x.process(y)
+
+// 但要求：隐式类型 Lambda 的参数要么全部用 var，要么全部不用
+// 非法：
+(var x, y) -&gt; x.process(y)   // 不能混用
+(var x, int y) -&gt; ...          // 不能混用 var 和显式类型</code></pre>
+
+<p>JEP 323 的核心动机是<strong>语法一致性</strong>：让局部变量和 Lambda 参数的声明语法对齐，使得注解（如 <code>@Nonnull</code>）可以同时应用于两者[reference:4]。</p>
+
+<div class="java-comparison">
+<div class="header">从 Java 视角看：与 C# 的 var 对比</div>
+<p>C# 从 3.0 起就有 <code>var</code>，但其推断规则更激进——C# 的 var 可以推断数组初始化器 <code>var a = new[] {1,2,3}</code>。Java 选择更保守的策略：<strong>只接受独立表达式</strong>，拒绝需要目标类型的 poly expression。这体现了 Java 对「可预测性」的偏好——编译器不会猜测开发者的意图。</p>
+</div>
+
+<h2>L4 · 边界层：局限、坑与最佳实践</h2>
+
+<h3>var 不能做什么</h3>
+
+<table>
+<tr><th>场景</th><th>问题</th><th>替代方案</th></tr>
+<tr><td>推断出具体类而非接口</td><td><code>var list = new ArrayList&lt;String&gt;()</code> 推断为 <code>ArrayList</code>，无法赋值给 <code>List</code> 变量</td><td>显式声明 <code>List&lt;String&gt; list = new ArrayList&lt;&gt;()</code></td></tr>
+<tr><td>可读性下降</td><td><code>var result = process()</code> 看不出返回类型</td><td>方法名要足够自描述，或显式声明类型</td></tr>
+<tr><td>与 Lombok <code>var</code> 冲突</td><td>Lombok 的 <code>var</code> 在 Java 10 后无法使用</td><td>升级 Lombok 版本或改用 Java var</td></tr>
+<tr><td><code>var</code> 作为类名</td><td>Java 10 之前可以定义名为 <code>var</code> 的类，之后不再允许</td><td>重命名类（违反命名规范，实际很少见）</td></tr>
+</table>
+
+<div class="production-note">
+<div class="header">生产环境建议</div>
+<p>var 的使用应遵循「局部性原则」：</p>
+<ul>
+<li>✅ 适合：循环变量、try-with-resources、方法调用链的中间变量——类型从上下文容易看出</li>
+<li>❌ 不适合：API 边界、字段、方法签名——这些地方类型是契约的一部分</li>
+<li>⚠️ 建议：单行 var 使用比例不超过 30%，可读性优先于简洁性[reference:5]</li>
+</ul>
+</div>
+
+<h3>与 Java 8 的兼容性</h3>
+
+<p>var 带来的唯一源不兼容：<strong>不能再定义名为 <code>var</code> 的类</strong>。JEP 286 将此视为可接受的兼容性代价，因为类名应大写开头[reference:6]。</p>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: var 是什么？它改变了 Java 的静态类型吗？</div>
+<div class="answer">
+<p>var 是 Java 10 引入的局部变量类型推断语法。它<strong>不改变</strong> Java 的静态类型本质——变量在编译后仍有确定的静态类型，只是声明时由编译器自动推断。字节码层面 var 不存在，与显式声明生成的字节码完全一致。</p>
+<div class="key-point"><strong>关键点</strong>：var 是编译期语法糖，不是运行时特性。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — var 为什么不能用于方法参数和字段？</div>
+<div class="answer">
+<p>方法参数和字段是<strong>接口契约</strong>的一部分。调用方或子类需要看到稳定的类型声明，而 var 的推断结果是编译器内部决定的，对调用方不可见。如果允许，会导致 API 语义不可预测——同一段代码在不同编译器版本下可能推断出不同的类型。</p>
+<div class="key-point"><strong>关键点</strong>：var 的设计原则是「局部性」——只影响变量声明所在的局部作用域。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — 写出 var 推断的伪代码，核心判断条件是什么？</div>
+<div class="answer">
+<pre><code>// javac 中 var 推断的核心逻辑（伪代码）
+function processVarDeclaration(JCVariableDecl node):
+    if node.vartype != null:
+        return  // 显式类型，不处理
+
+    if node.init == null:
+        error("cannot use 'var' without initializer")
+        return
+
+    // 将初始化表达式作为独立表达式进行类型检查
+    // 不提供目标类型（Type.noType）
+    inferredType = attribExpr(node.init, env, Type.noType)
+
+    if inferredType == null or inferredType.isErroneous():
+        error("cannot infer type")
+        return
+
+    node.vartype = inferredType  // 设置推断出的类型</code></pre>
+<p><strong>核心判断条件</strong>：(1) 是否有初始化表达式；(2) 初始化表达式是否能独立推导出类型（即不是 poly expression）。</p>
+<div class="key-point"><strong>关键点</strong>：poly expression（需要目标类型的表达式，如数组初始化器、lambda）会被拒绝。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能解释 var 为什么只推断局部变量（interviewer 角度）</li>
+<li class="done">能写出 var 推断的伪代码（interviewer 追问链）</li>
+<li class="done">能说出 var 与 C# var 的区别（architect 角度）</li>
+<li>能指出 var 在代码审查中的可读性风险（code reviewer 角度）</li>
+<li>能用大白话向新人解释 var 不是动态类型（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+  <span>← 首页</span>
+  <span><a href="./0002-copyOf-unmodifiable.html">下一课：不可变集合 API →</a></span>
+</div>
+
+    </div>
+  </main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

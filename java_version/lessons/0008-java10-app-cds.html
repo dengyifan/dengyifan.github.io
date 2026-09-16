@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AppCDS — 应用类数据共享 · Java 10</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 10 · AppCDS</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>AppCDS — 应用类数据共享</h1>
+<div class="article-meta"><span>📚 L2-L3 · 原理与源码</span><span>🔬 JEP 310 · OpenJDK 10</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 10 / AppCDS</div>
+
+<h2>L1 · 概念层：CDS 的扩展</h2>
+
+<p>类数据共享（CDS）从 JDK 5 就存在，但仅限于<strong>引导类加载器</strong>加载的系统类。AppCDS 将 CDS 扩展到三个类加载器：内置系统类加载器（app class loader）、内置平台类加载器和<strong>自定义类加载器</strong>，使应用程序类也能从共享归档中加载[reference:10]。</p>
+
+<h3>核心价值</h3>
+
+<table>
+<tr><th>收益</th><th>原理</th></tr>
+<tr><td>缩短启动时间</td><td>类元数据从预处理的归档文件中 mmap 到内存，避免解析 class 文件的 CPU 开销</td></tr>
+<tr><td>减少内存占用</td><td>多个 JVM 进程共享同一份归档文件的物理内存（mmap 的只读映射天然支持进程间共享）</td></tr>
+<tr><td>容器化友好</td><td>启动时间缩短 10%~20%，适合 K8s 等容器编排场景</td></tr>
+</table>
+
+<div class="production-note">
+<div class="header">容器化部署中的 AppCDS</div>
+<p>在 K8s 中，多个 Pod 运行同一 Java 镜像时，AppCDS 归档文件被 mmap 到各进程地址空间。物理内存只在宿主机上保留一份，显著降低内存开销。配合 <code>-XX:SharedArchiveFile</code> 指向镜像内的只读归档路径，是微服务启动优化的标准手段。</p>
+</div>
+
+<h2>L2 · 原理层：CDS 工作流程</h2>
+
+<h3>三步流程（Java 10 原始方式）</h3>
+
+<div class="mermaid">
+flowchart LR
+    A["1. 收集类列表<br/>-XX:DumpLoadedClassList"] --> B["2. 生成归档<br/>-Xshare:dump"]
+    B --> C["3. 使用归档<br/>-Xshare:on"]
+    C --> D{归档版本匹配?}
+    D -->|是| E[mmap 加载类元数据]
+    D -->|否| F[回退到文件系统加载]
+</div>
+
+<pre><code># 步骤 1：收集类列表
+java -Xshare:off -XX:+UseAppCDS \
+     -XX:DumpLoadedClassList=hello.lst \
+     -cp hello.jar HelloWorld
+
+# 步骤 2：生成归档
+java -Xshare:dump -XX:+UseAppCDS \
+     -XX:SharedClassListFile=hello.lst \
+     -XX:SharedArchiveFile=hello.jsa \
+     -cp hello.jar
+
+# 步骤 3：使用归档
+java -Xshare:on -XX:+UseAppCDS \
+     -XX:SharedArchiveFile=hello.jsa \
+     -cp hello.jar HelloWorld</code></pre>
+
+<div class="warning">
+<div class="warning-title">版本匹配的硬约束</div>
+<p>CDS 归档文件与 JDK 版本严格绑定。升级 JDK 后必须重新生成归档，否则 JVM 会静默回退到文件系统加载——不会报错，但也没有加速效果[reference:11]。这是生产环境中最容易踩的坑。</p>
+</div>
+
+<h3>mmap 共享内存机制</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant JVM1 as JVM 进程 A
+    participant OS as 操作系统
+    participant Disk as hello.jsa
+    participant JVM2 as JVM 进程 B
+
+    JVM1->>OS: mmap(hello.jsa, PROT_READ)
+    OS->>Disk: 读取归档内容
+    OS-->>JVM1: 返回内存映射地址
+    JVM2->>OS: mmap(hello.jsa, PROT_READ)
+    OS-->>JVM2: 返回相同物理内存的映射
+    Note over JVM1,JVM2: 物理内存共享<br/>只保留一份
+</div>
+
+<h2>L3 · 源码层：类加载器的扩展</h2>
+
+<h3>关键数据结构</h3>
+
+<table>
+<tr><th>类/方法</th><th>作用</th></tr>
+<tr><td><code>ClassLoader::load_class</code></td><td>类加载入口，检查 CDS 归档</td></tr>
+<tr><td><code>FileMapInfo</code></td><td>管理归档文件的内存映射</td></tr>
+<tr><td><code>MetaspaceShared</code></td><td>共享元空间的初始化与映射</td></tr>
+<tr><td><code>SharedClassPathEntry</code></td><td>归档中的类路径条目记录</td></tr>
+</table>
+
+<h3>AppCDS 引入的关键变化</h3>
+
+<p>JEP 310 的核心改动在 <code>ClassLoader</code> 和 <code>FileMapInfo</code> 中：</p>
+
+<pre><code>// 概念性源码结构（HotSpot C++）
+// src/hotspot/share/classfile/classLoader.cpp
+
+// 类加载时检查 CDS 归档
+InstanceKlass* ClassLoader::load_class(const char* name, ...) {
+    if (UseSharedSpaces) {
+        // 尝试从共享归档中加载
+        InstanceKlass* k = SystemDictionary::find_shared_class(name);
+        if (k != NULL) {
+            return k;  // 命中归档，直接返回
+        }
+    }
+    // 未命中，从文件系统加载
+    return load_class_from_file(name, ...);
+}
+
+// AppCDS 扩展：支持自定义类加载器
+// 归档中记录类路径条目，加载时按路径匹配
+bool FileMapInfo::map_shared_spaces() {
+    // 映射归档中的元空间区域
+    // 支持 app class loader、platform class loader
+    // 以及 custom class loader 的类
+}</code></pre>
+
+<p><strong>关键设计</strong>：AppCDS 在归档中记录了类的<strong>来源路径</strong>（来自哪个 JAR 或目录），加载时通过路径匹配判断类是否在归档中。这要求归档生成和使用时的类路径必须一致。</p>
+
+<h2>L4 · 边界层：局限与演进</h2>
+
+<table>
+<tr><th>局限</th><th>说明</th></tr>
+<tr><td>JDK 版本绑定</td><td>归档文件必须在相同 JDK 版本下生成和使用</td></tr>
+<tr><td>类路径一致性</td><td>生成和使用归档时的 <code>-cp</code> 必须一致</td></tr>
+<tr><td>动态代理类</td><td>运行时生成的类（如动态代理）无法被归档</td></tr>
+<tr><td>三步流程繁琐</td><td>Java 10 中需要三个步骤，Java 13 简化为两步，Java 19 支持自动生成</td></tr>
+</table>
+
+<h3>演进链</h3>
+
+<div class="mermaid">
+timeline
+    title CDS 演进
+    JDK 5 : 基础 CDS（仅引导类加载器）
+    JDK 10 : AppCDS（扩展至 app / platform / custom 类加载器）
+    JDK 12 : CDS 默认开启
+    JDK 13 : Dynamic CDS Archives（两步流程）
+    JDK 19 : AutoCreateSharedArchive（一步自动生成）
+</div>
+
+<h2>L5 · 面试层</h2>
+
+<div class="qa-block">
+<div class="question">Q1: AppCDS 为什么能减少内存占用？</div>
+<div class="answer">
+<p>因为归档文件被 mmap 为只读映射。操作系统对同一文件的只读 mmap 在不同进程间共享物理页——多个 JVM 进程看到的归档内容映射到同一块物理内存。类元数据只在内存中保留一份，而非每个进程一份。</p>
+<div class="key-point"><strong>关键点</strong>：共享的是物理内存页，不是虚拟地址空间。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — 如果 JDK 升级了，AppCDS 归档会怎样？</div>
+<div class="answer">
+<p>JVM 在启动时会检查归档文件的 JDK 版本。如果不匹配，会<strong>静默忽略</strong>归档，回退到文件系统加载类。不会报错，但也不会有加速效果。这是生产环境中的隐形坑——部署新 JDK 后如果忘记重新生成归档，启动优化会悄悄失效。</p>
+<div class="key-point"><strong>关键点</strong>：静默回退是设计选择（保证兼容性），但需要监控启动时间来发现。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — 画出 AppCDS 类加载的伪代码。</div>
+<div class="answer">
+<pre><code>function loadClass(className, classLoader):
+    if UseSharedSpaces:
+        sharedClass = SystemDictionary.findSharedClass(className, classLoader)
+        if sharedClass != null:
+            return sharedClass  // 命中归档
+
+    // 未命中，正常从文件系统加载
+    return loadFromFileSystem(className, classLoader)</code></pre>
+<p><strong>核心判断</strong>：先查共享归档，未命中再走常规加载。</p>
+<div class="key-point"><strong>关键点</strong>：归档查找在类加载路径的最前端，零成本（一次哈希查找）。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能解释 AppCDS 的三步流程（interviewer 角度）</li>
+<li class="done">能说出 mmap 共享内存的原理（architect 角度）</li>
+<li>能指出 JDK 版本不匹配的静默回退风险（code reviewer 角度）</li>
+<li>能排查「AppCDS 不生效」的根因（incident responder 角度）</li>
+<li>能用大白话解释 CDS 与 AppCDS 的关系（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="./0002-copyOf-unmodifiable.html">← 上一课：不可变集合</a></span>
+<span><a href="./0004-g1-parallel-full-gc.html">下一课：G1 并行 Full GC →</a></span>
+</div>
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>不可变集合 API — copyOf 与 Collectors.toUnmodifiable* · Java 10</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 10 · 不可变集合</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>不可变集合 API — copyOf 与 Collectors.toUnmodifiable*</h1>
+<div class="article-meta"><span>📚 L2 · API 设计层</span><span>🔬 JDK-8177290 / JDK-8184690</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 10 / 不可变集合</div>
+
+<h2>L1 · 概念层：三类不可变集合工厂</h2>
+
+<p>Java 9 引入了 <code>List.of()</code> / <code>Set.of()</code> / <code>Map.of()</code> 来创建小规模不可变集合。Java 10 补充了两个关键缺口：</p>
+
+<ol>
+<li><strong><code>copyOf()</code></strong>：从已有集合创建不可变副本</li>
+<li><strong><code>Collectors.toUnmodifiableList/Set/Map()</code></strong>：Stream 终端操作直接收集为不可变集合</li>
+<li><strong><code>Optional.orElseThrow()</code></strong>：无参版本，作为 <code>get()</code> 的语义化替代</li>
+</ol>
+
+<pre><code>// copyOf — 从已有集合创建不可变副本
+List&lt;String&gt; mutable = new ArrayList&lt;&gt;();
+mutable.add("a");
+List&lt;String&gt; immutable = List.copyOf(mutable);  // 不可变
+
+// toUnmodifiableList — Stream 终端操作
+List&lt;Integer&gt; result = Stream.of(1, 2, 3)
+    .collect(Collectors.toUnmodifiableList());
+
+// Optional.orElseThrow — 语义化替代 get()
+Optional&lt;String&gt; opt = Optional.of("hello");
+String value = opt.orElseThrow();  // 缺失时抛 NoSuchElementException</code></pre>
+
+<h2>L2 · 原理层：不可变性与幂等性设计</h2>
+
+<h3>copyOf 的幂等性</h3>
+
+<p><code>copyOf()</code> 的关键设计是<strong>幂等性</strong>：如果入参已经是不可变集合（<code>ImmutableCollections.AbstractImmutableList</code> 类型），直接返回原引用，不创建新对象。</p>
+
+<pre><code>// 源码实现（简化）
+static &lt;E&gt; List&lt;E&gt; copyOf(Collection&lt;? extends E&gt; coll) {
+    if (coll instanceof ImmutableCollections.AbstractImmutableList) {
+        return (List&lt;E&gt;) coll;  // 幂等：已是不可变，直接返回
+    }
+    return (List&lt;E&gt;) List.of(coll.toArray());  // 创建不可变副本
+}</code></pre>
+
+<div class="note">
+<div class="note-title">幂等性的意义</div>
+<p>在防御性编程中，开发者经常需要在方法入口处 <code>List.copyOf(input)</code> 来防止外部修改。幂等性保证了：如果调用方传入的已经是不可变集合，不会产生不必要的拷贝开销。这在链式调用和多次防御时非常关键。</p>
+</div>
+
+<h3>与 Java 9 <code>of()</code> 方法的关系</h3>
+
+<table>
+<tr><th>方法</th><th>引入版本</th><th>输入</th><th>幂等性</th></tr>
+<tr><td><code>List.of(e1, e2, ...)</code></td><td>Java 9</td><td>可变参数元素</td><td>—</td></tr>
+<tr><td><code>List.copyOf(coll)</code></td><td>Java 10</td><td>已有集合</td><td>✅ 传入不可变集合时直接返回</td></tr>
+<tr><td><code>Collectors.toUnmodifiableList()</code></td><td>Java 10</td><td>Stream 终端操作</td><td>内部复用 <code>List.of()</code> 的实现</td></tr>
+</table>
+
+<h3>Collectors.toUnmodifiableList 的实现</h3>
+
+<pre><code>// OpenJDK · Collectors.java
+// 版本：jdk-10+35 · 路径：java.base/java/util/stream/Collectors.java
+
+public static &lt;T&gt;
+Collector&lt;T, ?, List&lt;T&gt;&gt; toUnmodifiableList() {
+    return new CollectorImpl&lt;&gt;(ArrayList::new, List::add,
+        (left, right) -&gt; { left.addAll(right); return left; },
+        list -&gt; {
+            if (list.getClass() == ArrayList.class) { // 确保可信
+                return SharedSecrets.getJavaUtilCollectionAccess()
+                    .listFromTrustedArray(list.toArray());
+            } else {
+                throw new IllegalArgumentException();
+            }
+        },
+        CH_NOID);
+}</code></pre>
+
+<p><strong>关键设计点</strong>：收集过程使用可变的 <code>ArrayList</code> 作为累加器，在最后一步通过 <code>listFromTrustedArray</code> 转换为不可变列表。这避免了在收集过程中反复创建不可变对象的开销。</p>
+
+<div class="warning">
+<div class="warning-title">常见误区：Collectors.toList() 返回的是可变列表</div>
+<p><code>Collectors.toList()</code> 返回的 <code>ArrayList</code> 是<strong>可变</strong>的。Java 10 之前，开发者需要 <code>collectingAndThen(toList(), Collections::unmodifiableList)</code> 来获得不可变列表。Java 10 的 <code>toUnmodifiableList()</code> 是原生支持，性能更优（不需要包装器）。</p>
+</div>
+
+<h3>Optional.orElseThrow() 的设计</h3>
+
+<pre><code>// OpenJDK · Optional.java
+// 版本：jdk10 · rev 48328 · JDK-8140281
+// 四个 Optional 变体（Optional / OptionalInt / OptionalLong / OptionalDouble）同步添加
+
+public T orElseThrow() {
+    if (value == null) {
+        throw new NoSuchElementException("No value present");
+    }
+    return value;
+}</code></pre>
+
+<p>实现与 <code>get()</code> <strong>完全一致</strong>，区别仅在方法名——<code>orElseThrow</code> 明确表达了「如果缺失则抛出异常」的语义，比 <code>get</code> 更符合 Optional 的设计哲学[reference:8]。</p>
+
+<h2>L3 · 源码层：调用链与数据结构</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Client
+    participant ImmutableCollections
+    participant SharedSecrets
+
+    Client->>ImmutableCollections: List.copyOf(mutableList)
+    ImmutableCollections->>ImmutableCollections: 检查是否为 AbstractImmutableList
+    alt 已经是不可变集合
+        ImmutableCollections-->>Client: 返回原引用（幂等）
+    else 可变集合
+        ImmutableCollections->>ImmutableCollections: coll.toArray()
+        ImmutableCollections->>SharedSecrets: listFromTrustedArray(array)
+        SharedSecrets-->>ImmutableCollections: 不可变 List 实例
+        ImmutableCollections-->>Client: 返回新实例
+    end
+</div>
+
+<h2>L4 · 边界层：不可变不等于不可修改内容</h2>
+
+<div class="warning">
+<div class="warning-title">边界条件：不可变集合的「浅不可变性」</div>
+<p><code>List.copyOf()</code> 拒绝 <code>null</code> 元素——传入包含 null 的集合会抛 <code>NullPointerException</code>。这是与 <code>Collections.unmodifiableList()</code> 的关键区别：后者允许 null，前者不允许。</p>
+<p>此外，不可变集合只保证<strong>集合结构</strong>不可修改，如果元素本身可变，集合的「内容」仍然会变化。</p>
+</div>
+
+<table>
+<tr><th>对比</th><th>List.copyOf()</th><th>Collections.unmodifiableList()</th></tr>
+<tr><td>引入版本</td><td>Java 10</td><td>Java 1.2</td></tr>
+<tr><td>null 元素</td><td>❌ 抛 NPE</td><td>✅ 允许</td></tr>
+<tr><td>幂等性</td><td>✅ 传入不可变集合直接返回</td><td>❌ 每次都创建包装器</td></tr>
+<tr><td>实现方式</td><td>创建新的不可变实例</td><td>包装已有列表（视图）</td></tr>
+<tr><td>原集合修改的影响</td><td>不受影响（独立副本）</td><td>受影响（视图）</td></tr>
+</table>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: List.copyOf() 和 Collections.unmodifiableList() 有什么区别？</div>
+<div class="answer">
+<p>三个核心区别：(1) <strong>副本 vs 视图</strong>——copyOf 创建独立副本，unmodifiableList 创建包装视图，原列表修改会影响视图；(2) <strong>null 处理</strong>——copyOf 拒绝 null，unmodifiableList 允许；(3) <strong>幂等性</strong>——copyOf 传入不可变集合时直接返回原引用。</p>
+<div class="key-point"><strong>关键点</strong>：防御性编程应用 copyOf（副本独立），只读视图用 unmodifiableList（零拷贝）。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — 为什么 copyOf 要设计成幂等的？</div>
+<div class="answer">
+<p>幂等性避免了多次防御性拷贝的开销。在方法链中，每一层都调用 <code>copyOf()</code> 时，如果传入的已经是不可变集合，后续的调用都是零成本的。这鼓励开发者在不牺牲性能的前提下进行防御性编程。</p>
+<div class="key-point"><strong>关键点</strong>：幂等性是「零成本防御」设计哲学的体现。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — Collectors.toUnmodifiableList() 的累加器类型是什么？为什么？</div>
+<div class="answer">
+<p>累加器是 <code>ArrayList</code>（可变），在收集结束时转换为不可变列表。原因是：如果累加器本身就是不可变类型，每次 <code>add</code> 操作都需要创建新对象，导致 O(n²) 复杂度。使用可变累加器 + 最终转换，复杂度为 O(n)。</p>
+<div class="key-point"><strong>关键点</strong>：收集过程用可变，最终结果用不可变——这是 Stream Collector 的通用模式。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能说出 copyOf 与 unmodifiableList 的区别（interviewer 角度）</li>
+<li class="done">能解释幂等性设计的意义（architect 角度）</li>
+<li class="done">能指出 copyOf 的 null 边界问题（code reviewer 角度）</li>
+<li>能排查「防御性拷贝性能差」的根因（incident responder 角度）</li>
+<li>能用大白话解释不可变集合的浅不可变性（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="./0001-var-type-inference.html">← 上一课：var 类型推断</a></span>
+<span><a href="./0003-appcds.html">下一课：AppCDS →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

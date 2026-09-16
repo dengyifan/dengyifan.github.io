@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>G1 并行 Full GC · Java 10</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 10 · G1 并行 Full GC</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>G1 并行 Full GC — 从单线程到多线程的 STW 优化</h1>
+<div class="article-meta"><span>📚 L2-L3 · 原理与源码</span><span>🔬 JEP 307 · OpenJDK 10</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 10 / G1 并行 Full GC</div>
+
+<h2>L1 · 概念层：解决什么问题</h2>
+
+<p>G1 从 Java 9 起成为默认 GC，但它的 Full GC 有一个致命缺陷：<strong>单线程执行</strong>。当并发模式失败、晋升失败或疏散失败触发 Full GC 时，整个 JVM 会用<strong>一个线程</strong>执行 Mark-Sweep-Compact 算法，在多核机器上完全浪费 CPU 资源[reference:12]。</p>
+
+<p>JEP 307 将 Full GC 改为<strong>并行执行</strong>，利用多核 CPU 缩短最坏情况下的 STW 暂停时间。</p>
+
+<h3>生产环境的真实影响</h3>
+
+<p>Bazel 项目在 JDK 9 时代曾报告：使用 G1 后 Java 构建性能回退约 <strong>30%</strong>，原因是 G1 的 Full GC 单线程瓶颈。升级到 Java 10 后，并行 Full GC 解决了这个问题，Bazel 重新启用了 G1。</p>
+
+<h2>L2 · 原理层：Full GC 的四个阶段</h2>
+
+<div class="mermaid">
+flowchart LR
+    A[Phase 1<br/>标记存活对象] --> B[Phase 2<br/>准备压缩]
+    B --> C[Phase 3<br/>调整指针]
+    C --> D[Phase 4<br/>执行压缩]
+</div>
+
+<p>四个阶段全部通过 <code>G1FullCollector::run_task()</code> 使用工作线程组并行执行：</p>
+
+<pre><code>// 并行执行任务的核心方法
+void G1FullCollector::run_task(AbstractGangTask* task) {
+    G1CollectedHeap::heap()->workers()
+        ->run_task(task, _num_workers);
+}</code></pre>
+
+<p><code>_num_workers</code> 来自 <code>workers()->active_workers()</code>，即当前活跃的 GC 工作线程数，默认与 CPU 核数相关[reference:14]。</p>
+
+<h3>并行化的粒度</h3>
+
+<table>
+<tr><th>阶段</th><th>并行化策略</th></tr>
+<tr><td>Phase 1: 标记</td><td>按 Region 分区并行标记，各线程处理不同的 Region 集合</td></tr>
+<tr><td>Phase 2: 准备压缩</td><td>并行计算每个 Region 的压缩目标位置</td></tr>
+<tr><td>Phase 3: 调整指针</td><td>并行遍历对象引用，调整指向新位置的指针</td></tr>
+<tr><td>Phase 4: 压缩</td><td>并行移动对象到压缩后的位置</td></tr>
+</table>
+
+<h2>L3 · 源码层：G1FullCollector 的类结构</h2>
+
+<h3>关键类清单</h3>
+
+<table>
+<tr><th>类</th><th>作用</th><th>文件</th></tr>
+<tr><td><code>G1FullCollector</code></td><td>Full GC 流程的总控</td><td><code>gc/g1/g1FullCollector.cpp</code></td></tr>
+<tr><td><code>G1FullGCMarkTask</code></td><td>Phase 1 标记任务</td><td><code>gc/g1/g1FullGCMarkTask.cpp</code></td></tr>
+<tr><td><code>G1FullGCPrepareTask</code></td><td>Phase 2 准备任务</td><td><code>gc/g1/g1FullGCPrepareTask.cpp</code></td></tr>
+<tr><td><code>G1FullGCAdjustTask</code></td><td>Phase 3 指针调整任务</td><td><code>gc/g1/g1FullGCAdjustTask.cpp</code></td></tr>
+<tr><td><code>G1FullGCCompactTask</code></td><td>Phase 4 压缩任务</td><td><code>gc/g1/g1FullGCCompactTask.cpp</code></td></tr>
+<tr><td><code>G1FullGCMarker</code></td><td>并行标记器</td><td><code>gc/g1/g1FullGCMarker.cpp</code></td></tr>
+</table>
+
+<h3>核心调用链</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Heap as G1CollectedHeap
+    participant Collector as G1FullCollector
+    participant Workers as WorkGang
+    participant Task as G1FullGC*Task
+
+    Heap->>Collector: new G1FullCollector(scope, ref_processor,<br/>mark_bitmap, active_workers)
+    Collector->>Collector: prepare_collection()
+    Collector->>Collector: collect()
+    Note over Collector: 四个阶段依次执行
+    Collector->>Workers: run_task(G1FullGCMarkTask)
+    Workers->>Task: 并行标记
+    Collector->>Workers: run_task(G1FullGCPrepareTask)
+    Workers->>Task: 并行准备压缩
+    Collector->>Workers: run_task(G1FullGCAdjustTask)
+    Workers->>Task: 并行调整指针
+    Collector->>Workers: run_task(G1FullGCCompactTask)
+    Workers->>Task: 并行压缩
+    Collector->>Collector: complete_collection()
+</div>
+
+<h3>与串行版本的对比</h3>
+
+<pre><code>// Java 9 · G1SerialFullCollector（单线程）
+G1SerialFullCollector serial(scope, ref_processor_stw());
+serial.prepare_collection();
+serial.collect();
+serial.complete_collection();
+
+// Java 10 · G1FullCollector（并行）
+G1FullCollector collector(scope, ref_processor_stw(),
+    concurrent_mark()->next_mark_bitmap(),
+    workers()->active_workers());
+collector.prepare_collection();
+collector.collect();
+collector.complete_collection();</code></pre>
+
+<p>改动核心：新增了 <code>mark_bitmap</code> 和工作线程数入参，标记阶段不再使用 STW 引用处理器的单线程发现，而是使用并发标记的 <code>next_mark_bitmap</code> 进行并行标记[reference:15]。</p>
+
+<h2>L4 · 边界层</h2>
+
+<table>
+<tr><th>边界条件</th><th>说明</th></tr>
+<tr><td>引用处理仍为单线程</td><td>Full GC 中 Reference Processing 阶段仍可能单线程执行，是并行化的最后瓶颈</td></tr>
+<tr><td>Region 粒度的负载不均</td><td>如果某些 Region 对象特别多（如巨型对象区域），并行标记可能出现线程间负载不均衡</td></tr>
+<tr><td>老年代空间浪费</td><td>Google 团队报告 JDK 10 G1 的 Full GC 后老年代 Region 存在显著空间浪费[reference:16]</td></tr>
+</table>
+
+<div class="production-note">
+<div class="header">监控建议</div>
+<p>使用 <code>-Xlog:gc*</code> 开启 GC 日志，观察 Full GC 的 <code>Pause</code> 时间。在 Java 10 之前，Full GC 暂停时间可能达到秒级；Java 10 后，多核机器上的暂停时间应显著下降。如果 Full GC 频繁触发，需要检查是否存在内存泄漏或堆大小配置不当。</p>
+</div>
+
+<h2>L5 · 面试层</h2>
+
+<div class="qa-block">
+<div class="question">Q1: G1 的 Full GC 在 Java 10 之前为什么是单线程的？</div>
+<div class="answer">
+<p>历史原因。G1 最初是从 CMS 和 Parallel GC 的代码基础演进而来的。Parallel GC 的 Full GC 早已并行化，但 G1 在实现 Full GC 时选择了更简单的串行算法——因为 Full GC 本身是「最坏情况」的兜底路径，G1 的设计假设是尽量避免触发 Full GC。然而实际生产中 Full GC 仍然会发生，单线程成为严重瓶颈。</p>
+<div class="key-point"><strong>关键点</strong>：不是设计失误，而是优先级权衡——Full GC 优化被推迟了。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — G1 Full GC 并行化的核心改动是什么？</div>
+<div class="answer">
+<p>核心是引入 <code>G1FullCollector</code> 替代 <code>G1SerialFullCollector</code>，将四个阶段（标记、准备压缩、调整指针、压缩）全部改为通过 <code>WorkGang</code> 并行执行。关键入参增加了 <code>mark_bitmap</code>（复用并发标记的 bitmap）和 <code>active_workers</code>（工作线程数）。</p>
+<div class="key-point"><strong>关键点</strong>：不是简单地把循环改成并行，而是重新设计了任务划分和数据共享。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — 画出并行 Full GC 的阶段伪代码。</div>
+<div class="answer">
+<pre><code>function fullGC():
+    collector = new G1FullCollector(active_workers)
+    collector.prepare_collection()
+
+    // Phase 1: 并行标记
+    workers.runTask(G1FullGCMarkTask)
+
+    // Phase 2: 并行准备压缩
+    workers.runTask(G1FullGCPrepareTask)
+
+    // Phase 3: 并行调整指针
+    workers.runTask(G1FullGCAdjustTask)
+
+    // Phase 4: 并行压缩
+    workers.runTask(G1FullGCCompactTask)
+
+    collector.complete_collection()</code></pre>
+<div class="key-point"><strong>关键点</strong>：四个阶段串行，每个阶段内部并行——这是典型的「分阶段并行」设计。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能解释 G1 Full GC 并行化的动机（interviewer 角度）</li>
+<li class="done">能写出并行 Full GC 的阶段伪代码（interviewer 追问链）</li>
+<li class="done">能说出 G1FullCollector 的关键入参（code reviewer 角度）</li>
+<li>能排查 Full GC 频繁触发的根因（incident responder 角度）</li>
+<li>能用大白话解释 STW 和并行化的关系（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="./0003-appcds.html">← 上一课：AppCDS</a></span>
+<span><a href="./0005-thread-local-handshakes.html">下一课：Thread-Local Handshakes →</a></span>
+</div>
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 10 — Deep Mastery Course</title>
+<style>
+:root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-blue:#3194d0;--accent-light:#fef0f0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--orange:#f5a623;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}
+.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-.5px}
+.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}
+.container{max-width:1020px;margin:80px auto 80px;padding:0 16px}
+.hero{background:var(--card-bg);border-radius:4px;padding:48px 40px 36px;margin-bottom:24px;border-bottom:1px solid var(--border)}
+.hero h1{font-size:34px;font-weight:700;line-height:1.3;font-family:var(--font-sans);color:var(--text);margin-bottom:12px}
+.hero .subtitle{font-size:17px;color:var(--text-secondary);font-family:var(--font-sans);line-height:1.6}
+.hero .meta{margin-top:20px;font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:24px;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:var(--card-bg);border-radius:4px;padding:20px 24px;text-align:center;border:1px solid var(--border)}
+.stat-card .number{font-size:32px;font-weight:700;font-family:var(--font-sans);color:var(--accent)}
+.stat-card .label{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);margin-top:4px}
+.section{background:var(--card-bg);border-radius:4px;margin-bottom:16px;border:1px solid var(--border);overflow:hidden}
+.section-header{padding:20px 28px;border-bottom:1px solid var(--border);font-family:var(--font-sans);display:flex;align-items:center;gap:12px}
+.section-header h2{font-size:18px;font-weight:700;color:var(--text);flex:1}
+.section-header .badge{font-size:12px;padding:3px 10px;border-radius:12px;font-weight:600}
+.badge.core{background:#fdf2f2;color:#e74c3c}
+.badge.support{background:#f0f7fd;color:var(--accent-blue)}
+.badge.optional{background:#f5f5f5;color:var(--text-muted)}
+.item-list{padding:4px 0}
+.item{display:flex;align-items:center;gap:16px;padding:16px 28px;border-bottom:1px solid var(--border);transition:background .15s;text-decoration:none;color:inherit}
+.item:last-child{border-bottom:none}.item:hover{background:#fafafa}
+.item .icon{width:44px;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;font-family:var(--font-sans);font-weight:700;flex-shrink:0}
+.icon.l1{background:#e8f5e9;color:#42c02e}.icon.l2{background:#f0f7fd;color:#3194d0}.icon.l3{background:#fef0f0;color:#ea6f5a}.icon.l4{background:#fff8e1;color:#f5a623}.icon.l5{background:#f3e5f5;color:#9c27b0}.icon.doc{background:#f5f5f5;color:var(--text-muted)}
+.item .info{flex:1;min-width:0}
+.item .info .title{font-size:16px;font-weight:600;font-family:var(--font-sans);margin-bottom:2px}
+.item .info .desc{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);line-height:1.5}
+.item .info .tags{margin-top:4px;display:flex;gap:6px;flex-wrap:wrap}
+.item .info .tag{font-size:11px;padding:1px 8px;border-radius:10px;font-family:var(--font-sans);background:#f5f5f5;color:var(--text-muted)}
+.item .arrow{color:var(--text-muted);font-size:18px;font-family:var(--font-sans);flex-shrink:0}
+.roadmap{background:var(--card-bg);border-radius:4px;margin-bottom:16px;border:1px solid var(--border);padding:28px}
+.roadmap h2{font-size:18px;font-weight:700;font-family:var(--font-sans);margin-bottom:20px}
+.steps{display:flex;gap:16px;flex-wrap:wrap}
+.step{flex:1;min-width:140px;background:#fafafa;border-radius:8px;padding:20px 16px;text-align:center;border:1px solid var(--border);font-family:var(--font-sans);position:relative}
+.step .step-num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:13px;font-weight:700}
+.step .step-title{font-size:14px;font-weight:600;margin-bottom:4px}.step .step-desc{font-size:12px;color:var(--text-muted);line-height:1.5}
+.step::after{content:"→";position:absolute;right:-14px;top:50%;transform:translateY(-50%);color:var(--border-light);font-size:20px}
+.step:last-child::after{display:none}
+.footer{text-align:center;padding:32px 0 0;font-size:13px;color:var(--text-muted);font-family:var(--font-sans);border-top:1px solid var(--border);margin-top:32px}
+@media(max-width:700px){.hero{padding:32px 20px 24px}.hero h1{font-size:24px}.stats{grid-template-columns:repeat(2,1fr)}.steps{flex-direction:column}.step::after{display:none}.item{padding:14px 20px}}
+</style>
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 10</span></div></nav>
+<div class="container">
+<div class="hero">
+<h1>Java 10 — Deep Mastery Course</h1>
+<p class="subtitle">从 var 语法糖到 JVM 底层优化，吃透 Java 10 的九项核心变更。</p>
+<div class="meta">
+<span>📚 5-layer deep-mastery model</span>
+<span>🔬 Source-verified (OpenJDK 10)</span>
+<span>🌐 中文</span>
+<span>🧪 Aligned with deep-grill interview angles</span>
+</div>
+</div>
+
+<div class="stats">
+<div class="stat-card"><div class="number">5</div><div class="label">Lessons (L1–L4)</div></div>
+<div class="stat-card"><div class="number">20</div><div class="label">Interview Questions</div></div>
+<div class="stat-card"><div class="number">12</div><div class="label">Source Files Walked</div></div>
+<div class="stat-card"><div class="number">5</div><div class="label">Supporting Docs</div></div>
+</div>
+
+<div class="roadmap">
+<h2>📖 Recommended Learning Path</h2>
+<div class="steps">
+<div class="step"><div class="step-num">1</div><div class="step-title">L1: 概念</div><div class="step-desc">var / copyOf / AppCDS 是什么</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-title">L2: 原理</div><div class="step-desc">编译器推断 / mmap / GC 阶段</div></div>
+<div class="step"><div class="step-num">3</div><div class="step-title">L3: 源码</div><div class="step-desc">Infer.java / G1FullCollector</div></div>
+<div class="step"><div class="step-num">4</div><div class="step-title">L4: 边界</div><div class="step-desc">限制 / 坑 / trade-off</div></div>
+<div class="step"><div class="step-num">5</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度追问链</div></div>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>🎓 Core Lessons</h2><span class="badge core">REQUIRED</span></div>
+<div class="item-list">
+<a class="item" href="./lessons/0001-var-type-inference.html"><div class="icon l1">L1</div><div class="info"><div class="title">var — 局部变量类型推断</div><div class="desc">JEP 286 · 编译器推断规则 · 限制边界 · Infer.java 源码</div><div class="tags"><span class="tag">JEP 286</span><span class="tag">推断</span><span class="tag">Infer.java</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./lessons/0002-copyOf-unmodifiable.html"><div class="icon l2">L2</div><div class="info"><div class="title">不可变集合 API — copyOf 与 Collectors</div><div class="desc">幂等性设计 · toUnmodifiable* · Optional.orElseThrow · 与 unmodifiableList 对比</div><div class="tags"><span class="tag">copyOf</span><span class="tag">幂等性</span><span class="tag">Collectors</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./lessons/0003-appcds.html"><div class="icon l2">L2</div><div class="info"><div class="title">AppCDS — 应用类数据共享</div><div class="desc">JEP 310 · 三步流程 · mmap 共享内存 · 容器化部署</div><div class="tags"><span class="tag">JEP 310</span><span class="tag">CDS</span><span class="tag">mmap</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./lessons/0004-g1-parallel-full-gc.html"><div class="icon l3">L3</div><div class="info"><div class="title">G1 并行 Full GC</div><div class="desc">JEP 307 · G1FullCollector · 四阶段并行 · Mark-Sweep-Compact</div><div class="tags"><span class="tag">JEP 307</span><span class="tag">G1</span><span class="tag">STW</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./lessons/0005-thread-local-handshakes.html"><div class="icon l3">L3</div><div class="info"><div class="title">Thread-Local Handshakes 与 GC 接口</div><div class="desc">JEP 312 · JEP 304 · HandshakeState 信号量 · CollectedHeap 抽象</div><div class="tags"><span class="tag">JEP 312</span><span class="tag">Safepoint</span><span class="tag">GC 接口</span></div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>🧪 Interview Question Bank</h2><span class="badge core">REQUIRED</span></div>
+<div class="item-list">
+<a class="item" href="./interview/java-10-interview.html"><div class="icon l5">L5</div><div class="info"><div class="title">Java 10 面试题库 — 20 题</div><div class="desc">var / copyOf / AppCDS / G1 / Handshake · 五角度追问链 + 伪代码题</div><div class="tags"><span class="tag">面试官</span><span class="tag">架构师</span><span class="tag">代码审查</span><span class="tag">故障排查</span><span class="tag">讲师</span></div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>📋 Supporting Documents</h2><span class="badge support">REFERENCE</span></div>
+<div class="item-list">
+<a class="item" href="./TOPIC-MAP.md"><div class="icon doc">🗺️</div><div class="info"><div class="title">知识地图 TOPIC-MAP</div><div class="desc">Java 10 概念图谱 + 分支优先级 + 学习路径</div></div><div class="arrow">→</div></a>
+<a class="item" href="./RESOURCES.md"><div class="icon doc">📚</div><div class="info"><div class="title">权威资源 RESOURCES</div><div class="desc">JEP 官方文档 + OpenJDK 源码链接</div></div><div class="arrow">→</div></a>
+<a class="item" href="./MISSION.md"><div class="icon doc">🎯</div><div class="info"><div class="title">学习使命 MISSION</div><div class="desc">为什么学 + 成功标准</div></div><div class="arrow">→</div></a>
+<a class="item" href="./spaced-repetition.md"><div class="icon doc">📅</div><div class="info"><div class="title">间隔复习队列</div><div class="desc">1/3/7/21 天间隔调度</div></div><div class="arrow">→</div></a>
+<a class="item" href="./common-misconceptions.md"><div class="icon doc">⚠️</div><div class="info"><div class="title">常见误区知识库</div><div class="desc">var / copyOf / G1 / Handshake 的常见误解</div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="footer">
+<p>Generated by Deep Mastery Skill · OpenJDK 10 · 中文</p>
+<p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
+</div>
+</div>
+</body>
+</html>

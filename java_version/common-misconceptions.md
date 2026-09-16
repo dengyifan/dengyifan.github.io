@@ -56,3 +56,34 @@
 - **错误理解**：G1 能处理所有对象
 - **正确理解**：大小 ≥ Region/2 的对象成为 Humongous，直接进 Old 区，碎片风险高
 - **如何避免**：用 `-Xlog:gc+heap=debug` 监控 Humongous 分配频率
+
+
+# Java 10 常见误区
+
+## 误区 1：var 是动态类型
+
+- **错误理解**：var 让 Java 变成动态类型语言
+- **正确理解**：var 只是编译期类型推断，变量仍有静态类型。字节码与显式声明完全一致。
+- **容易犯的原因**：语法上像 JavaScript 的 var，但语义完全不同。
+- **如何避免**：记住 var 是「省略类型声明」，不是「没有类型」。
+
+## 误区 2：copyOf 返回的是同一个集合的不可变视图
+
+- **错误理解**：List.copyOf(list) 返回的是 list 的不可变包装
+- **正确理解**：copyOf 创建独立副本。修改原列表不影响副本。
+- **容易犯的原因**：与 Collections.unmodifiableList 混淆。
+- **如何避免**：记住 copyOf = 拷贝 + 不可变；unmodifiableList = 包装 + 不可变视图。
+
+## 误区 3：G1 的 Full GC 在 Java 10 后完全并行
+
+- **错误理解**：Java 10 后 G1 Full GC 所有阶段都并行
+- **正确理解**：标记-压缩四个阶段并行，但引用处理（Reference Processing）阶段仍可能单线程执行。
+- **容易犯的原因**：JEP 307 描述的是「使 Full GC 并行」，没有强调引用处理的例外。
+- **如何避免**：查看 GC 日志中的 Reference Processing 阶段耗时。
+
+## 误区 4：Thread-Local Handshake 完全替代了 Safepoint
+
+- **错误理解**：有了 Handshake，不再需要全局 Safepoint
+- **正确理解**：Handshake 只适用于「只操作单个线程」的场景。GC 的 STW 阶段、类重定义等仍需要全局 Safepoint。
+- **容易犯的原因**：两者是互补关系，不是替代关系。
+- **如何避免**：记住 Handshake 的适用场景是「目标操作只涉及一个线程」。

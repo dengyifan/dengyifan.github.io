@@ -3,37 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Java 9 — Deep Mastery Course</title>
+  <title>Java 9-25 — Deep Mastery Course</title>
   <link rel="stylesheet" href="../style/shared.css">
 </head>
 <body>
 
 <nav class="top-nav">
-  <div class="logo">Deep&#8203;Mastery <span>/ Java 9</span></div>
+  <div class="logo">Deep&#8203;Mastery <span>/ Java 9-25</span></div>
 </nav>
 
 <div class="container">
 
   <div class="hero">
-    <h1>Java 9 — Deep Mastery Course</h1>
-    <p class="subtitle">从模块化系统到源码级实现，掌握 Java 平台工程化的真正起点。</p>
+    <h1>Java 9-25 — Deep Mastery Course</h1>
+    <p class="subtitle">从模块化系统到最新 JVM 特性，逐个版本系统吃透每一个 Java 发布。</p>
     <div class="meta">
       <span>📚 5-layer deep-mastery model</span>
-      <span>🔬 Source-verified (OpenJDK jdk9)</span>
+      <span>🔬 Source-verified (OpenJDK)</span>
       <span>🌐 中文</span>
       <span>🧪 Aligned with deep-grill interview angles</span>
     </div>
   </div>
 
   <div class="stats">
-    <div class="stat-card"><div class="number">4+1</div><div class="label">Lessons (L1–L4 + S1)</div></div>
-    <div class="stat-card"><div class="number">15</div><div class="label">Interview Questions</div></div>
-    <div class="stat-card"><div class="number">6</div><div class="label">Source Files Walked</div></div>
+    <div class="stat-card"><div class="number">10</div><div class="label">Lessons (L1–L4 + S1)</div></div>
+    <div class="stat-card"><div class="number">35</div><div class="label">Interview Questions</div></div>
+    <div class="stat-card"><div class="number">18</div><div class="label">Source Files Walked</div></div>
     <div class="stat-card"><div class="number">5</div><div class="label">Supporting Docs</div></div>
   </div>
 
+  <!-- Java 9 Roadmap -->
   <div class="roadmap">
-    <h2>📖 Recommended Learning Path</h2>
+    <h2>📖 Java 9 学习路径</h2>
     <div class="steps">
       <div class="step"><div class="step-num">1</div><div class="step-title">L1: Concepts</div><div class="step-desc">Java 9 全景与动机</div></div>
       <div class="step"><div class="step-num">2</div><div class="step-title">L2: Principles</div><div class="step-desc">JPMS 模块系统机制</div></div>
@@ -44,8 +45,21 @@
     </div>
   </div>
 
+  <!-- Java 10 Roadmap -->
+  <div class="roadmap">
+    <h2>📖 Java 10 学习路径</h2>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-title">L1: 概念</div><div class="step-desc">var / copyOf / AppCDS 是什么</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-title">L2: 原理</div><div class="step-desc">编译器推断 / mmap / GC 阶段</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-title">L3: 源码</div><div class="step-desc">Infer.java / G1FullCollector</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-title">L4: 边界</div><div class="step-desc">限制 / 坑 / trade-off</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度追问链</div></div>
+    </div>
+  </div>
+
+  <!-- Java 9 Core Lessons -->
   <div class="section">
-    <div class="section-header"><h2>🎓 Core Lessons</h2><span class="badge core">REQUIRED</span></div>
+    <div class="section-header"><h2>🎓 Java 9 Core Lessons</h2><span class="badge core">REQUIRED</span></div>
     <div class="item-list">
       <a class="item" href="./lessons/0001-java9-overview.html">
         <div class="icon l1">L1</div>
@@ -86,8 +100,9 @@
     </div>
   </div>
 
+  <!-- Java 9 Supplementary -->
   <div class="section">
-    <div class="section-header"><h2>📎 Supplementary Lessons</h2><span class="badge support">SUPPLEMENT</span></div>
+    <div class="section-header"><h2>📎 Java 9 Supplementary Lessons</h2><span class="badge support">SUPPLEMENT</span></div>
     <div class="item-list">
       <a class="item" href="./lessons/0005-java9-supplementary-features.html">
         <div class="icon l2">S1</div>
@@ -101,27 +116,90 @@
     </div>
   </div>
 
+  <!-- Java 10 Core Lessons -->
   <div class="section">
-    <div class="section-header"><h2>🧪 Interview Question Bank</h2><span class="badge core">REQUIRED</span></div>
+    <div class="section-header"><h2>🎓 Java 10 Core Lessons</h2><span class="badge core">REQUIRED</span></div>
     <div class="item-list">
-      <a class="item" href="./interview/0001-java9-interview.html">
-        <div class="icon l5">L5</div>
+      <a class="item" href="./lessons/0006-java10-var.html">
+        <div class="icon l1">L1</div>
         <div class="info">
-          <div class="title">Java 9 面试题库（五角度）</div>
-          <div class="desc">面试官 / 架构师 / 代码审查 / 故障排查 / 技术讲师 五角度共 15 题</div>
-          <div class="tags"><span class="tag">JPMS</span><span class="tag">Compact Strings</span><span class="tag">G1</span><span class="tag">jlink</span><span class="tag">追问链</span></div>
+          <div class="title">var — 局部变量类型推断</div>
+          <div class="desc">JEP 286 · 编译器推断规则 · 限制边界 · Infer.java 源码</div>
+          <div class="tags"><span class="tag">JEP 286</span><span class="tag">推断</span><span class="tag">Infer.java</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0007-java10-unmodifiable-collection.html">
+        <div class="icon l2">L2</div>
+        <div class="info">
+          <div class="title">不可变集合 API — copyOf 与 Collectors</div>
+          <div class="desc">幂等性设计 · toUnmodifiable* · Optional.orElseThrow · 与 unmodifiableList 对比</div>
+          <div class="tags"><span class="tag">copyOf</span><span class="tag">幂等性</span><span class="tag">Collectors</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0008-java10-app-cds.html">
+        <div class="icon l2">L3</div>
+        <div class="info">
+          <div class="title">AppCDS — 应用类数据共享</div>
+          <div class="desc">JEP 310 · 三步流程 · mmap 共享内存 · 容器化部署</div>
+          <div class="tags"><span class="tag">JEP 310</span><span class="tag">CDS</span><span class="tag">mmap</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0009-java10-parrel-full-gc.html">
+        <div class="icon l3">L4</div>
+        <div class="info">
+          <div class="title">G1 并行 Full GC</div>
+          <div class="desc">JEP 307 · G1FullCollector · 四阶段并行 · Mark-Sweep-Compact</div>
+          <div class="tags"><span class="tag">JEP 307</span><span class="tag">G1</span><span class="tag">STW</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0010-java10-thread-local-handshake-gc.html">
+        <div class="icon l3">L5</div>
+        <div class="info">
+          <div class="title">Thread-Local Handshakes 与 GC 接口</div>
+          <div class="desc">JEP 312 · JEP 304 · HandshakeState 信号量 · CollectedHeap 抽象</div>
+          <div class="tags"><span class="tag">JEP 312</span><span class="tag">Safepoint</span><span class="tag">GC 接口</span></div>
         </div>
         <div class="arrow">→</div>
       </a>
     </div>
   </div>
 
+  <!-- Interview Question Banks -->
+  <div class="section">
+    <div class="section-header"><h2>🧪 Interview Question Banks</h2><span class="badge core">REQUIRED</span></div>
+    <div class="item-list">
+      <a class="item" href="./interview/0001-java9-interview.html">
+        <div class="icon l5">L5</div>
+        <div class="info">
+          <div class="title">Java 9 面试题库（五角度 · 15 题）</div>
+          <div class="desc">面试官 / 架构师 / 代码审查 / 故障排查 / 技术讲师 五角度共 15 题</div>
+          <div class="tags"><span class="tag">JPMS</span><span class="tag">Compact Strings</span><span class="tag">G1</span><span class="tag">jlink</span><span class="tag">追问链</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./interview/0002-java10-interview.html">
+        <div class="icon l5">L6</div>
+        <div class="info">
+          <div class="title">Java 10 面试题库（五角度 · 20 题）</div>
+          <div class="desc">var / copyOf / AppCDS / G1 / Handshake · 五角度追问链 + 伪代码题</div>
+          <div class="tags"><span class="tag">面试官</span><span class="tag">架构师</span><span class="tag">代码审查</span><span class="tag">故障排查</span><span class="tag">讲师</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Supporting Documents -->
   <div class="section">
     <div class="section-header"><h2>📋 Supporting Documents</h2><span class="badge support">REFERENCE</span></div>
     <div class="item-list">
       <a class="item" href="./TOPIC-MAP.md">
         <div class="icon doc">📖</div>
-        <div class="info"><div class="title">TOPIC-MAP.md</div><div class="desc">知识地图：Java 9 概念图谱与优先级</div></div>
+        <div class="info"><div class="title">TOPIC-MAP.md</div><div class="desc">知识地图：Java 9-10 概念图谱与优先级</div></div>
         <div class="arrow">→</div>
       </a>
       <a class="item" href="./RESOURCES.md">
@@ -141,14 +219,14 @@
       </a>
       <a class="item" href="./common-misconceptions.md">
         <div class="icon doc">⚠️</div>
-        <div class="info"><div class="title">common-misconceptions.md</div><div class="desc">常见误区知识库：JPMS/Compact Strings/G1 易错点</div></div>
+        <div class="info"><div class="title">common-misconceptions.md</div><div class="desc">常见误区知识库：JPMS/Compact Strings/G1/var/copyOf 易错点</div></div>
         <div class="arrow">→</div>
       </a>
     </div>
   </div>
 
   <div class="footer">
-    <p>Generated by Deep Mastery Skill · <code>OpenJDK jdk9</code> · 中文</p>
+    <p>Generated by Deep Mastery Skill · <code>OpenJDK 9-10</code> · 中文</p>
     <p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
   </div>
 

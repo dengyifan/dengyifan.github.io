@@ -6,6 +6,131 @@
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
 <link rel="stylesheet" href="../../style/shared.css">
+<style>
+  .g1-anim {
+    max-width: 940px; margin: 24px auto; background: #fff;
+    border: 1px solid #e8eaee; border-radius: 12px; padding: 16px 20px 18px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.04);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    box-sizing: border-box;
+  }
+  .g1-anim * { box-sizing: border-box; }
+  .g1-anim-top {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px; flex-wrap: wrap; gap: 8px;
+  }
+  .g1-anim-title { font-size: 15px; font-weight: 600; color: #24272c; }
+  .g1-anim-title::before {
+    content: ''; display: inline-block; width: 3px; height: 14px;
+    background: #ea6f5a; border-radius: 2px; margin-right: 8px; vertical-align: -2px;
+  }
+  .g1-badges { display: flex; gap: 8px; align-items: center; }
+  .g1-badge {
+    font-size: 12px; padding: 3px 9px; border-radius: 20px;
+    background: #f2f4f7; color: #5a6472; font-variant-numeric: tabular-nums;
+  }
+  .g1-badge-stw { background: #fdecea; color: #d9534f; font-weight: 600; }
+  canvas.g1-canvas { display: block; width: 100%; height: auto; border-radius: 8px; }
+  .g1-phases { display: flex; gap: 6px; margin-top: 12px; }
+  .g1-ph {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 4px; border-radius: 8px; background: #f7f8fa; color: #98a1ad;
+    font-size: 12.5px; transition: all .25s; border: 1px solid transparent;
+  }
+  .g1-ph b {
+    width: 18px; height: 18px; border-radius: 50%; background: #dfe3e8; color: #fff;
+    font-size: 11px; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; transition: all .25s; flex: 0 0 auto;
+  }
+  .g1-ph.active { background: #fef0f0; color: #c9483a; border-color: #f6cfc9; }
+  .g1-ph.active b { background: #ea6f5a; }
+  .g1-ph.done { color: #7d8894; background: #f2f9f4; border-color: #d8ecdd; }
+  .g1-ph.done b { background: #6ec98a; }
+  .g1-controls { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .g1-controls button {
+    font: inherit; font-size: 13px; padding: 6px 16px; border-radius: 7px;
+    border: 1px solid #e0e3e8; background: #fff; color: #4a5260; cursor: pointer;
+    transition: all .18s;
+  }
+  .g1-controls button:hover { border-color: #ea6f5a; color: #ea6f5a; background: #fff8f7; }
+  .g1-controls select {
+    font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 7px;
+    border: 1px solid #e0e3e8; color: #4a5260; background: #fff;
+  }
+  .g1-legend {
+    display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto;
+    font-size: 12px; color: #8b94a0;
+  }
+  .g1-legend span { display: flex; align-items: center; gap: 5px; }
+  .g1-legend i {
+    width: 9px; height: 9px; border-radius: 50%; display: block;
+    box-sizing: border-box;
+  }
+  .g1-detail { margin-top: 36px; }
+  .g1-detail.p2 .g1-anim-title::before { background: #e8a33d; }
+  .g1-detail.p3 .g1-anim-title::before { background: #4a90d9; }
+  .g1-detail.p4 .g1-anim-title::before { background: #9b6fd0; }
+
+  /* ----- 四阶段水平展开图 ----- */
+  .gc-flow { margin: 28px 0; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .gc-flow-row { display: flex; gap: 0; margin-bottom: 0; }
+  .gc-ph-col { flex: 1; min-width: 0; position: relative; }
+  .gc-ph-header {
+    padding: 14px 10px; text-align: center; border-radius: 10px 10px 0 0;
+    color: #fff; font-weight: 700; font-size: 14px; letter-spacing: .3px;
+  }
+  .gc-ph0 .gc-ph-header { background: linear-gradient(135deg, #ea6f5a, #d9534f); }
+  .gc-ph1 .gc-ph-header { background: linear-gradient(135deg, #e8a33d, #d4892a); }
+  .gc-ph2 .gc-ph-header { background: linear-gradient(135deg, #4a90d9, #357abd); }
+  .gc-ph3 .gc-ph-header { background: linear-gradient(135deg, #9b6fd0, #7d52b8); }
+  .gc-ph-header .ph-num {
+    display: inline-block; width: 22px; height: 22px; line-height: 22px;
+    border-radius: 50%; background: rgba(255,255,255,.28); margin-right: 6px;
+    font-size: 12px; vertical-align: -2px;
+  }
+  .gc-ph-body {
+    padding: 10px 8px 12px; border: 1px solid #e6e8ec; border-top: none;
+    border-radius: 0 0 10px 10px; background: #fafbfc;
+  }
+  .gc-substep {
+    display: flex; align-items: center; gap: 7px;
+    padding: 6px 8px; margin-bottom: 4px; border-radius: 6px;
+    background: #fff; border: 1px solid #eef0f3; font-size: 12px;
+    transition: background .2s;
+  }
+  .gc-substep:last-child { margin-bottom: 0; }
+  .gc-substep .ss-num {
+    width: 19px; height: 19px; line-height: 19px; border-radius: 50%;
+    background: #f0f2f5; color: #8b94a0; text-align: center;
+    font-size: 11px; font-weight: 700; flex: 0 0 auto;
+  }
+  .gc-substep .ss-text { color: #4a5260; line-height: 1.4; }
+  .gc-substep:hover { background: #f8f9fb; }
+  .gc-ph0 .gc-substep .ss-num { background: #fef0f0; color: #d9534f; }
+  .gc-ph1 .gc-substep .ss-num { background: #fef6ed; color: #d4892a; }
+  .gc-ph2 .gc-substep .ss-num { background: #edf4fc; color: #357abd; }
+  .gc-ph3 .gc-substep .ss-num { background: #f6f1fb; color: #7d52b8; }
+
+  /* 阶段间箭头 */
+  .gc-arrow-col {
+    display: flex; align-items: center; justify-content: center;
+    width: 36px; flex: 0 0 36px; padding-top: 26px;
+  }
+  .gc-arrow {
+    font-size: 22px; color: #c8ccd2; font-weight: 300;
+    user-select: none;
+  }
+
+  /* 底部 Worker 栏 */
+  .gc-workers {
+    display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px 14px;
+    background: #f7f8fa; border-radius: 8px; font-size: 12px; color: #5a6472;
+  }
+  .gc-workers .w-title { font-weight: 600; flex: 0 0 auto; }
+  .gc-worker-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+  .gc-workers .w-label { flex: 0 0 auto; margin-right: 14px; }
+</style>
 </head>
 <body>
 <nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 10 · G1 并行 Full GC</span></div></nav>
@@ -31,11 +156,67 @@
 
 <h2>L2 · 原理层：Full GC 的四个阶段</h2>
 
-<div class="mermaid">
-flowchart LR
-    A[Phase 1<br/>标记存活对象] --> B[Phase 2<br/>准备压缩]
-    B --> C[Phase 3<br/>调整指针]
-    C --> D[Phase 4<br/>执行压缩]
+<p>四个阶段串行执行，每个阶段内部通过 <code>G1FullCollector::run_task()</code> 使用工作线程组并行执行。以下是结合下方交互式动画提炼出的完整步骤展开图：</p>
+
+<div class="gc-flow">
+  <div class="gc-flow-row">
+    <!-- Phase 1 -->
+    <div class="gc-ph-col gc-ph0">
+      <div class="gc-ph-header"><span class="ph-num">1</span>Phase 1 · 标记存活对象</div>
+      <div class="gc-ph-body">
+        <div class="gc-substep"><span class="ss-num">1</span><span class="ss-text">根扫描 — 从 GC Roots 出发发现可达对象</span></div>
+        <div class="gc-substep"><span class="ss-num">2</span><span class="ss-text">对象入栈 — 新发现对象压入标记栈等待处理</span></div>
+        <div class="gc-substep"><span class="ss-num">3</span><span class="ss-text">并行标记 — 4 Worker 并行取栈对象扫描引用</span></div>
+        <div class="gc-substep"><span class="ss-num">4</span><span class="ss-text">位图完成 — 标记栈清空，Mark Bitmap 全部置位</span></div>
+      </div>
+    </div>
+    <!-- arrow -->
+    <div class="gc-arrow-col"><span class="gc-arrow">→</span></div>
+    <!-- Phase 2 -->
+    <div class="gc-ph-col gc-ph1">
+      <div class="gc-ph-header"><span class="ph-num">2</span>Phase 2 · 准备压缩</div>
+      <div class="gc-ph-body">
+        <div class="gc-substep"><span class="ss-num">1</span><span class="ss-text">扫描存活对象 — 遍历各 Region 收集存活对象</span></div>
+        <div class="gc-substep"><span class="ss-num">2</span><span class="ss-text">计算目标地址 — 为每个存活对象分配紧凑的新地址</span></div>
+        <div class="gc-substep"><span class="ss-num">3</span><span class="ss-text">填充转发表 — 写入 旧地址 → 新地址 映射</span></div>
+        <div class="gc-substep"><span class="ss-num">4</span><span class="ss-text">转发表就绪 — 所有存活对象均有了确定的新位置</span></div>
+      </div>
+    </div>
+    <!-- arrow -->
+    <div class="gc-arrow-col"><span class="gc-arrow">→</span></div>
+    <!-- Phase 3 -->
+    <div class="gc-ph-col gc-ph2">
+      <div class="gc-ph-header"><span class="ph-num">3</span>Phase 3 · 调整指针</div>
+      <div class="gc-ph-body">
+        <div class="gc-substep"><span class="ss-num">1</span><span class="ss-text">遍历对象 — 并行遍历所有存活对象的引用字段</span></div>
+        <div class="gc-substep"><span class="ss-num">2</span><span class="ss-text">读取引用 — 读取每个字段指向的目标对象旧地址</span></div>
+        <div class="gc-substep"><span class="ss-num">3</span><span class="ss-text">查找转发表 — 在转发表中查询新地址</span></div>
+        <div class="gc-substep"><span class="ss-num">4</span><span class="ss-text">更新指针 — 将引用值改写为目标对象的新地址</span></div>
+      </div>
+    </div>
+    <!-- arrow -->
+    <div class="gc-arrow-col"><span class="gc-arrow">→</span></div>
+    <!-- Phase 4 -->
+    <div class="gc-ph-col gc-ph3">
+      <div class="gc-ph-header"><span class="ph-num">4</span>Phase 4 · 执行压缩</div>
+      <div class="gc-ph-body">
+        <div class="gc-substep"><span class="ss-num">1</span><span class="ss-text">准备目标区域 — 确认目标 Region 已清空可接收</span></div>
+        <div class="gc-substep"><span class="ss-num">2</span><span class="ss-text">并行移动对象 — 多 Worker 搬运到紧凑目标位置</span></div>
+        <div class="gc-substep"><span class="ss-num">3</span><span class="ss-text">更新 Region 状态 — 标记已用空间、更新空闲列表</span></div>
+        <div class="gc-substep"><span class="ss-num">4</span><span class="ss-text">回收垃圾 Region — 全部垃圾 Region 归还空闲池</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gc-workers">
+    <span class="w-title">并行 Worker</span>
+    <span class="gc-worker-dot" style="background:#ea6f5a"></span><span class="w-label">Worker 1</span>
+    <span class="gc-worker-dot" style="background:#e8a33d"></span><span class="w-label">Worker 2</span>
+    <span class="gc-worker-dot" style="background:#4a90d9"></span><span class="w-label">Worker 3</span>
+    <span class="gc-worker-dot" style="background:#9b6fd0"></span><span class="w-label">Worker 4</span>
+    <span style="flex:1"></span>
+    <span>贯穿 4 阶段，按 Region / 对象粒度分片执行（全程 STW）</span>
+  </div>
 </div>
 
 <p>四个阶段全部通过 <code>G1FullCollector::run_task()</code> 使用工作线程组并行执行：</p>
@@ -47,16 +228,6 @@ void G1FullCollector::run_task(AbstractGangTask* task) {
 }</code></pre>
 
 <p><code>_num_workers</code> 来自 <code>workers()->active_workers()</code>，即当前活跃的 GC 工作线程数，默认与 CPU 核数相关[reference:14]。</p>
-
-<h3>并行化的粒度</h3>
-
-<table>
-<tr><th>阶段</th><th>并行化策略</th></tr>
-<tr><td>Phase 1: 标记</td><td>按 Region 分区并行标记，各线程处理不同的 Region 集合</td></tr>
-<tr><td>Phase 2: 准备压缩</td><td>并行计算每个 Region 的压缩目标位置</td></tr>
-<tr><td>Phase 3: 调整指针</td><td>并行遍历对象引用，调整指向新位置的指针</td></tr>
-<tr><td>Phase 4: 压缩</td><td>并行移动对象到压缩后的位置</td></tr>
-</table>
 
 <h2>L3 · 源码层：G1FullCollector 的类结构</h2>
 
@@ -181,6 +352,211 @@ collector.complete_collection();</code></pre>
 </ul>
 </div>
 
+<h2>可视化演示 · G1 并行 Full GC 四阶段动画</h2>
+
+<p>下面通过交互式动画直观展示 G1 并行 Full GC 四个阶段的完整执行过程，以及每个阶段的内部细节流程。</p>
+
+<!-- ============================================================ -->
+<!-- 第一个动画：四阶段总览 -->
+<!-- ============================================================ -->
+<div class="g1-anim">
+  <div class="g1-anim-top">
+    <div class="g1-anim-title">G1 并行 Full GC · 四阶段执行流程</div>
+    <div class="g1-badges">
+      <span class="g1-badge g1-badge-stw">全程 STW</span>
+      <span class="g1-badge" id="phaseBadge">Phase 1 · 标记</span>
+    </div>
+  </div>
+
+  <canvas id="g1canvas" class="g1-canvas"></canvas>
+
+  <div class="g1-phases" id="g1phases">
+    <div class="g1-ph" data-i="0"><b>1</b><span>标记存活对象</span></div>
+    <div class="g1-ph" data-i="1"><b>2</b><span>准备压缩</span></div>
+    <div class="g1-ph" data-i="2"><b>3</b><span>调整指针</span></div>
+    <div class="g1-ph" data-i="3"><b>4</b><span>执行压缩</span></div>
+  </div>
+
+  <div class="g1-controls">
+    <button id="btnPlay">⏸ 暂停</button>
+    <button id="btnReplay">↻ 重播</button>
+    <select id="selSpeed">
+      <option value="0.5">0.5×</option>
+      <option value="0.75">0.75×</option>
+      <option value="1" selected>1×</option>
+      <option value="1.5">1.5×</option>
+    </select>
+    <div class="g1-legend">
+      <span><i style="background:#ea6f5a"></i>Worker 1</span>
+      <span><i style="background:#e8a33d"></i>Worker 2</span>
+      <span><i style="background:#4a90d9"></i>Worker 3</span>
+      <span><i style="background:#9b6fd0"></i>Worker 4</span>
+      <span><i style="background:#aed3f2"></i>存活</span>
+      <span><i style="background:#dcdee2"></i>垃圾</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 第二个动画：Phase 1 标记存活对象 · 细节流程 -->
+<!-- ============================================================ -->
+<div class="g1-anim g1-detail p1">
+  <div class="g1-anim-top">
+    <div class="g1-anim-title">Phase 1 细节 · 标记存活对象的完整操作流程</div>
+    <div class="g1-badges">
+      <span class="g1-badge g1-badge-stw">全程 STW</span>
+      <span class="g1-badge" id="markStepBadge">根扫描</span>
+    </div>
+  </div>
+
+  <canvas id="markCanvas" class="g1-canvas"></canvas>
+
+  <div class="g1-phases" id="markSteps">
+    <div class="g1-ph" data-i="0"><b>1</b><span>根扫描</span></div>
+    <div class="g1-ph" data-i="1"><b>2</b><span>对象入栈</span></div>
+    <div class="g1-ph" data-i="2"><b>3</b><span>并行标记</span></div>
+    <div class="g1-ph" data-i="3"><b>4</b><span>位图完成</span></div>
+  </div>
+
+  <div class="g1-controls">
+    <button id="markBtnPlay">⏸ 暂停</button>
+    <button id="markBtnReplay">↻ 重播</button>
+    <select id="markSelSpeed">
+      <option value="0.5">0.5×</option>
+      <option value="0.75">0.75×</option>
+      <option value="1" selected>1×</option>
+      <option value="1.5">1.5×</option>
+    </select>
+    <div class="g1-legend">
+      <span><i style="background:#fff;border:1px solid #c8ccd2"></i>未标记</span>
+      <span><i style="background:#f5a623"></i>在标记栈</span>
+      <span><i style="background:#6ec98a"></i>已标记</span>
+      <span><i style="background:#4a90d9"></i>活跃引用边</span>
+      <span><i style="background:#9b6fd0"></i>GC Root</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 第三个动画：Phase 2 准备压缩 · 细节流程 -->
+<!-- ============================================================ -->
+<div class="g1-anim g1-detail p2">
+  <div class="g1-anim-top">
+    <div class="g1-anim-title">Phase 2 细节 · 准备压缩（并行计算目标位置）</div>
+    <div class="g1-badges">
+      <span class="g1-badge g1-badge-stw">全程 STW</span>
+      <span class="g1-badge" id="p2Badge">扫描存活对象</span>
+    </div>
+  </div>
+
+  <canvas id="p2Canvas" class="g1-canvas"></canvas>
+
+  <div class="g1-phases" id="p2Steps">
+    <div class="g1-ph" data-i="0"><b>1</b><span>扫描存活对象</span></div>
+    <div class="g1-ph" data-i="1"><b>2</b><span>计算目标地址</span></div>
+    <div class="g1-ph" data-i="2"><b>3</b><span>填充转发表</span></div>
+    <div class="g1-ph" data-i="3"><b>4</b><span>转发表就绪</span></div>
+  </div>
+
+  <div class="g1-controls">
+    <button id="p2BtnPlay">⏸ 暂停</button>
+    <button id="p2BtnReplay">↻ 重播</button>
+    <select id="p2SelSpeed">
+      <option value="0.5">0.5×</option>
+      <option value="0.75">0.75×</option>
+      <option value="1" selected>1×</option>
+      <option value="1.5">1.5×</option>
+    </select>
+    <div class="g1-legend">
+      <span><i style="background:#aed3f2"></i>存活对象</span>
+      <span><i style="background:#dcdee2"></i>垃圾对象</span>
+      <span><i style="background:#6ec98a"></i>已计算新地址</span>
+      <span><i style="background:#f5a623"></i>处理中</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 第四个动画：Phase 3 调整指针 · 细节流程 -->
+<!-- ============================================================ -->
+<div class="g1-anim g1-detail p3">
+  <div class="g1-anim-top">
+    <div class="g1-anim-title">Phase 3 细节 · 调整指针（并行修正引用）</div>
+    <div class="g1-badges">
+      <span class="g1-badge g1-badge-stw">全程 STW</span>
+      <span class="g1-badge" id="p3Badge">遍历对象 O1</span>
+    </div>
+  </div>
+
+  <canvas id="p3Canvas" class="g1-canvas"></canvas>
+
+  <div class="g1-phases" id="p3Steps">
+    <div class="g1-ph" data-i="0"><b>1</b><span>遍历对象</span></div>
+    <div class="g1-ph" data-i="1"><b>2</b><span>读取引用</span></div>
+    <div class="g1-ph" data-i="2"><b>3</b><span>查找转发表</span></div>
+    <div class="g1-ph" data-i="3"><b>4</b><span>更新指针</span></div>
+  </div>
+
+  <div class="g1-controls">
+    <button id="p3BtnPlay">⏸ 暂停</button>
+    <button id="p3BtnReplay">↻ 重播</button>
+    <select id="p3SelSpeed">
+      <option value="0.5">0.5×</option>
+      <option value="0.75">0.75×</option>
+      <option value="1" selected>1×</option>
+      <option value="1.5">1.5×</option>
+    </select>
+    <div class="g1-legend">
+      <span><i style="background:#aed3f2"></i>对象</span>
+      <span><i style="background:#f5a623"></i>当前处理</span>
+      <span><i style="background:#4a90d9"></i>被修正的引用</span>
+      <span><i style="background:#6ec98a"></i>修正完成</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 第五个动画：Phase 4 执行压缩 · 细节流程 -->
+<!-- ============================================================ -->
+<div class="g1-anim g1-detail p4">
+  <div class="g1-anim-top">
+    <div class="g1-anim-title">Phase 4 细节 · 执行压缩（并行移动对象）</div>
+    <div class="g1-badges">
+      <span class="g1-badge g1-badge-stw">全程 STW</span>
+      <span class="g1-badge" id="p4Badge">准备目标区域</span>
+    </div>
+  </div>
+
+  <canvas id="p4Canvas" class="g1-canvas"></canvas>
+
+  <div class="g1-phases" id="p4Steps">
+    <div class="g1-ph" data-i="0"><b>1</b><span>准备目标区域</span></div>
+    <div class="g1-ph" data-i="1"><b>2</b><span>并行移动对象</span></div>
+    <div class="g1-ph" data-i="2"><b>3</b><span>更新 Region 状态</span></div>
+    <div class="g1-ph" data-i="3"><b>4</b><span>回收垃圾 Region</span></div>
+  </div>
+
+  <div class="g1-controls">
+    <button id="p4BtnPlay">⏸ 暂停</button>
+    <button id="p4BtnReplay">↻ 重播</button>
+    <select id="p4SelSpeed">
+      <option value="0.5">0.5×</option>
+      <option value="0.75">0.75×</option>
+      <option value="1" selected>1×</option>
+      <option value="1.5">1.5×</option>
+    </select>
+    <div class="g1-legend">
+      <span><i style="background:#aed3f2"></i>存活对象</span>
+      <span><i style="background:#dcdee2"></i>垃圾对象</span>
+      <span><i style="background:#6ec98a"></i>已移动</span>
+      <span><i style="background:#ea6f5a"></i>Worker 1</span>
+      <span><i style="background:#e8a33d"></i>Worker 2</span>
+      <span><i style="background:#4a90d9"></i>Worker 3</span>
+      <span><i style="background:#9b6fd0"></i>Worker 4</span>
+    </div>
+  </div>
+</div>
+
 <div class="page-nav">
 <span><a href="./0008-java10-appcds.html">← 上一课：AppCDS</a></span>
 <span><a href="./0010-java10-thread-local-handshake.html">下一课：Thread-Local Handshakes →</a></span>
@@ -191,5 +567,2023 @@ collector.complete_collection();</code></pre>
 <script>
 (function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
 </script>
+<script>
+/* ================================================================
+ * 通用工具
+ * ================================================================ */
+function _clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function _roundRect(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+function _pad4(n) {
+  var s = n.toString(16).toUpperCase();
+  while (s.length < 4) s = '0' + s;
+  return '0x' + s;
+}
+
+/* ================================================================
+ * 第一个动画：四阶段总览
+ * ================================================================ */
+(function () {
+  'use strict';
+
+  var W = 900, H = 420;
+  var canvas = document.getElementById('g1canvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = '100%';
+  canvas.style.height = 'auto';
+  ctx.scale(DPR, DPR);
+
+  var COLS = 8, ROWS = 4, NREG = COLS * ROWS;
+  var REG_W = 93, REG_H = 70, GAP = 8;
+  var GRID_W = COLS * REG_W + (COLS - 1) * GAP;
+  var GRID_X = (W - GRID_W) / 2;
+  var GRID_Y = 80;
+  var SLOTS_PER_REGION = 6;
+  var WORKER_COLORS = ['#ea6f5a', '#e8a33d', '#4a90d9', '#9b6fd0'];
+  var SLOT_PAD = 4, SLOT_GAP = 3, SLOT_COLS = 2, SLOT_ROWS = 3;
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function easeInOutCubic(x) {
+    return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  }
+  function easeOutBack(x) {
+    var c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+  }
+  function roundRect(c, x, y, w, h, r) { _roundRect(c, x, y, w, h, r); }
+  function makeRnd(s) {
+    var x = s >>> 0;
+    return function () {
+      x = (x * 1664525 + 1013904223) >>> 0;
+      return x / 4294967296;
+    };
+  }
+  function bezier2(sx, sy, cx, cy, tx, ty, u) {
+    var iu = 1 - u;
+    return {
+      x: iu * iu * sx + 2 * iu * u * cx + u * u * tx,
+      y: iu * iu * sy + 2 * iu * u * cy + u * u * ty
+    };
+  }
+
+  function regionRect(ri) {
+    var r = Math.floor(ri / COLS), c = ri % COLS;
+    return {
+      x: GRID_X + c * (REG_W + GAP),
+      y: GRID_Y + r * (REG_H + GAP),
+      w: REG_W, h: REG_H
+    };
+  }
+  function slotRect(si) {
+    var ri = Math.floor(si / SLOTS_PER_REGION);
+    var k = si % SLOTS_PER_REGION;
+    var rr = regionRect(ri);
+    var iw = rr.w - SLOT_PAD * 2;
+    var ih = rr.h - SLOT_PAD * 2;
+    var ow = (iw - (SLOT_COLS - 1) * SLOT_GAP) / SLOT_COLS;
+    var oh = (ih - (SLOT_ROWS - 1) * SLOT_GAP) / SLOT_ROWS;
+    var c = k % SLOT_COLS, r = Math.floor(k / SLOT_COLS);
+    return {
+      x: rr.x + SLOT_PAD + c * (ow + SLOT_GAP),
+      y: rr.y + SLOT_PAD + r * (oh + SLOT_GAP),
+      w: ow, h: oh
+    };
+  }
+  function slotCenter(si) {
+    var r = slotRect(si);
+    return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+  }
+  function regionProgress(ri, p) {
+    var col = ri % COLS;
+    return clamp(p * COLS - col, 0, 1);
+  }
+  function workerOfSlot(slot) {
+    return Math.floor(slot / SLOTS_PER_REGION / COLS);
+  }
+
+  var heap = [];
+  var aliveSorted = [];
+
+  function initHeap() {
+    var rnd = makeRnd(987654321);
+    heap = [];
+    for (var ri = 0; ri < NREG; ri++) {
+      if (rnd() < 0.20) continue;
+      var n = 1 + Math.floor(rnd() * 6);
+      var pool = [0, 1, 2, 3, 4, 5];
+      for (var i = pool.length - 1; i > 0; i--) {
+        var j = Math.floor(rnd() * (i + 1));
+        var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+      }
+      for (var k = 0; k < n; k++) {
+        heap.push({ slot: ri * SLOTS_PER_REGION + pool[k], alive: rnd() < 0.62 });
+      }
+    }
+    aliveSorted = heap.filter(function (o) { return o.alive; })
+                      .sort(function (a, b) { return a.slot - b.slot; });
+    aliveSorted.forEach(function (o, i) {
+      o.targetSlot = i;
+      o.order = i;
+    });
+  }
+
+  var PHASES = [
+    { name: 'Phase 1 · 标记存活对象（4 线程并行）', dur: 6000 },
+    { name: 'Phase 2 · 准备压缩（并行计算目标位置）', dur: 5800 },
+    { name: 'Phase 3 · 调整指针（并行修正引用）', dur: 4400 },
+    { name: 'Phase 4 · 执行压缩（并行移动对象）', dur: 6000 }
+  ];
+
+  var state = { phase: 0, pt: 0, playing: true, speed: 1, finished: false };
+
+  function drawGrid(phase, t) {
+    for (var ri = 0; ri < NREG; ri++) {
+      var r = regionRect(ri);
+      var row = Math.floor(ri / COLS);
+      var lp = phase === 0 ? regionProgress(ri, t) : 1;
+      roundRect(ctx, r.x, r.y, r.w, r.h, 6);
+      ctx.fillStyle = '#fbfcfd';
+      ctx.fill();
+      if (phase === 0 && lp > 0 && lp < 1) {
+        roundRect(ctx, r.x, r.y, r.w, r.h, 6);
+        ctx.fillStyle = WORKER_COLORS[row] + '14';
+        ctx.fill();
+      }
+      roundRect(ctx, r.x, r.y, r.w, r.h, 6);
+      if (phase === 0 && lp > 0 && lp < 1) {
+        ctx.strokeStyle = WORKER_COLORS[row];
+        ctx.lineWidth = 1.6;
+      } else {
+        ctx.strokeStyle = '#e6e8ec';
+        ctx.lineWidth = 1;
+      }
+      ctx.stroke();
+      if (phase === 0 && lp > 0 && lp < 1) {
+        var sx = r.x + lp * r.w;
+        ctx.beginPath();
+        ctx.moveTo(sx, r.y + 3);
+        ctx.lineTo(sx, r.y + r.h - 3);
+        ctx.strokeStyle = WORKER_COLORS[row];
+        ctx.globalAlpha = 0.65;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function ghostLocal(o, phase, t) {
+    if (phase < 1) return 0;
+    if (phase > 1) return 1;
+    var n = aliveSorted.length || 1;
+    var delay = (o.order / n) * 0.65 + 0.16;
+    return clamp((t - delay) / 0.16, 0, 1);
+  }
+
+  function drawGhosts(phase, t) {
+    if (phase < 1) return;
+    var n = aliveSorted.length;
+    for (var i = 0; i < n; i++) {
+      var o = aliveSorted[i];
+      var target = slotRect(o.targetSlot);
+      var gl = ghostLocal(o, phase, t);
+      if (gl <= 0) continue;
+      var a, scale;
+      if (phase === 1) {
+        a = gl * 0.75;
+        scale = 0.35 + 0.65 * easeOutBack(gl);
+      } else if (phase === 2) {
+        a = 0.75;
+        scale = 1;
+      } else {
+        var p = compactProgress(o, t);
+        a = 0.75 * (1 - p);
+        scale = 1;
+      }
+      if (a <= 0.015) continue;
+      var cx = target.x + target.w / 2;
+      var cy = target.y + target.h / 2;
+      var sw = target.w * scale;
+      var sh = target.h * scale;
+      ctx.globalAlpha = a;
+      roundRect(ctx, cx - sw / 2, cy - sh / 2, sw, sh, 3);
+      ctx.fillStyle = '#d9f0dd';
+      ctx.fill();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = '#79c088';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (scale > 0.6) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = '#5aa86c';
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawPrepareDots(phase, t) {
+    if (phase !== 1) return;
+    var n = aliveSorted.length;
+    if (n === 0) return;
+    for (var i = 0; i < n; i++) {
+      var o = aliveSorted[i];
+      var delay = (o.order / n) * 0.65;
+      var local = clamp((t - delay) / 0.26, 0, 1);
+      if (local <= 0) continue;
+      var sc = slotCenter(o.slot);
+      var tc = slotCenter(o.targetSlot);
+      var sx = sc.x, sy = sc.y, tx = tc.x, ty = tc.y;
+      var dx = tx - sx, dy = ty - sy;
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var bow = Math.min(30, len * 0.18);
+      var cx = (sx + tx) / 2 + (-dy / len) * bow;
+      var cy = (sy + ty) / 2 + ( dx / len) * bow;
+      var color = WORKER_COLORS[workerOfSlot(o.slot)];
+      var alpha = 1 - clamp((local - 0.88) / 0.12, 0, 1);
+      var tailU = Math.max(0, local - 0.35);
+      if (local - tailU > 0.015) {
+        ctx.beginPath();
+        var segs = 14;
+        for (var s = 0; s <= segs; s++) {
+          var u = tailU + (local - tailU) * (s / segs);
+          var pt = bezier2(sx, sy, cx, cy, tx, ty, u);
+          if (s === 0) ctx.moveTo(pt.x, pt.y);
+          else ctx.lineTo(pt.x, pt.y);
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.6;
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = alpha * 0.85;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      var hp = bezier2(sx, sy, cx, cy, tx, ty, local);
+      ctx.beginPath();
+      ctx.arc(hp.x, hp.y, 4.4, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = alpha;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(hp.x, hp.y, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.globalAlpha = alpha * 0.92;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      if (local > 0.86) {
+        var hitP = (local - 0.86) / 0.14;
+        var rad = 5 + 16 * hitP;
+        ctx.beginPath();
+        ctx.arc(tx, ty, rad, 0, Math.PI * 2);
+        ctx.strokeStyle = '#6ec98a';
+        ctx.globalAlpha = (1 - hitP) * 0.95;
+        ctx.lineWidth = 2.4;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      if (local < 0.25) {
+        var sp = local / 0.25;
+        ctx.beginPath();
+        ctx.arc(sx, sy, 3 + 7 * sp, 0, Math.PI * 2);
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = (1 - sp) * 0.8;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function isMarked(o, t) {
+    var ri = Math.floor(o.slot / SLOTS_PER_REGION);
+    var lp = regionProgress(ri, t);
+    if (lp <= 0) return false;
+    var r = slotRect(o.slot);
+    var rr = regionRect(ri);
+    var scanX = rr.x + lp * rr.w;
+    return (r.x + r.w * 0.25) < scanX;
+  }
+
+  function compactProgress(o, t) {
+    var n = aliveSorted.length || 1;
+    var delay = (o.order / n) * 0.35;
+    var span = 1 - 0.35;
+    return clamp((t - delay) / span, 0, 1);
+  }
+
+  function drawObjects(phase, t) {
+    for (var i = 0; i < heap.length; i++) {
+      var o = heap[i];
+      var rect = slotRect(o.slot);
+      var alpha = 1;
+      var fill, stroke;
+      if (o.alive) {
+        if (phase === 3) {
+          var p = easeInOutCubic(compactProgress(o, t));
+          var tgt = slotRect(o.targetSlot);
+          rect = {
+            x: lerp(rect.x, tgt.x, p),
+            y: lerp(rect.y, tgt.y, p),
+            w: rect.w, h: rect.h
+          };
+        }
+        var marked = phase > 0 || isMarked(o, t);
+        fill = marked ? '#6ec98a' : '#aed3f2';
+        stroke = marked ? '#45a866' : '#7fb2e0';
+      } else {
+        if (phase === 3) {
+          alpha = 1 - clamp(t * 2.2, 0, 1);
+          if (alpha <= 0.02) continue;
+        }
+        fill = '#dcdee2';
+        stroke = '#cbced4';
+      }
+      ctx.globalAlpha = alpha;
+      roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 3);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawPtrPulses(phase, t) {
+    if (phase !== 2) return;
+    var n = aliveSorted.length;
+    for (var i = 0; i < n; i++) {
+      var o = aliveSorted[i];
+      var delay = (o.order / n) * 0.55;
+      var local = clamp((t - delay) / 0.35, 0, 1);
+      if (local <= 0 || local >= 1) continue;
+      var r = slotRect(o.slot);
+      var cx = r.x + r.w - 6;
+      var cy = r.y + 6;
+      var rad = 2.5 + 5 * local;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+      ctx.strokeStyle = '#4a90d9';
+      ctx.globalAlpha = (1 - local) * 0.85;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#4a90d9';
+      ctx.globalAlpha = (1 - local) * 0.9;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawTopLabel(phase, t) {
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = '600 14px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = '#2c3038';
+    ctx.fillText(PHASES[phase].name, GRID_X, 38);
+    if (phase === 1 && aliveSorted.length > 0) {
+      var n = aliveSorted.length;
+      var done = 0;
+      for (var i = 0; i < n; i++) {
+        var delay = (aliveSorted[i].order / n) * 0.65;
+        if (t >= delay + 0.26) done++;
+      }
+      ctx.font = '500 12px -apple-system, "PingFang SC", sans-serif';
+      ctx.fillStyle = '#5aa86c';
+      ctx.fillText('已计算目标位置：' + done + ' / ' + n, GRID_X, 58);
+    }
+    var barW = 180, barH = 5;
+    var bx = W - GRID_X - barW, by = 35;
+    roundRect(ctx, bx, by, barW, barH, 2.5);
+    ctx.fillStyle = '#eef0f3';
+    ctx.fill();
+    if (t > 0) {
+      roundRect(ctx, bx, by, Math.max(barW * t, 2), barH, 2.5);
+      ctx.fillStyle = '#ea6f5a';
+      ctx.fill();
+    }
+  }
+
+  function draw() {
+    var phase = state.phase;
+    var t = state.finished ? 1 : clamp(state.pt / PHASES[phase].dur, 0, 1);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    drawGrid(phase, t);
+    drawGhosts(phase, t);
+    drawPrepareDots(phase, t);
+    drawObjects(phase, t);
+    drawPtrPulses(phase, t);
+    drawTopLabel(phase, t);
+  }
+
+  var lastPhaseShown = -1;
+  var phaseItems = document.querySelectorAll('#g1phases .g1-ph');
+  var phaseBadge = document.getElementById('phaseBadge');
+  var btnPlay = document.getElementById('btnPlay');
+
+  function updatePhaseUI(phase) {
+    if (phase === lastPhaseShown) return;
+    lastPhaseShown = phase;
+    for (var i = 0; i < phaseItems.length; i++) {
+      phaseItems[i].classList.toggle('active', i === phase);
+      phaseItems[i].classList.toggle('done', i < phase);
+    }
+    phaseBadge.textContent = 'Phase ' + (phase + 1) + ' · ' +
+      PHASES[phase].name.split('· ')[1].split('（')[0];
+  }
+
+  var last = 0;
+  function tick(now) {
+    if (!last) last = now;
+    var dt = Math.min(now - last, 64);
+    last = now;
+    if (state.playing && !state.finished) {
+      state.pt += dt * state.speed;
+      while (state.phase < PHASES.length && state.pt >= PHASES[state.phase].dur) {
+        state.pt -= PHASES[state.phase].dur;
+        state.phase++;
+        if (state.phase >= PHASES.length) {
+          state.phase = PHASES.length - 1;
+          state.pt = PHASES[state.phase].dur;
+          state.finished = true;
+          state.playing = false;
+          btnPlay.textContent = '▶ 播放';
+          break;
+        }
+      }
+    }
+    updatePhaseUI(state.phase);
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  btnPlay.addEventListener('click', function () {
+    if (state.finished) { replay(); return; }
+    state.playing = !state.playing;
+    btnPlay.textContent = state.playing ? '⏸ 暂停' : '▶ 播放';
+  });
+
+  function replay() {
+    state.phase = 0;
+    state.pt = 0;
+    state.playing = true;
+    state.finished = false;
+    lastPhaseShown = -1;
+    btnPlay.textContent = '⏸ 暂停';
+    updatePhaseUI(0);
+  }
+
+  document.getElementById('btnReplay').addEventListener('click', replay);
+  document.getElementById('selSpeed').addEventListener('change', function (e) {
+    state.speed = parseFloat(e.target.value) || 1;
+  });
+
+  initHeap();
+  updatePhaseUI(0);
+  requestAnimationFrame(tick);
+})();
+
+
+/* ================================================================
+ * 第二个动画：Phase 1 标记存活对象 · 细节流程
+ * ================================================================ */
+(function () {
+  'use strict';
+
+  var W = 900, H = 480;
+  var canvas = document.getElementById('markCanvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = '100%';
+  canvas.style.height = 'auto';
+  ctx.scale(DPR, DPR);
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function hexToRgb(h) {
+    h = h.replace('#', '');
+    if (h.length === 3) h = h.split('').map(function (c) { return c + c; }).join('');
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(function (v) {
+      var s = Math.round(clamp(v, 0, 255)).toString(16);
+      return s.length === 1 ? '0' + s : s;
+    }).join('');
+  }
+  function mixColor(a, b, t) {
+    var ca = hexToRgb(a), cb = hexToRgb(b);
+    return rgbToHex(
+      ca[0] + (cb[0] - ca[0]) * t,
+      ca[1] + (cb[1] - ca[1]) * t,
+      ca[2] + (cb[2] - ca[2]) * t
+    );
+  }
+  function roundRect(c, x, y, w, h, r) { _roundRect(c, x, y, w, h, r); }
+
+  var ROOTS = [
+    { id: 'R1', label: 'Thread Stack',  x: 85, y: 130 },
+    { id: 'R2', label: 'Static Fields', x: 85, y: 215 },
+    { id: 'R3', label: 'JNI Refs',      x: 85, y: 300 },
+    { id: 'R4', label: 'Class Loader',  x: 85, y: 385 }
+  ];
+
+  var NODES = [
+    { id: 'O1',  x: 250, y: 110 },
+    { id: 'O2',  x: 250, y: 200 },
+    { id: 'O3',  x: 250, y: 290 },
+    { id: 'O4',  x: 250, y: 380 },
+    { id: 'O5',  x: 430, y: 90  },
+    { id: 'O6',  x: 430, y: 175 },
+    { id: 'O7',  x: 430, y: 260 },
+    { id: 'O8',  x: 430, y: 345 },
+    { id: 'O9',  x: 430, y: 430 },
+    { id: 'O10', x: 600, y: 120 },
+    { id: 'O11', x: 600, y: 230 },
+    { id: 'O12', x: 600, y: 355 }
+  ];
+
+  var NMAP = {};
+  NODES.forEach(function (n) { NMAP[n.id] = n; });
+  var RMAP = {};
+  ROOTS.forEach(function (r) { RMAP[r.id] = r; });
+
+  var ROOT_EDGES = [
+    { from: 'R1', to: 'O1', t: 0.06 },
+    { from: 'R2', to: 'O2', t: 0.09 },
+    { from: 'R3', to: 'O3', t: 0.12 },
+    { from: 'R4', to: 'O4', t: 0.15 }
+  ];
+
+  var NODE_EDGES = [
+    { from: 'O1', to: 'O5',  t: 0.24 },
+    { from: 'O1', to: 'O6',  t: 0.25 },
+    { from: 'O2', to: 'O6',  t: 0.26, dup: true },
+    { from: 'O2', to: 'O7',  t: 0.27 },
+    { from: 'O3', to: 'O8',  t: 0.28 },
+    { from: 'O4', to: 'O8',  t: 0.30, dup: true },
+    { from: 'O4', to: 'O9',  t: 0.31 },
+    { from: 'O5', to: 'O10', t: 0.42 },
+    { from: 'O6', to: 'O11', t: 0.44 },
+    { from: 'O8', to: 'O12', t: 0.48 }
+  ];
+
+  var NODE_TIMES = {
+    O1:  { discover: 0.06, mark: 0.22 },
+    O2:  { discover: 0.09, mark: 0.24 },
+    O3:  { discover: 0.12, mark: 0.26 },
+    O4:  { discover: 0.15, mark: 0.28 },
+    O5:  { discover: 0.24, mark: 0.40 },
+    O6:  { discover: 0.25, mark: 0.42 },
+    O7:  { discover: 0.27, mark: 0.44 },
+    O8:  { discover: 0.28, mark: 0.46 },
+    O9:  { discover: 0.31, mark: 0.48 },
+    O10: { discover: 0.42, mark: 0.54 },
+    O11: { discover: 0.44, mark: 0.56 },
+    O12: { discover: 0.48, mark: 0.58 }
+  };
+
+  var DURATION = 16000;
+  var state = { pt: 0, playing: true, speed: 1, finished: false };
+  var R_NODE = 18;
+  var ROOT_W = 118, ROOT_H = 34;
+
+  function drawBackground() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+  }
+  function drawSectionLabels() {
+    ctx.font = '500 11px -apple-system, "PingFang SC", sans-serif';
+    ctx.fillStyle = '#98a1ad';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('GC Roots', 85, 78);
+    ctx.fillText('对象图', 430, 58);
+    ctx.fillText('标记栈 / 标记位图', 780, 58);
+  }
+  function drawRootEdges(t) {
+    ROOT_EDGES.forEach(function (e) {
+      var prog = clamp((t - e.t) / 0.05, 0, 1);
+      if (prog <= 0) return;
+      var from = RMAP[e.from], to = NMAP[e.to];
+      var x1 = from.x + ROOT_W / 2;
+      var y1 = from.y;
+      var x2 = to.x - R_NODE;
+      var y2 = to.y;
+      var ex = x1 + (x2 - x1) * prog;
+      var ey = y1 + (y2 - y1) * prog;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(ex, ey);
+      ctx.strokeStyle = prog < 1 ? '#4a90d9' : '#c0c8d2';
+      ctx.lineWidth = prog < 1 ? 2.2 : 1.4;
+      ctx.globalAlpha = prog < 1 ? 0.9 : 0.55;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      if (prog < 1) {
+        ctx.beginPath();
+        ctx.arc(ex, ey, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#4a90d9';
+        ctx.fill();
+      }
+    });
+  }
+  function drawNodeEdges(t) {
+    NODE_EDGES.forEach(function (e) {
+      var from = NMAP[e.from], to = NMAP[e.to];
+      var active = t >= e.t;
+      var justActive = active && (t - e.t) < 0.04;
+      var dx = to.x - from.x, dy = to.y - from.y;
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var ux = dx / len, uy = dy / len;
+      var x1 = from.x + ux * R_NODE;
+      var y1 = from.y + uy * R_NODE;
+      var x2 = to.x - ux * R_NODE;
+      var y2 = to.y - uy * R_NODE;
+      if (!active) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = '#e8eaee';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        return;
+      }
+      if (e.dup) {
+        ctx.setLineDash([4, 3]);
+        ctx.strokeStyle = '#c8ccd2';
+        ctx.lineWidth = 1.4;
+      } else {
+        ctx.setLineDash([]);
+        ctx.strokeStyle = justActive ? '#4a90d9' : '#b8ccdf';
+        ctx.lineWidth = justActive ? 2.2 : 1.4;
+      }
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (justActive) {
+        var p = (t - e.t) / 0.04;
+        var px = x1 + (x2 - x1) * p;
+        var py = y1 + (y2 - y1) * p;
+        ctx.beginPath();
+        ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#4a90d9';
+        ctx.fill();
+      }
+    });
+  }
+  function rootHighlight(r, t) {
+    for (var i = 0; i < ROOT_EDGES.length; i++) {
+      var e = ROOT_EDGES[i];
+      if (e.from === r.id) {
+        if (t >= e.t - 0.01 && t <= e.t + 0.06) {
+          return clamp(1 - (t - e.t) / 0.06, 0, 1);
+        }
+      }
+    }
+    return 0;
+  }
+  function drawRoots(t) {
+    ROOTS.forEach(function (r) {
+      var x = r.x - ROOT_W / 2;
+      var y = r.y - ROOT_H / 2;
+      var hl = rootHighlight(r, t);
+      if (hl > 0) {
+        roundRect(ctx, x - 4, y - 4, ROOT_W + 8, ROOT_H + 8, 10);
+        ctx.strokeStyle = '#9b6fd0';
+        ctx.globalAlpha = hl * 0.55;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      roundRect(ctx, x, y, ROOT_W, ROOT_H, 8);
+      ctx.fillStyle = '#f3eefb';
+      ctx.fill();
+      ctx.strokeStyle = '#9b6fd0';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.font = '600 12px -apple-system, "PingFang SC", sans-serif';
+      ctx.fillStyle = '#6d4aa3';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(r.label, r.x, r.y);
+    });
+  }
+  function nodeVisual(id, t) {
+    var times = NODE_TIMES[id];
+    if (!times) return null;
+    if (t < times.discover) {
+      return { fill: '#ffffff', stroke: '#c8ccd2', text: '#8b94a0', state: 'white' };
+    }
+    if (t < times.mark) {
+      var p = clamp((t - times.discover) / 0.04, 0, 1);
+      return {
+        fill: mixColor('#ffffff', '#fdeccb', p),
+        stroke: mixColor('#c8ccd2', '#f5a623', p),
+        text: mixColor('#8b94a0', '#b3791a', p),
+        state: 'gray',
+        pulse: p
+      };
+    }
+    var q = clamp((t - times.mark) / 0.05, 0, 1);
+    return {
+      fill: mixColor('#fdeccb', '#6ec98a', q),
+      stroke: mixColor('#f5a623', '#45a866', q),
+      text: mixColor('#b3791a', '#ffffff', q),
+      state: 'green',
+      pulse: 1 - q
+    };
+  }
+  function drawNodes(t) {
+    NODES.forEach(function (n) {
+      var v = nodeVisual(n.id, t);
+      if (!v) return;
+      if (v.state === 'gray' && v.pulse > 0) {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, R_NODE + 6 + 4 * Math.sin(t * 40), 0, Math.PI * 2);
+        ctx.strokeStyle = '#f5a623';
+        ctx.globalAlpha = 0.35 * (1 - Math.abs(v.pulse - 0.5) * 2);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      if (v.state === 'green' && v.pulse > 0) {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, R_NODE + 12 * (1 - v.pulse), 0, Math.PI * 2);
+        ctx.strokeStyle = '#6ec98a';
+        ctx.globalAlpha = v.pulse * 0.8;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, R_NODE, 0, Math.PI * 2);
+      ctx.fillStyle = v.fill;
+      ctx.fill();
+      ctx.strokeStyle = v.stroke;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.font = '700 12px -apple-system, "PingFang SC", sans-serif';
+      ctx.fillStyle = v.text;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.id, n.x, n.y);
+    });
+  }
+  function drawMarkStack(t) {
+    var bx = 670, by = 90, bw = 220, bh = 200;
+    roundRect(ctx, bx, by, bw, bh, 8);
+    ctx.fillStyle = '#fafbfc';
+    ctx.fill();
+    ctx.strokeStyle = '#e6e8ec';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.font = '600 12px -apple-system, "PingFang SC", sans-serif';
+    ctx.fillStyle = '#5a6472';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('标记栈 (Mark Stack)', bx + 12, by + 10);
+    var inStack = NODES.filter(function (n) {
+      var times = NODE_TIMES[n.id];
+      return times && t >= times.discover && t < times.mark;
+    }).sort(function (a, b) {
+      return NODE_TIMES[a.id].discover - NODE_TIMES[b.id].discover;
+    });
+    if (inStack.length === 0) {
+      ctx.font = '500 11px -apple-system, "PingFang SC", sans-serif';
+      ctx.fillStyle = '#a8b1bc';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      var msg = t < 0.06 ? '等待根扫描…' : '栈已清空';
+      ctx.fillText(msg, bx + bw / 2, by + bh / 2);
+      return;
+    }
+    var itemH = 22, itemGap = 4;
+    var startY = by + 32;
+    var maxShow = Math.floor((bh - 44) / (itemH + itemGap));
+    inStack.slice(0, maxShow).forEach(function (n, i) {
+      var iy = startY + i * (itemH + itemGap);
+      var ix = bx + 12;
+      var iw = bw - 24;
+      roundRect(ctx, ix, iy, iw, itemH, 5);
+      ctx.fillStyle = '#fef3e0';
+      ctx.fill();
+      ctx.strokeStyle = '#f5d9a6';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.font = '600 11px -apple-system, "PingFang SC", sans-serif';
+      ctx.fillStyle = '#b3791a';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.id, ix + 10, iy + itemH / 2);
+      var times = NODE_TIMES[n.id];
+      if (t - times.discover < 0.05) {
+        var p = (t - times.discover) / 0.05;
+        roundRect(ctx, ix, iy, iw, itemH, 5);
+        ctx.fillStyle = '#f5a623';
+        ctx.globalAlpha = (1 - p) * 0.35;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    });
+    if (inStack.length > maxShow) {
+      ctx.font = '500 11px -apple-system, "PingFang SC", sans-serif';
+      ctx.fillStyle = '#a8b1bc';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('+' + (inStack.length - maxShow) + ' 更多', bx + bw - 12, by + bh - 8);
+    }
+  }
+  function drawMarkBitmap(t) {
+    var bx = 670, by = 310, bw = 220, bh = 140;
+    roundRect(ctx, bx, by, bw, bh, 8);
+    ctx.fillStyle = '#fafbfc';
+    ctx.fill();
+    ctx.strokeStyle = '#e6e8ec';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.font = '600 12px -apple-system, "PingFang SC", sans-serif';
+    ctx.fillStyle = '#5a6472';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('标记位图 (Mark Bitmap)', bx + 12, by + 10);
+    var cols = 6;
+    var cw = 28, ch = 28, cg = 5;
+    var totalW = cols * cw + (cols - 1) * cg;
+    var startX = bx + (bw - totalW) / 2;
+    var startY = by + 42;
+    NODES.forEach(function (n, i) {
+      var r = Math.floor(i / cols), c = i % cols;
+      var x = startX + c * (cw + cg);
+      var y = startY + r * (ch + cg);
+      var times = NODE_TIMES[n.id];
+      var marked = times && t >= times.mark;
+      if (marked) {
+        var since = t - times.mark;
+        var scale = since < 0.08 ? 0.6 + 0.4 * (since / 0.08) : 1;
+        var cx = x + cw / 2, cy = y + ch / 2;
+        var sw = cw * scale, sh = ch * scale;
+        roundRect(ctx, cx - sw / 2, cy - sh / 2, sw, sh, 4);
+        ctx.fillStyle = '#6ec98a';
+        ctx.fill();
+        ctx.strokeStyle = '#45a866';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        if (since < 0.15) {
+          ctx.globalAlpha = 0.5 * (1 - since / 0.15);
+          roundRect(ctx, x - 2, y - 2, cw + 4, ch + 4, 5);
+          ctx.strokeStyle = '#6ec98a';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      } else {
+        roundRect(ctx, x, y, cw, ch, 4);
+        ctx.fillStyle = '#f0f2f5';
+        ctx.fill();
+        ctx.strokeStyle = '#e0e3e8';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.font = '600 10px -apple-system, "PingFang SC", sans-serif';
+      ctx.fillStyle = marked ? '#ffffff' : '#a8b1bc';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.id, x + cw / 2, y + ch / 2);
+    });
+  }
+  function drawTopInfo(t) {
+    var stepName;
+    if (t < 0.20) stepName = '① 根扫描：从 GC Roots 出发，发现第一批可达对象';
+    else if (t < 0.40) stepName = '② 对象入栈：新发现的对象被压入标记栈，等待处理';
+    else if (t < 0.62) stepName = '③ 并行标记：4 个 Worker 从栈取对象，标记并扫描其引用';
+    else stepName = '④ 位图完成：标记栈清空，所有存活对象在 Mark Bitmap 中置位';
+    ctx.font = '600 13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = '#2c3038';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(stepName, 30, 36);
+    var markedCount = 0;
+    NODES.forEach(function (n) {
+      if (t >= NODE_TIMES[n.id].mark) markedCount++;
+    });
+    ctx.font = '600 12px -apple-system, "PingFang SC", sans-serif';
+    ctx.fillStyle = '#5aa86c';
+    ctx.textAlign = 'right';
+    ctx.fillText('已标记：' + markedCount + ' / ' + NODES.length, W - 30, 36);
+  }
+  function draw() {
+    var t = state.finished ? 1 : clamp(state.pt / DURATION, 0, 1);
+    drawBackground();
+    drawSectionLabels();
+    drawRootEdges(t);
+    drawNodeEdges(t);
+    drawRoots(t);
+    drawNodes(t);
+    drawMarkStack(t);
+    drawMarkBitmap(t);
+    drawTopInfo(t);
+  }
+  var stepItems = document.querySelectorAll('#markSteps .g1-ph');
+  var stepBadge = document.getElementById('markStepBadge');
+  var btnPlay = document.getElementById('markBtnPlay');
+  var lastStep = -1;
+  function currentStep(t) {
+    if (t < 0.20) return 0;
+    if (t < 0.40) return 1;
+    if (t < 0.62) return 2;
+    return 3;
+  }
+  function updateStepUI(t) {
+    var s = currentStep(t);
+    if (s === lastStep) return;
+    lastStep = s;
+    for (var i = 0; i < stepItems.length; i++) {
+      stepItems[i].classList.toggle('active', i === s);
+      stepItems[i].classList.toggle('done', i < s);
+    }
+    var names = ['根扫描', '对象入栈', '并行标记', '位图完成'];
+    stepBadge.textContent = names[s];
+  }
+  var lastTime = 0;
+  function tick(now) {
+    if (!lastTime) lastTime = now;
+    var dt = Math.min(now - lastTime, 64);
+    lastTime = now;
+    if (state.playing && !state.finished) {
+      state.pt += dt * state.speed;
+      if (state.pt >= DURATION) {
+        state.pt = DURATION;
+        state.finished = true;
+        state.playing = false;
+        btnPlay.textContent = '▶ 播放';
+      }
+    }
+    var t = state.finished ? 1 : clamp(state.pt / DURATION, 0, 1);
+    updateStepUI(t);
+    draw();
+    requestAnimationFrame(tick);
+  }
+  btnPlay.addEventListener('click', function () {
+    if (state.finished) { replay(); return; }
+    state.playing = !state.playing;
+    btnPlay.textContent = state.playing ? '⏸ 暂停' : '▶ 播放';
+  });
+  function replay() {
+    state.pt = 0;
+    state.playing = true;
+    state.finished = false;
+    lastStep = -1;
+    btnPlay.textContent = '⏸ 暂停';
+    updateStepUI(0);
+  }
+  document.getElementById('markBtnReplay').addEventListener('click', replay);
+  document.getElementById('markSelSpeed').addEventListener('change', function (e) {
+    state.speed = parseFloat(e.target.value) || 1;
+  });
+  updateStepUI(0);
+  requestAnimationFrame(tick);
+})();
+
+
+/* ================================================================
+ * 第三个动画：Phase 2 准备压缩 · 细节流程
+ * ================================================================ */
+(function () {
+  'use strict';
+
+  var W = 900, H = 460;
+  var canvas = document.getElementById('p2Canvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = '100%';
+  canvas.style.height = 'auto';
+  ctx.scale(DPR, DPR);
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function roundRect(c, x, y, w, h, r) { _roundRect(c, x, y, w, h, r); }
+
+  // 16 个对象
+  var OBJS = [
+    { id: 'O1',  addr: '0x1000', alive: true  },
+    { id: 'O2',  addr: '0x1040', alive: true  },
+    { id: 'O3',  addr: '0x1080', alive: false },
+    { id: 'O4',  addr: '0x10C0', alive: true  },
+    { id: 'O5',  addr: '0x1100', alive: true  },
+    { id: 'O6',  addr: '0x1140', alive: false },
+    { id: 'O7',  addr: '0x1180', alive: true  },
+    { id: 'O8',  addr: '0x11C0', alive: true  },
+    { id: 'O9',  addr: '0x1200', alive: true  },
+    { id: 'O10', addr: '0x1240', alive: false },
+    { id: 'O11', addr: '0x1280', alive: true  },
+    { id: 'O12', addr: '0x12C0', alive: true  },
+    { id: 'O13', addr: '0x1300', alive: true  },
+    { id: 'O14', addr: '0x1340', alive: false },
+    { id: 'O15', addr: '0x1380', alive: true  },
+    { id: 'O16', addr: '0x13C0', alive: false }
+  ];
+
+  var ALIVE = [];
+  OBJS.forEach(function (o) {
+    if (o.alive) {
+      o.order = ALIVE.length;
+      o.newAddr = _pad4(o.order * 0x40);
+      ALIVE.push(o);
+    }
+  });
+
+  var DURATION = 16000;
+  var state = { pt: 0, playing: true, speed: 1, finished: false };
+
+  var GRID_X = 35, GRID_Y = 100;
+  var CELL_W = 68, CELL_H = 52, CELL_GAP = 6;
+  var COLS = 4;
+
+  var TABLE_X = 420, TABLE_Y = 100;
+  var TABLE_W = 440;
+  var ROW_H = 24;
+  var HEADER_H = 28;
+
+  function drawObjectGrid(t) {
+    // 统计阶段进度
+    var scanProg = clamp((t - 0.02) / 0.20, 0, 1);
+    // 计算阶段进度
+    var calcProg = clamp((t - 0.25) / 0.30, 0, 1);
+
+    for (var i = 0; i < OBJS.length; i++) {
+      var o = OBJS[i];
+      var col = i % COLS;
+      var row = Math.floor(i / COLS);
+      var x = GRID_X + col * (CELL_W + CELL_GAP);
+      var y = GRID_Y + row * (CELL_H + CELL_GAP);
+
+      var fill, stroke;
+      if (o.alive) {
+        fill = '#aed3f2';
+        stroke = '#7fb2e0';
+      } else {
+        fill = '#dcdee2';
+        stroke = '#cbced4';
+      }
+
+      // 统计阶段：已扫描到的存活对象变绿
+      if (t < 0.25 && o.alive) {
+        if (o.order < scanProg * ALIVE.length) {
+          fill = '#6ec98a';
+          stroke = '#45a866';
+        }
+      }
+
+      // 计算阶段：已计算新地址的对象变浅绿
+      if (t >= 0.25 && o.alive) {
+        if (o.order < calcProg * ALIVE.length) {
+          fill = '#d9f0dd';
+          stroke = '#6ec98a';
+        }
+      }
+
+      roundRect(ctx, x, y, CELL_W, CELL_H, 6);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      ctx.font = '700 12px -apple-system, sans-serif';
+      ctx.fillStyle = o.alive ? '#2c3038' : '#8b94a0';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(o.id, x + CELL_W / 2, y + CELL_H / 2 - 8);
+
+      ctx.font = '500 10px -apple-system, sans-serif';
+      ctx.fillStyle = o.alive ? '#5a6472' : '#a8b1bc';
+      ctx.fillText(o.addr, x + CELL_W / 2, y + CELL_H / 2 + 8);
+
+      // 显示新地址
+      if (t >= 0.25 && o.alive && o.order < calcProg * ALIVE.length) {
+        ctx.font = '700 10px -apple-system, sans-serif';
+        ctx.fillStyle = '#3a8a4a';
+        ctx.fillText('→ ' + o.newAddr, x + CELL_W / 2, y + CELL_H - 7);
+      }
+    }
+  }
+
+  function drawForwardTable(t) {
+    var tx = TABLE_X, ty = TABLE_Y;
+
+    // 表头
+    roundRect(ctx, tx, ty, TABLE_W, HEADER_H, 6);
+    ctx.fillStyle = '#f0f2f5';
+    ctx.fill();
+    ctx.strokeStyle = '#e0e3e8';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.font = '600 12px -apple-system, sans-serif';
+    ctx.fillStyle = '#5a6472';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('对象', tx + 14, ty + HEADER_H / 2);
+    ctx.fillText('旧地址', tx + 104, ty + HEADER_H / 2);
+    ctx.fillText('新地址', tx + 264, ty + HEADER_H / 2);
+
+    // 行：填充进度
+    var fillProg = clamp((t - 0.55) / 0.30, 0, 1);
+
+    for (var i = 0; i < ALIVE.length; i++) {
+      var o = ALIVE[i];
+      var ry = ty + HEADER_H + i * ROW_H;
+      var visible = i < fillProg * ALIVE.length;
+      if (!visible) continue;
+
+      // 行背景
+      var rowFill = i % 2 === 0 ? '#fafbfc' : '#ffffff';
+      ctx.fillStyle = rowFill;
+      ctx.fillRect(tx, ry, TABLE_W, ROW_H);
+
+      // 边框
+      ctx.strokeStyle = '#eef0f3';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(tx, ry + ROW_H);
+      ctx.lineTo(tx + TABLE_W, ry + ROW_H);
+      ctx.stroke();
+
+      // 刚出现的行高亮
+      var appearAt = 0.55 + (i / ALIVE.length) * 0.30;
+      var sinceAppear = t - appearAt;
+      if (sinceAppear >= 0 && sinceAppear < 0.10) {
+        var hp = 1 - sinceAppear / 0.10;
+        ctx.fillStyle = 'rgba(110,201,138,' + (hp * 0.20) + ')';
+        ctx.fillRect(tx, ry, TABLE_W, ROW_H);
+      }
+
+      // 数据
+      ctx.font = '600 11px -apple-system, sans-serif';
+      ctx.fillStyle = '#2c3038';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(o.id, tx + 14, ry + ROW_H / 2);
+
+      ctx.font = '500 11px ui-monospace, monospace';
+      ctx.fillStyle = '#8b94a0';
+      ctx.fillText(o.addr, tx + 104, ry + ROW_H / 2);
+
+      ctx.font = '700 11px ui-monospace, monospace';
+      ctx.fillStyle = '#3a8a4a';
+      ctx.fillText(o.newAddr, tx + 264, ry + ROW_H / 2);
+    }
+  }
+
+  function drawTopInfo(t) {
+    var stepName;
+    if (t < 0.25) stepName = '① 扫描存活对象：按顺序扫描 Region，识别哪些对象存活';
+    else if (t < 0.55) stepName = '② 计算目标地址：按顺序为每个存活对象分配紧凑的新地址';
+    else if (t < 0.85) stepName = '③ 填充转发表：将 旧地址 → 新地址 写入转发映射表';
+    else stepName = '④ 转发表就绪：所有存活对象都有明确的新地址，可开始后续阶段';
+
+    ctx.font = '600 13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = '#2c3038';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(stepName, 30, 36);
+
+    // 统计数字
+    var aliveCount = ALIVE.length;
+    var calcCount = Math.floor(clamp((t - 0.25) / 0.30, 0, 1) * aliveCount);
+    var tableCount = Math.floor(clamp((t - 0.55) / 0.30, 0, 1) * aliveCount);
+
+    ctx.font = '600 12px -apple-system, sans-serif';
+    ctx.fillStyle = '#5aa86c';
+    ctx.textAlign = 'right';
+    if (t < 0.55) {
+      ctx.fillText('存活对象：' + aliveCount + ' 个', W - 30, 36);
+    } else {
+      ctx.fillText('已填转发表：' + tableCount + ' / ' + aliveCount, W - 30, 36);
+    }
+  }
+
+  function draw() {
+    var t = state.finished ? 1 : clamp(state.pt / DURATION, 0, 1);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+
+    drawObjectGrid(t);
+    drawForwardTable(t);
+    drawTopInfo(t);
+  }
+
+  var stepItems = document.querySelectorAll('#p2Steps .g1-ph');
+  var stepBadge = document.getElementById('p2Badge');
+  var btnPlay = document.getElementById('p2BtnPlay');
+  var lastStep = -1;
+
+  function currentStep(t) {
+    if (t < 0.25) return 0;
+    if (t < 0.55) return 1;
+    if (t < 0.85) return 2;
+    return 3;
+  }
+  function updateStepUI(t) {
+    var s = currentStep(t);
+    if (s === lastStep) return;
+    lastStep = s;
+    for (var i = 0; i < stepItems.length; i++) {
+      stepItems[i].classList.toggle('active', i === s);
+      stepItems[i].classList.toggle('done', i < s);
+    }
+    var names = ['扫描存活对象', '计算目标地址', '填充转发表', '转发表就绪'];
+    stepBadge.textContent = names[s];
+  }
+
+  var lastTime = 0;
+  function tick(now) {
+    if (!lastTime) lastTime = now;
+    var dt = Math.min(now - lastTime, 64);
+    lastTime = now;
+    if (state.playing && !state.finished) {
+      state.pt += dt * state.speed;
+      if (state.pt >= DURATION) {
+        state.pt = DURATION;
+        state.finished = true;
+        state.playing = false;
+        btnPlay.textContent = '▶ 播放';
+      }
+    }
+    var t = state.finished ? 1 : clamp(state.pt / DURATION, 0, 1);
+    updateStepUI(t);
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  btnPlay.addEventListener('click', function () {
+    if (state.finished) { replay(); return; }
+    state.playing = !state.playing;
+    btnPlay.textContent = state.playing ? '⏸ 暂停' : '▶ 播放';
+  });
+  function replay() {
+    state.pt = 0;
+    state.playing = true;
+    state.finished = false;
+    lastStep = -1;
+    btnPlay.textContent = '⏸ 暂停';
+    updateStepUI(0);
+  }
+  document.getElementById('p2BtnReplay').addEventListener('click', replay);
+  document.getElementById('p2SelSpeed').addEventListener('change', function (e) {
+    state.speed = parseFloat(e.target.value) || 1;
+  });
+  updateStepUI(0);
+  requestAnimationFrame(tick);
+})();
+
+
+/* ================================================================
+ * 第四个动画：Phase 3 调整指针 · 细节流程
+ * ================================================================ */
+(function () {
+  'use strict';
+
+  var W = 900, H = 460;
+  var canvas = document.getElementById('p3Canvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = '100%';
+  canvas.style.height = 'auto';
+  ctx.scale(DPR, DPR);
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function roundRect(c, x, y, w, h, r) { _roundRect(c, x, y, w, h, r); }
+
+  // 对象
+  var NODES = [
+    { id: 'O1', x: 150, y: 100, addr: '0x1000', newAddr: '0x0000' },
+    { id: 'O2', x: 150, y: 220, addr: '0x1040', newAddr: '0x0040' },
+    { id: 'O3', x: 150, y: 340, addr: '0x1080', newAddr: '0x0080' },
+    { id: 'O4', x: 400, y: 100, addr: '0x10C0', newAddr: '0x00C0' },
+    { id: 'O5', x: 400, y: 220, addr: '0x1100', newAddr: '0x0100' },
+    { id: 'O6', x: 400, y: 340, addr: '0x1140', newAddr: '0x0140' }
+  ];
+
+  var NMAP = {};
+  NODES.forEach(function (n) { NMAP[n.id] = n; });
+
+  // 引用：from 对象的 field 指向 to 对象
+  var EDGES = [
+    { from: 'O1', to: 'O2', field: 'f1' },
+    { from: 'O1', to: 'O3', field: 'f2' },
+    { from: 'O2', to: 'O4', field: 'f1' },
+    { from: 'O2', to: 'O5', field: 'f2' },
+    { from: 'O3', to: 'O5', field: 'f1' },
+    { from: 'O4', to: 'O6', field: 'f1' },
+    { from: 'O5', to: 'O6', field: 'f1' }
+  ];
+
+  // 按顺序：每条边对应的时间段
+  // 0.15 开始，每条边间隔 0.10
+  var EDGE_START = 0.15;
+  var EDGE_DUR = 0.10;
+  var EDGE_COUNT = EDGES.length;
+  var EDGE_END = EDGE_START + EDGE_COUNT * EDGE_DUR;
+
+  // 转发表
+  var ROW_H = 26;
+  var TABLE_X = 620, TABLE_Y = 90;
+  var TABLE_W = 250;
+  var HEADER_H = 28;
+
+  var DURATION = 16000;
+  var state = { pt: 0, playing: true, speed: 1, finished: false };
+
+  var R_NODE = 20;
+
+  function edgeTime(i) {
+    return EDGE_START + i * EDGE_DUR;
+  }
+
+  function drawEdges(t) {
+    EDGES.forEach(function (e, i) {
+      var from = NMAP[e.from], to = NMAP[e.to];
+      var active = t >= edgeTime(i);
+      var justActive = active && (t - edgeTime(i)) < 0.06;
+
+      var dx = to.x - from.x, dy = to.y - from.y;
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var ux = dx / len, uy = dy / len;
+      var x1 = from.x + ux * R_NODE;
+      var y1 = from.y + uy * R_NODE;
+      var x2 = to.x - ux * R_NODE;
+      var y2 = to.y - uy * R_NODE;
+
+      if (!active) {
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = '#e8eaee';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        return;
+      }
+
+      // 已处理完的边变绿，正在处理的边变蓝
+      var done = t >= edgeTime(i) + 0.06;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = justActive ? '#f5a623' : (done ? '#6ec98a' : '#4a90d9');
+      ctx.lineWidth = justActive ? 3 : 2;
+      ctx.stroke();
+
+      // 箭头
+      var ax = x2 - ux * 4, ay = y2 - uy * 4;
+      var px = -uy, py = ux;
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(ax + px * 5, ay + py * 5);
+      ctx.lineTo(ax - px * 5, ay - py * 5);
+      ctx.closePath();
+      ctx.fillStyle = justActive ? '#f5a623' : (done ? '#6ec98a' : '#4a90d9');
+      ctx.fill();
+
+      // 正在处理的边：显示流动光点
+      if (justActive) {
+        var p = (t - edgeTime(i)) / 0.06;
+        var fx = x1 + (x2 - x1) * p;
+        var fy = y1 + (y2 - y1) * p;
+        ctx.beginPath();
+        ctx.arc(fx, fy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#f5a623';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // 边的 field 标签
+      var mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      ctx.font = '500 10px ui-monospace, monospace';
+      ctx.fillStyle = justActive ? '#b3791a' : (done ? '#3a8a4a' : '#8b94a0');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(e.field, mx, my - 8);
+    });
+  }
+
+  function drawNodes(t) {
+    NODES.forEach(function (n) {
+      // 检查是否正在被处理
+      var isCurrent = false;
+      for (var i = 0; i < EDGES.length; i++) {
+        var et = edgeTime(i);
+        if (t >= et && t < et + EDGE_DUR && EDGES[i].from === n.id) {
+          isCurrent = true;
+          break;
+        }
+      }
+
+      var fill = '#aed3f2';
+      var stroke = '#7fb2e0';
+      if (isCurrent) {
+        fill = '#fdeccb';
+        stroke = '#f5a623';
+      }
+
+      if (isCurrent) {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, R_NODE + 8 + 3 * Math.sin(t * 30), 0, Math.PI * 2);
+        ctx.strokeStyle = '#f5a623';
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, R_NODE, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+
+      ctx.font = '700 13px -apple-system, sans-serif';
+      ctx.fillStyle = '#2c3038';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.id, n.x, n.y);
+
+      // 地址
+      ctx.font = '500 10px ui-monospace, monospace';
+      ctx.fillStyle = '#8b94a0';
+      ctx.fillText(n.addr, n.x, n.y + R_NODE + 14);
+    });
+  }
+
+  function drawPointerLog(t) {
+    var tx = TABLE_X, ty = TABLE_Y;
+
+    roundRect(ctx, tx, ty, TABLE_W, 32, 6);
+    ctx.fillStyle = '#f0f2f5';
+    ctx.fill();
+    ctx.strokeStyle = '#e0e3e8';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.font = '600 12px -apple-system, sans-serif';
+    ctx.fillStyle = '#5a6472';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('指针修正日志', tx + 14, ty + 16);
+
+    // 显示已完成的修正
+    var doneCount = 0;
+    for (var i = 0; i < EDGES.length; i++) {
+      var et = edgeTime(i);
+      if (t >= et + 0.06) doneCount++;
+    }
+
+    var listY = ty + 44;
+    for (var j = 0; j < EDGES.length; j++) {
+      var e = EDGES[j];
+      var et2 = edgeTime(j);
+      var ry = listY + j * ROW_H;
+      if (t < et2) continue;
+
+      var appearing = t - et2 < 0.06;
+      var done = t >= et2 + 0.06;
+
+      if (appearing) {
+        // 正在处理
+        roundRect(ctx, tx, ry, TABLE_W, ROW_H - 4, 5);
+        ctx.fillStyle = '#fff8e6';
+        ctx.fill();
+        ctx.strokeStyle = '#f5d9a6';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      var from = NMAP[e.from], to = NMAP[e.to];
+
+      ctx.font = '600 11px -apple-system, sans-serif';
+      ctx.fillStyle = appearing ? '#b3791a' : (done ? '#3a8a4a' : '#5a6472');
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+
+      // 格式：O1.f1: 0x1040 → 0x0040
+      var oldVal = to.addr;
+      var newVal = to.newAddr;
+      var text = from.id + '.' + e.field + ': ' + oldVal + ' → ' + newVal;
+      ctx.fillText(text, tx + 10, ry + (ROW_H - 4) / 2);
+
+      if (appearing) {
+        // 闪烁
+        var p = (t - et2) / 0.06;
+        roundRect(ctx, tx, ry, TABLE_W, ROW_H - 4, 5);
+        ctx.fillStyle = '#f5a623';
+        ctx.globalAlpha = (1 - p) * 0.20;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function drawTopInfo(t) {
+    // 当前正在处理的对象
+    var currentObj = null;
+    for (var i = 0; i < EDGES.length; i++) {
+      var et = edgeTime(i);
+      if (t >= et && t < et + EDGE_DUR) {
+        currentObj = EDGES[i].from;
+        break;
+      }
+    }
+
+    var stepName;
+    if (t < 0.15) stepName = '准备：转发表已就绪，开始遍历存活对象';
+    else if (t >= EDGE_END) stepName = '完成：所有引用指针已修正，指向压缩后的新地址';
+    else {
+      var phase = (t - EDGE_START) % EDGE_DUR;
+      if (phase < 0.03) stepName = '遍历对象 ' + currentObj + '：读取它的引用字段';
+      else if (phase < 0.06) stepName = '查找转发表：定位目标对象的新地址';
+      else stepName = '更新指针：将引用值改为目标对象的新地址';
+    }
+
+    ctx.font = '600 13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = '#2c3038';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(stepName, 30, 36);
+
+    var doneCount = 0;
+    for (var k = 0; k < EDGES.length; k++) {
+      if (t >= edgeTime(k) + 0.06) doneCount++;
+    }
+    ctx.font = '600 12px -apple-system, sans-serif';
+    ctx.fillStyle = '#5aa86c';
+    ctx.textAlign = 'right';
+    ctx.fillText('已修正引用：' + doneCount + ' / ' + EDGES.length, W - 30, 36);
+  }
+
+  function draw() {
+    var t = state.finished ? 1 : clamp(state.pt / DURATION, 0, 1);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+
+    drawEdges(t);
+    drawNodes(t);
+    drawPointerLog(t);
+    drawTopInfo(t);
+  }
+
+  var stepItems = document.querySelectorAll('#p3Steps .g1-ph');
+  var stepBadge = document.getElementById('p3Badge');
+  var btnPlay = document.getElementById('p3BtnPlay');
+  var lastStep = -1;
+
+  function currentStep(t) {
+    if (t < 0.15) return 0;
+    // 根据当前处理阶段判断
+    for (var i = 0; i < EDGES.length; i++) {
+      var et = edgeTime(i);
+      if (t >= et && t < et + EDGE_DUR) {
+        var phase = (t - et) / EDGE_DUR;
+        if (phase < 0.35) return 0;
+        if (phase < 0.65) return 1;
+        return 2;
+      }
+    }
+    return 3;
+  }
+
+  function updateStepUI(t) {
+    var s = currentStep(t);
+    if (s === lastStep) return;
+    lastStep = s;
+    for (var i = 0; i < stepItems.length; i++) {
+      stepItems[i].classList.toggle('active', i === s);
+      stepItems[i].classList.toggle('done', i < s);
+    }
+    var names = ['遍历对象', '读取引用', '查找转发表', '更新指针'];
+    stepBadge.textContent = names[s];
+  }
+
+  var lastTime = 0;
+  function tick(now) {
+    if (!lastTime) lastTime = now;
+    var dt = Math.min(now - lastTime, 64);
+    lastTime = now;
+    if (state.playing && !state.finished) {
+      state.pt += dt * state.speed;
+      if (state.pt >= DURATION) {
+        state.pt = DURATION;
+        state.finished = true;
+        state.playing = false;
+        btnPlay.textContent = '▶ 播放';
+      }
+    }
+    var t = state.finished ? 1 : clamp(state.pt / DURATION, 0, 1);
+    updateStepUI(t);
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  btnPlay.addEventListener('click', function () {
+    if (state.finished) { replay(); return; }
+    state.playing = !state.playing;
+    btnPlay.textContent = state.playing ? '⏸ 暂停' : '▶ 播放';
+  });
+  function replay() {
+    state.pt = 0;
+    state.playing = true;
+    state.finished = false;
+    lastStep = -1;
+    btnPlay.textContent = '⏸ 暂停';
+    updateStepUI(0);
+  }
+  document.getElementById('p3BtnReplay').addEventListener('click', replay);
+  document.getElementById('p3SelSpeed').addEventListener('change', function (e) {
+    state.speed = parseFloat(e.target.value) || 1;
+  });
+  updateStepUI(0);
+  requestAnimationFrame(tick);
+})();
+
+
+/* ================================================================
+ * 第五个动画：Phase 4 执行压缩 · 细节流程
+ * ================================================================ */
+(function () {
+  'use strict';
+
+  var W = 900, H = 460;
+  var canvas = document.getElementById('p4Canvas');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  canvas.style.width = '100%';
+  canvas.style.height = 'auto';
+  ctx.scale(DPR, DPR);
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function easeInOutCubic(x) {
+    return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+  }
+  function roundRect(c, x, y, w, h, r) { _roundRect(c, x, y, w, h, r); }
+
+  var WORKER_COLORS = ['#ea6f5a', '#e8a33d', '#4a90d9', '#9b6fd0'];
+
+  // 对象：src 是源位置，dst 是目标位置（都在 4x4 网格里）
+  // 源：有些空洞
+  // 目标：紧凑
+  var OBJECTS = [
+    { id: 'O1',  srcIdx: 0,  dstIdx: 0,  worker: 0 },
+    { id: 'O2',  srcIdx: 1,  dstIdx: 1,  worker: 0 },
+    { id: 'O3',  srcIdx: 4,  dstIdx: 2,  worker: 0 },
+    { id: 'O4',  srcIdx: 5,  dstIdx: 3,  worker: 0 },
+    { id: 'O5',  srcIdx: 8,  dstIdx: 4,  worker: 1 },
+    { id: 'O6',  srcIdx: 9,  dstIdx: 5,  worker: 1 },
+    { id: 'O7',  srcIdx: 12, dstIdx: 6,  worker: 1 },
+    { id: 'O8',  srcIdx: 13, dstIdx: 7,  worker: 1 },
+    { id: 'O9',  srcIdx: 2,  dstIdx: 8,  worker: 2 },
+    { id: 'O10', srcIdx: 6,  dstIdx: 9,  worker: 2 },
+    { id: 'O11', srcIdx: 10, dstIdx: 10, worker: 2 },
+    { id: 'O12', srcIdx: 7,  dstIdx: 11, worker: 3 }
+  ];
+
+  // 源网格
+  var SRC_X = 40, SRC_Y = 100;
+  var CELL_W = 62, CELL_H = 48, CELL_GAP = 6;
+  var COLS = 4;
+
+  // 目标网格（右侧）
+  var DST_X = 500, DST_Y = 100;
+
+  var DURATION = 16000;
+  var state = { pt: 0, playing: true, speed: 1, finished: false };
+
+  function cellRect(baseX, baseY, idx) {
+    var col = idx % COLS;
+    var row = Math.floor(idx / COLS);
+    return {
+      x: baseX + col * (CELL_W + CELL_GAP),
+      y: baseY + row * (CELL_H + CELL_GAP),
+      w: CELL_W,
+      h: CELL_H
+    };
+  }
+
+  // 移动进度：每个对象有先后
+  function moveProgress(o, t) {
+    var total = OBJECTS.length;
+    var order = 0;
+    for (var i = 0; i < OBJECTS.length; i++) {
+      if (OBJECTS[i].id === o.id) { order = i; break; }
+    }
+    var delay = 0.25 + (order / total) * 0.35;
+    var span = 0.20;
+    return clamp((t - delay) / span, 0, 1);
+  }
+
+  function drawSourceGrid(t) {
+    // 画底格
+    for (var i = 0; i < 16; i++) {
+      var r = cellRect(SRC_X, SRC_Y, i);
+      roundRect(ctx, r.x, r.y, r.w, r.h, 5);
+      ctx.fillStyle = '#fbfcfd';
+      ctx.fill();
+      ctx.strokeStyle = '#eef0f3';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // 画对象
+    OBJECTS.forEach(function (o) {
+      var r = cellRect(SRC_X, SRC_Y, o.srcIdx);
+      var p = moveProgress(o, t);
+
+      // 已完成移动的对象，源位置淡出
+      if (p >= 1) return;
+
+      var alpha = 1 - p;
+
+      var fill = WORKER_COLORS[o.worker] + '33';
+      var stroke = WORKER_COLORS[o.worker];
+      if (t >= 0.15 && t < 0.25) {
+        // 准备阶段：高亮所有待移动对象
+        fill = WORKER_COLORS[o.worker] + '55';
+      }
+
+      ctx.globalAlpha = alpha;
+      roundRect(ctx, r.x, r.y, r.w, r.h, 5);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      ctx.font = '700 12px -apple-system, sans-serif';
+      ctx.fillStyle = '#2c3038';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(o.id, r.x + r.w / 2, r.y + r.h / 2);
+      ctx.globalAlpha = 1;
+    });
+
+    // 源区域标题
+    ctx.font = '600 12px -apple-system, sans-serif';
+    ctx.fillStyle = '#5a6472';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('源堆（移动前）', SRC_X + 130, SRC_Y - 20);
+  }
+
+  function drawTargetGrid(t) {
+    // 画底格
+    for (var i = 0; i < 16; i++) {
+      var r = cellRect(DST_X, DST_Y, i);
+      roundRect(ctx, r.x, r.y, r.w, r.h, 5);
+      ctx.fillStyle = '#fbfcfd';
+      ctx.fill();
+      ctx.strokeStyle = '#eef0f3';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // 目标区域标题
+    ctx.font = '600 12px -apple-system, sans-serif';
+    ctx.fillStyle = '#5a6472';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('目标堆（移动后）', DST_X + 130, DST_Y - 20);
+
+    // 画已经移动到的对象
+    OBJECTS.forEach(function (o) {
+      var p = moveProgress(o, t);
+      if (p < 0.85) return;
+
+      var r = cellRect(DST_X, DST_Y, o.dstIdx);
+      var appear = clamp((p - 0.85) / 0.15, 0, 1);
+
+      ctx.globalAlpha = appear;
+      roundRect(ctx, r.x, r.y, r.w, r.h, 5);
+      ctx.fillStyle = WORKER_COLORS[o.worker] + '55';
+      ctx.fill();
+      ctx.strokeStyle = WORKER_COLORS[o.worker];
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      ctx.font = '700 12px -apple-system, sans-serif';
+      ctx.fillStyle = '#2c3038';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(o.id, r.x + r.w / 2, r.y + r.h / 2);
+
+      if (appear < 1) {
+        ctx.beginPath();
+        ctx.arc(r.x + r.w / 2, r.y + r.h / 2, 20 * (1 - appear), 0, Math.PI * 2);
+        ctx.strokeStyle = WORKER_COLORS[o.worker];
+        ctx.globalAlpha = (1 - appear) * 0.6;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  // 飞行的对象
+  function drawFlyingObjects(t) {
+    OBJECTS.forEach(function (o) {
+      var p = moveProgress(o, t);
+      if (p <= 0 || p >= 1) return;
+
+      var src = cellRect(SRC_X, SRC_Y, o.srcIdx);
+      var dst = cellRect(DST_X, DST_Y, o.dstIdx);
+
+      var ease = easeInOutCubic(p);
+      var x = lerp(src.x, dst.x, ease);
+      var y = lerp(src.y, dst.y, ease);
+
+      // 轨迹
+      ctx.beginPath();
+      ctx.moveTo(src.x + src.w / 2, src.y + src.h / 2);
+      ctx.lineTo(x + src.w / 2, y + src.h / 2);
+      ctx.strokeStyle = WORKER_COLORS[o.worker];
+      ctx.globalAlpha = 0.25;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      roundRect(ctx, x, y, src.w, src.h, 5);
+      ctx.fillStyle = WORKER_COLORS[o.worker] + 'cc';
+      ctx.fill();
+      ctx.strokeStyle = WORKER_COLORS[o.worker];
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.font = '700 12px -apple-system, sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(o.id, x + src.w / 2, y + src.h / 2);
+    });
+  }
+
+  // 回收垃圾 Region
+  function drawReclaim(t) {
+    if (t < 0.80) return;
+    var p = clamp((t - 0.80) / 0.18, 0, 1);
+
+    // 在源区域右侧显示"垃圾 Region 已回收"
+    var bx = SRC_X + 140, by = SRC_Y + 220;
+    roundRect(ctx, bx, by, 260, 36, 6);
+    ctx.fillStyle = 'rgba(110,201,138,' + (p * 0.15) + ')';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(110,201,138,' + (p * 0.5) + ')';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.font = '600 12px -apple-system, sans-serif';
+    ctx.fillStyle = '#3a8a4a';
+    ctx.globalAlpha = p;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('✓ 垃圾对象已回收，Region 已释放', bx + 130, by + 18);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawTopInfo(t) {
+    var stepName;
+    if (t < 0.15) stepName = '① 准备目标区域：确认目标 Region 已清空，可以接收对象';
+    else if (t < 0.80) stepName = '② 并行移动对象：4 个 Worker 按 Region 并行搬运对象到目标位置';
+    else if (t < 0.90) stepName = '③ 更新 Region 状态：标记目标 Region 已用空间，更新空闲列表';
+    else stepName = '④ 回收垃圾 Region：释放只含垃圾对象的 Region，还给空闲池';
+
+    ctx.font = '600 13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.fillStyle = '#2c3038';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(stepName, 30, 36);
+
+    var movedCount = 0;
+    OBJECTS.forEach(function (o) {
+      if (moveProgress(o, t) >= 1) movedCount++;
+    });
+    ctx.font = '600 12px -apple-system, sans-serif';
+    ctx.fillStyle = '#5aa86c';
+    ctx.textAlign = 'right';
+    ctx.fillText('已移动：' + movedCount + ' / ' + OBJECTS.length, W - 30, 36);
+  }
+
+  function draw() {
+    var t = state.finished ? 1 : clamp(state.pt / DURATION, 0, 1);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+
+    drawSourceGrid(t);
+    drawTargetGrid(t);
+    drawFlyingObjects(t);
+    drawReclaim(t);
+    drawTopInfo(t);
+  }
+
+  var stepItems = document.querySelectorAll('#p4Steps .g1-ph');
+  var stepBadge = document.getElementById('p4Badge');
+  var btnPlay = document.getElementById('p4BtnPlay');
+  var lastStep = -1;
+
+  function currentStep(t) {
+    if (t < 0.15) return 0;
+    if (t < 0.80) return 1;
+    if (t < 0.90) return 2;
+    return 3;
+  }
+  function updateStepUI(t) {
+    var s = currentStep(t);
+    if (s === lastStep) return;
+    lastStep = s;
+    for (var i = 0; i < stepItems.length; i++) {
+      stepItems[i].classList.toggle('active', i === s);
+      stepItems[i].classList.toggle('done', i < s);
+    }
+    var names = ['准备目标区域', '并行移动对象', '更新 Region 状态', '回收垃圾 Region'];
+    stepBadge.textContent = names[s];
+  }
+
+  var lastTime = 0;
+  function tick(now) {
+    if (!lastTime) lastTime = now;
+    var dt = Math.min(now - lastTime, 64);
+    lastTime = now;
+    if (state.playing && !state.finished) {
+      state.pt += dt * state.speed;
+      if (state.pt >= DURATION) {
+        state.pt = DURATION;
+        state.finished = true;
+        state.playing = false;
+        btnPlay.textContent = '▶ 播放';
+      }
+    }
+    var t = state.finished ? 1 : clamp(state.pt / DURATION, 0, 1);
+    updateStepUI(t);
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  btnPlay.addEventListener('click', function () {
+    if (state.finished) { replay(); return; }
+    state.playing = !state.playing;
+    btnPlay.textContent = state.playing ? '⏸ 暂停' : '▶ 播放';
+  });
+  function replay() {
+    state.pt = 0;
+    state.playing = true;
+    state.finished = false;
+    lastStep = -1;
+    btnPlay.textContent = '⏸ 暂停';
+    updateStepUI(0);
+  }
+  document.getElementById('p4BtnReplay').addEventListener('click', replay);
+  document.getElementById('p4SelSpeed').addEventListener('change', function (e) {
+    state.speed = parseFloat(e.target.value) || 1;
+  });
+  updateStepUI(0);
+  requestAnimationFrame(tick);
+})();
+</script>
 </body>
-</html>
+</html>>

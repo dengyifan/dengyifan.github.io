@@ -173,6 +173,31 @@ sequenceDiagram
 <div class="answer">
 <p>累加器是 <code>ArrayList</code>（可变），在收集结束时转换为不可变列表。原因是：如果累加器本身就是不可变类型，每次 <code>add</code> 操作都需要创建新对象，导致 O(n²) 复杂度。使用可变累加器 + 最终转换，复杂度为 O(n)。</p>
 <div class="key-point"><strong>关键点</strong>：收集过程用可变，最终结果用不可变——这是 Stream Collector 的通用模式。</div>
+
+<h4>直白理解：两种方案对比</h4>
+
+<pre><code>// 方案 A：累加器直接用不可变集合（❌ 性能灾难）
+List&lt;T&gt; acc = List.of();  // 空不可变列表，无法添加
+// 每添加一个元素，必须创建一个新的不可变列表：
+acc = List.of(acc..., newElement);  // 每次复制全部已有元素
+
+// 第1个元素：复制 0 个
+// 第2个元素：复制 1 个
+// 第3个元素：复制 2 个
+// ...
+// 第n个元素：复制 n-1 个
+// 总复制次数 = 0+1+2+...+(n-1) = n(n-1)/2 → O(n²)</code></pre>
+
+<pre><code>// 方案 B：累加器用 ArrayList，最后一步转换（✅ O(n)）
+ArrayList&lt;T&gt; acc = new ArrayList&lt;&gt;();
+acc.add(e1);  // 摊还 O(1)
+acc.add(e2);  // 摊还 O(1)
+// ... 总收集耗时 O(n)
+
+// 收集结束后，一次性转换：
+return List.copyOf(acc);  // O(n)</code></pre>
+
+<p><strong>一句话总结</strong>：收集过程中频繁写（add），所以用可变类型保证每次 add 是 O(1)；收集结束后只读不写，所以在最后一次性转换为不可变类型。这就是「可变过程 + 不可变结果」模式，本质是用空间换时间（可变的 <code>ArrayList</code> 暂时存在于收集期间，最终转为不可变列表）。</p>
 </div>
 </div>
 

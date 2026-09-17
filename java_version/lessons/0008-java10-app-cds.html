@@ -6,6 +6,85 @@
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
 <link rel="stylesheet" href="../../style/shared.css">
+<style>
+/* ================= 动画演示组件样式 ================= */
+.anim-demo{
+  background:#fbfcfd;
+  border:1px solid #e3e8ee;
+  border-radius:14px;
+  padding:14px 16px 12px;
+  margin:18px 0 24px;
+}
+.anim-head{
+  display:flex;justify-content:space-between;align-items:center;
+  gap:12px;flex-wrap:wrap;margin-bottom:4px;
+}
+.anim-title{font-size:14px;font-weight:600;color:#33414f}
+.anim-hint{font-size:13px;color:#8b97a6;flex:1;min-width:200px;text-align:right}
+.anim-svg{width:100%;height:auto;display:block}
+.anim-controls{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.anim-btn{
+  font:inherit;font-size:13px;padding:5px 14px;border-radius:8px;
+  border:1px solid #e0e6ed;background:#fff;color:#43505e;
+  cursor:pointer;transition:background .2s,border-color .2s,color .2s;
+}
+.anim-btn:hover{background:#fef0f0;border-color:#ea6f5a;color:#c9472f}
+.anim-btn[disabled]{opacity:.45;cursor:not-allowed}
+
+.anim-svg text{font-family:inherit;user-select:none;-webkit-user-select:none}
+.anim-svg.no-trans *{transition:none !important;animation:none !important}
+
+/* --- 流程卡片 --- */
+.anim-svg .card{opacity:.4;transition:opacity .45s ease}
+.anim-svg .card.on{opacity:1}
+.anim-svg .card-bg{
+  fill:#fff;stroke:#e3e8ee;stroke-width:1.5;
+  transition:stroke .45s,fill .45s,filter .45s;
+}
+.anim-svg .card.on .card-bg{
+  stroke:#ea6f5a;fill:#fffaf9;
+  filter:drop-shadow(0 4px 16px rgba(234,111,90,.22));
+}
+.anim-svg .card-title{font-size:15px;font-weight:600;fill:#33414f;text-anchor:middle}
+.anim-svg .mini{fill:#f5f8fb;stroke:#e2e9f0;stroke-width:1}
+.anim-svg .mini-text{font-size:12px;fill:#5b6b7d;text-anchor:middle}
+.anim-svg .mini-text.sm{font-size:11px;fill:#8a97a5}
+.anim-svg .chip{fill:#fff;stroke:#cfd8e3;stroke-width:1.2}
+.anim-svg .chip-text{font-size:12.5px;fill:#2f3b48;text-anchor:middle;font-weight:600}
+.anim-svg .fade{opacity:0;transition:opacity .4s ease}
+.anim-svg .fade.show{opacity:1}
+
+/* --- 箭头 / 连线 --- */
+.anim-svg .flow{stroke:#c9d3de;stroke-width:2;fill:none;marker-end:url(#mk-gray);transition:stroke .35s}
+.anim-svg .flow.on{stroke:#ea6f5a;marker-end:url(#mk-accent)}
+.anim-svg .draw{stroke-dasharray:1;stroke-dashoffset:1;transition:stroke-dashoffset .6s ease,stroke .35s}
+.anim-svg .draw.on{stroke-dashoffset:0}
+.anim-svg .flow-label{font-size:11px;fill:#7a8794;text-anchor:middle}
+
+/* --- 进程 / 内存 / 文件 --- */
+.anim-svg .proc{opacity:.4;transition:opacity .45s ease}
+.anim-svg .proc.on{opacity:1}
+.anim-svg .proc-bg{
+  fill:#fff;stroke:#e3e8ee;stroke-width:1.5;
+  transition:stroke .45s,fill .45s,filter .45s;
+}
+.anim-svg .proc.on .proc-bg{
+  stroke:#ea6f5a;fill:#fffaf9;
+  filter:drop-shadow(0 4px 16px rgba(234,111,90,.22));
+}
+.anim-svg .proc-title{font-size:14px;font-weight:600;fill:#33414f;text-anchor:middle}
+.anim-svg .proc-sub{font-size:11px;fill:#94a1b0;text-anchor:middle}
+.anim-svg .vpage{fill:#eef3f8;stroke:#d5dfe9;transition:fill .4s,stroke .4s}
+.anim-svg .vpage.on{fill:#fde8e4;stroke:#ea6f5a}
+.anim-svg .mm-page{fill:#fff;stroke:#dde5ee;stroke-width:1.5;transition:fill .45s,stroke .45s}
+.anim-svg .mm-page.on{fill:#fde8e4;stroke:#ea6f5a}
+.anim-svg .ram-bg{fill:#fcfdfe;stroke:#e3e8ee;stroke-width:1.5;transition:stroke .45s,fill .45s}
+.anim-svg .ram-bg.on{stroke:#ea6f5a;fill:#fffaf9}
+.anim-svg .ram-title{font-size:13px;font-weight:600;fill:#41505f;text-anchor:middle}
+.anim-svg .file-bg{fill:#f5f8fb;stroke:#dde5ee;stroke-width:1.5}
+.anim-svg .file-text{font-size:14px;font-weight:600;fill:#41505f;text-anchor:middle}
+.anim-svg .file-sub{font-size:11px;fill:#94a1b0;text-anchor:middle}
+</style>
 </head>
 <body>
 <nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 10 · AppCDS</span></div></nav>
@@ -39,6 +118,57 @@
 
 <h2>L2 · 原理层：CDS 工作流程</h2>
 
+<h3>补问 · 「mmap 到内存」到底是什么意思？</h3>
+
+<p><strong>mmap</strong>（memory map，内存映射）是操作系统提供的一个系统调用：把<strong>一个文件（或文件的一段区间）映射到进程的虚拟地址空间</strong>。</p>
+
+<p>说人话：调用完 mmap 之后，文件里的内容就「变成」了进程地址空间里的一段地址。你直接按地址读内存，操作系统在背后按需从磁盘把数据搬进来——你不需要自己调用 <code>read()</code> 把文件读进一个 byte 数组。</p>
+
+<table>
+<tr><th>方式</th><th>数据流向</th><th>开销</th></tr>
+<tr><td>传统 <code>read()</code></td><td>磁盘 → 内核 page cache → <strong>拷贝</strong>到用户态堆内存 → 应用解析</td><td>一次内存拷贝 + 用户态解析 class 字节码</td></tr>
+<tr><td><code>mmap()</code> + 直接访问</td><td>磁盘 → 内核 page cache → <strong>直接映射</strong>进用户态地址（不拷贝）</td><td>只有缺页中断的开销，没有数据拷贝</td></tr>
+</table>
+
+<p>所以「类元数据从预处理的归档文件中 mmap 到内存」的完整含义是：</p>
+
+<ol>
+<li>CDS 归档（<code>hello.jsa</code>）是 <strong>JVM 内部类元数据结构的一份「内存快照」</strong>——常量池、字段/方法描述、类层次等都已经在 dump 阶段解析整理好了；</li>
+<li>启动时 JVM 直接对这个文件做 mmap，把这段「快照」当作内存地址来访问；</li>
+<li>于是跳过了「读 class 字节码 → 解析常量池 → 校验 → 构建元数据结构」这一大段 CPU 密集的工作。</li>
+</ol>
+
+<div class="warning">
+<div class="warning-title">常见误解</div>
+<p>「mmap 到内存」<strong>不等于</strong>「启动时把文件一次性读进内存」。mmap 之后只是建立了映射关系，真正的数据是<strong>第一次被访问时才触发缺页中断</strong>、由内核从磁盘按页搬进来的（懒加载）。这也是为什么 mmap 的启动开销比 read 整个文件更低。</p>
+</div>
+
+<h3>补问 · 多个 JVM 真的能共享同一份物理内存吗？</h3>
+
+<p>能，但有两个前提：</p>
+
+<ol>
+<li><strong>必须在同一台宿主机（同一份内核）上。</strong>跨机器的 JVM 当然不可能共享物理内存。</li>
+<li><strong>必须 mmap 的是同一个文件（同一 inode）。</strong>容器场景下，这通常意味着同一个镜像的多个 Pod 被调度到了同一台宿主机，且镜像层在宿主机上只有一份。</li>
+</ol>
+
+<p>为什么同一台机器上就能共享？关键在于 mmap 的语义：</p>
+
+<ul>
+<li>每个进程有<strong>独立的虚拟地址空间</strong>——JVM A 里这块数据可能落在 <code>0x7f2a0000</code>，JVM B 里落在 <code>0x7f8c0000</code>，虚拟地址完全不一样。</li>
+<li>但内核的 <strong>page cache 是全局的</strong>：同一个文件、同一个偏移量的那一页，在内核里只对应<strong>一份物理页帧</strong>。</li>
+<li>只读映射（<code>PROT_READ</code>）下，内核完全可以让多个进程的页表项指向同一个物理页帧——因为它永远不会被写，不存在一致性问题。这就是「共享」的全部秘密。</li>
+</ul>
+
+<div class="production-note">
+<div class="header">划重点：什么场景下才真的省内存</div>
+<ul>
+<li>一台宿主机上只跑 <strong>1 个</strong> JVM → 只有<strong>启动加速</strong>的收益，没有省内存的收益。</li>
+<li>一台宿主机上跑 <strong>N 个</strong> 同镜像的 JVM → 类元数据这部分内存只占 1 份，省下 (N−1) 份。</li>
+<li>K8s 里 Pod 会被随机调度到不同节点，所以「省内存」的收益是<strong>概率性</strong>的：节点上同镜像 Pod 越多，收益越大。</li>
+</ul>
+</div>
+
 <h3>三步流程（Java 10 原始方式）</h3>
 
 <div class="mermaid">
@@ -48,6 +178,74 @@ flowchart LR
     C --> D{归档版本匹配?}
     D -->|是| E[mmap 加载类元数据]
     D -->|否| F[回退到文件系统加载]
+</div>
+
+<!-- ===================== 动画 1 ===================== -->
+<div class="anim-demo" id="anim-steps">
+  <div class="anim-head">
+    <span class="anim-title">🎬 动画演示 · AppCDS 三步流程</span>
+    <span class="anim-hint">点击播放，观看三步流程</span>
+  </div>
+  <svg viewBox="0 0 900 280" class="anim-svg" role="img" aria-label="AppCDS 三步流程动画演示">
+    <defs>
+      <marker id="mk-gray" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 z" fill="#c9d3de"/>
+      </marker>
+      <marker id="mk-accent" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 z" fill="#ea6f5a"/>
+      </marker>
+    </defs>
+
+    <!-- 卡片 1 -->
+    <g class="card" id="as-card1">
+      <rect class="card-bg" x="20" y="40" width="250" height="200" rx="14"/>
+      <text class="card-title" x="145" y="74">① 收集类列表</text>
+      <rect class="mini" x="45" y="92" width="200" height="48" rx="9"/>
+      <text class="mini-text" x="145" y="113">JVM 正常运行</text>
+      <text class="mini-text sm" x="145" y="130">-XX:DumpLoadedClassList</text>
+      <text class="mini-text" x="145" y="166">记录所有已加载的类名</text>
+      <g class="fade" id="as-chip1">
+        <rect class="chip" x="72" y="184" width="146" height="34" rx="17"/>
+        <text class="chip-text" x="145" y="206">hello.lst</text>
+      </g>
+    </g>
+
+    <path id="as-flow1" class="flow draw" pathLength="1" d="M278,140 L318,140"/>
+
+    <!-- 卡片 2 -->
+    <g class="card" id="as-card2">
+      <rect class="card-bg" x="325" y="40" width="250" height="200" rx="14"/>
+      <text class="card-title" x="450" y="74">② 生成归档</text>
+      <rect class="mini" x="350" y="92" width="200" height="48" rx="9"/>
+      <text class="mini-text" x="450" y="113">java -Xshare:dump</text>
+      <text class="mini-text sm" x="450" y="130">-XX:SharedClassListFile</text>
+      <text class="mini-text" x="450" y="166">解析类文件 → 写入共享元数据</text>
+      <g class="fade" id="as-chip2">
+        <rect class="chip" x="372" y="184" width="156" height="34" rx="17"/>
+        <text class="chip-text" x="450" y="206">hello.jsa</text>
+      </g>
+    </g>
+
+    <path id="as-flow2" class="flow draw" pathLength="1" d="M583,140 L623,140"/>
+
+    <!-- 卡片 3 -->
+    <g class="card" id="as-card3">
+      <rect class="card-bg" x="630" y="40" width="250" height="200" rx="14"/>
+      <text class="card-title" x="755" y="74">③ 使用归档</text>
+      <rect class="mini" x="655" y="92" width="200" height="48" rx="9"/>
+      <text class="mini-text" x="755" y="113">java -Xshare:on</text>
+      <text class="mini-text sm" x="755" y="130">-XX:SharedArchiveFile</text>
+      <text class="mini-text" x="755" y="166">mmap 归档 → 直接取类元数据</text>
+      <g class="fade" id="as-chip3">
+        <rect class="chip" x="672" y="184" width="166" height="34" rx="17"/>
+        <text class="chip-text" x="755" y="206">⚡ 启动加速</text>
+      </g>
+    </g>
+  </svg>
+  <div class="anim-controls">
+    <button class="anim-btn" data-act="play">▶ 播放</button>
+    <button class="anim-btn" data-act="reset">↺ 重置</button>
+  </div>
 </div>
 
 <pre><code># 步骤 1：收集类列表
@@ -68,7 +266,14 @@ java -Xshare:on -XX:+UseAppCDS \
 
 <div class="warning">
 <div class="warning-title">版本匹配的硬约束</div>
-<p>CDS 归档文件与 JDK 版本严格绑定。升级 JDK 后必须重新生成归档，否则 JVM 会静默回退到文件系统加载——不会报错，但也没有加速效果[reference:11]。这是生产环境中最容易踩的坑。</p>
+<p>CDS 归档文件与 JDK 版本严格绑定。升级 JDK 后必须重新生成归档，否则可能静默回退到文件系统加载——不会报错，但也没有加速效果[reference:11]。这是生产环境中最容易踩的坑。</p>
+</div>
+
+<div class="warning">
+<div class="warning-title">补充：-Xshare:auto 与 -Xshare:on 的行为差异</div>
+<p><code>-Xshare:auto</code>（默认值）：归档不可用时<strong>静默回退</strong>到文件系统加载，不报错、不中断。<br/>
+<code>-Xshare:on</code>：要求<strong>必须</strong>使用共享归档，不可用时 JVM 直接启动失败并打印错误。</p>
+<p>生产环境建议用 <code>-Xshare:on</code> —— 让「归档失效」这件事快速失败（fail fast），而不是悄悄降级成没优化的启动。否则你只能在监控里通过启动耗时变长来发现问题。</p>
 </div>
 
 <h3>mmap 共享内存机制</h3>
@@ -86,6 +291,75 @@ sequenceDiagram
     JVM2->>OS: mmap(hello.jsa, PROT_READ)
     OS-->>JVM2: 返回相同物理内存的映射
     Note over JVM1,JVM2: 物理内存共享<br/>只保留一份
+</div>
+
+<!-- ===================== 动画 2 ===================== -->
+<div class="anim-demo" id="anim-mmap">
+  <div class="anim-head">
+    <span class="anim-title">🎬 动画演示 · mmap 如何让两个 JVM 共享物理内存</span>
+    <span class="anim-hint">点击播放，观看两个 JVM 如何共享同一份物理内存</span>
+  </div>
+  <svg viewBox="0 0 900 420" class="anim-svg" role="img" aria-label="mmap 共享物理内存动画演示">
+    <defs>
+      <marker id="mk-gray2" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 z" fill="#c9d3de"/>
+      </marker>
+      <marker id="mk-accent2" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+        <path d="M0,0 L8,3 L0,6 z" fill="#ea6f5a"/>
+      </marker>
+    </defs>
+
+    <!-- JVM 进程 A -->
+    <g class="proc" id="mm-jvmA">
+      <rect class="proc-bg" x="30" y="40" width="220" height="150" rx="12"/>
+      <text class="proc-title" x="140" y="72">JVM 进程 A</text>
+      <text class="proc-sub" x="140" y="94">虚拟地址空间</text>
+      <rect class="vpage" x="55" y="110" width="170" height="26" rx="6"/>
+      <rect class="vpage" x="55" y="142" width="170" height="26" rx="6"/>
+    </g>
+
+    <!-- JVM 进程 B -->
+    <g class="proc" id="mm-jvmB">
+      <rect class="proc-bg" x="30" y="240" width="220" height="150" rx="12"/>
+      <text class="proc-title" x="140" y="272">JVM 进程 B</text>
+      <text class="proc-sub" x="140" y="294">虚拟地址空间</text>
+      <rect class="vpage" x="55" y="310" width="170" height="26" rx="6"/>
+      <rect class="vpage" x="55" y="342" width="170" height="26" rx="6"/>
+    </g>
+
+    <!-- 物理内存 -->
+    <rect class="ram-bg" id="mm-ram" x="380" y="40" width="200" height="350" rx="12"/>
+    <text class="ram-title" x="480" y="70">物理内存（RAM）</text>
+    <rect class="mm-page" x="405" y="95"  width="150" height="38" rx="6"/>
+    <rect class="mm-page" x="405" y="143" width="150" height="38" rx="6"/>
+    <rect class="mm-page" x="405" y="191" width="150" height="38" rx="6"/>
+    <rect class="mm-page" x="405" y="239" width="150" height="38" rx="6"/>
+    <rect class="mm-page" x="405" y="287" width="150" height="38" rx="6"/>
+
+    <g class="fade" id="mm-badge">
+      <rect x="395" y="340" width="170" height="30" rx="15" fill="#fde8e4" stroke="#ea6f5a" stroke-width="1.2"/>
+      <text x="480" y="360" style="font-size:12px;font-weight:600;fill:#c9472f;text-anchor:middle">物理内存只保留一份</text>
+    </g>
+
+    <!-- 归档文件 -->
+    <rect class="file-bg" x="690" y="130" width="180" height="170" rx="12"/>
+    <text class="file-text" x="780" y="190">hello.jsa</text>
+    <text class="file-sub" x="780" y="214">CDS 共享归档</text>
+
+    <!-- 连线 -->
+    <path id="mm-flowA" class="flow draw" pathLength="1" d="M252,115 C300,115 332,115 376,115"
+          style="marker-end:url(#mk-gray)"/>
+    <path id="mm-flowB" class="flow draw" pathLength="1" d="M252,315 C300,315 332,315 376,315"/>
+    <path id="mm-flowFile" class="flow draw" pathLength="1" d="M688,215 C650,215 620,215 584,215"/>
+
+    <text class="flow-label" x="316" y="103">mmap(PROT_READ)</text>
+    <text class="flow-label" x="316" y="303">mmap(PROT_READ)</text>
+    <text class="flow-label" x="636" y="203">缺页时读入</text>
+  </svg>
+  <div class="anim-controls">
+    <button class="anim-btn" data-act="play">▶ 播放</button>
+    <button class="anim-btn" data-act="reset">↺ 重置</button>
+  </div>
 </div>
 
 <h2>L3 · 源码层：类加载器的扩展</h2>
@@ -152,21 +426,159 @@ timeline
     JDK 19 : AutoCreateSharedArchive（一步自动生成）
 </div>
 
-<h2>L5 · 面试层</h2>
+<h2>L5 · 开发者视角：这活到底是谁的？我要做什么？</h2>
+
+<h3>先回答：这是运维的活还是开发的活？</h3>
+
+<p>答案是：<strong>AppCDS 不需要你改一行业务代码，但它也不是纯运维的事</strong>。它的成败取决于「类路径是否稳定」和「构建流程是否规范」，前者是开发的纪律，后者通常落在写 Dockerfile / CI 的人身上——而在大多数团队里，那个人就是开发。</p>
+
+<table>
+<tr><th>环节</th><th>主要责任方</th><th>具体动作</th></tr>
+<tr><td>类路径稳定</td><td><strong>开发</strong></td><td>镜像内 JAR 用固定文件名，不用带版本号的路径</td></tr>
+<tr><td>避免运行时生成类</td><td><strong>开发</strong></td><td>减少反射代理、脚本引擎、动态字节码生成</td></tr>
+<tr><td>提供预热入口</td><td><strong>开发</strong></td><td>应用支持「启动到就绪后退出」的 dry-run 模式</td></tr>
+<tr><td>CI 中生成归档</td><td>构建 / DevOps</td><td>预热运行 → dump 类列表 → 生成 .jsa</td></tr>
+<tr><td>归档固化进镜像</td><td>构建 / DevOps</td><td>与 JAR 同一次构建、同一层</td></tr>
+<tr><td>JDK 升级后重生成</td><td>运维</td><td>写进升级 checklist，或 CI 强制校验</td></tr>
+<tr><td>监控启动耗时</td><td>运维</td><td>埋点 + 告警，及时发现「加速失效」</td></tr>
+</table>
+
+<div class="key-point">
+<strong>一句话</strong>：AppCDS 是「构建期 + 启动参数的纪律」，不是「写代码的活」。但只要你在写 Dockerfile 或维护 CI，它就是你的活。
+</div>
+
+<h3>日常开发要注意的 7 个坑</h3>
+
+<table>
+<tr><th>#</th><th>坑</th><th>后果</th><th>怎么避</th></tr>
+<tr>
+  <td>1</td>
+  <td><strong>JAR 文件名带版本号</strong><br/><code>-cp app-1.0.jar</code> → <code>app-2.0.jar</code></td>
+  <td>归档记录的来源路径变了，匹配失败，加速失效</td>
+  <td>镜像内统一重命名为固定名（如 <code>app.jar</code>），<code>-cp</code> 永远写 <code>app.jar</code></td>
+</tr>
+<tr>
+  <td>2</td>
+  <td><strong>升级 JDK 后忘记重新 dump</strong></td>
+  <td>归档版本不匹配，<code>-Xshare:auto</code> 静默降级 / <code>-Xshare:on</code> 直接启动失败</td>
+  <td>把「重新生成归档」写进 JDK 升级 checklist 或 CI 流水线</td>
+</tr>
+<tr>
+  <td>3</td>
+  <td><strong>预热时的 profile / 配置和线上不一致</strong></td>
+  <td>只 dump 了一部分类，加速效果打折</td>
+  <td>预热运行使用<strong>与生产完全相同</strong>的 profile、环境变量、启动参数</td>
+</tr>
+<tr>
+  <td>4</td>
+  <td><strong>动态生成的类进不了归档</strong></td>
+  <td>JDK 动态代理、CGLIB、Lambda 隐藏类、脚本引擎生成的类全部无法归档</td>
+  <td>这是收益上限问题，不是 bug。减少不必要的运行时代理，但别为它重构架构</td>
+</tr>
+<tr>
+  <td>5</td>
+  <td><strong>自定义类加载器花样太多</strong></td>
+  <td>Java 10 的 AppCDS 对自定义类加载器支持有限（Spring Boot fat jar 的 <code>LaunchedURLClassLoader</code>、Tomcat 的 WebappClassLoader 都算）</td>
+  <td>先用 <code>-Xshare:on</code> + 日志确认归档里到底装进了哪些类，再决定是否值得优化</td>
+</tr>
+<tr>
+  <td>6</td>
+  <td><strong>启动参数在 dump 阶段和使用阶段不一致</strong></td>
+  <td>某些影响堆布局的参数（如 <code>-XX:+UseCompressedOops</code>）不一致会导致归档无法使用</td>
+  <td>把 JVM 参数抽成一个共享的 <code>JAVA_OPTS</code>，两个阶段引用同一个变量</td>
+</tr>
+<tr>
+  <td>7</td>
+  <td><strong>归档文件写进了容器的可写层</strong></td>
+  <td>容器重启后归档丢失 / 白白增大镜像</td>
+  <td>归档在<strong>构建期</strong>生成，<code>COPY</code> 进镜像，运行时只读挂载</td>
+</tr>
+</table>
+
+<h3>上线落地：CI / Dockerfile 四步法</h3>
+
+<pre><code># ============ 阶段 1：构建 & 生成归档 ============
+FROM eclipse-temurin:10-jdk AS builder
+WORKDIR /app
+COPY target/app.jar /app/app.jar
+
+# 步骤 1：跑一次真实启动，收集加载的类列表
+#   注意：profile、环境变量、JVM 参数必须与生产一致
+#   应用需要支持"启动到就绪后自动退出"的 dry-run 模式（如 --warmup-only）
+RUN timeout 120 java \
+      -Xshare:off -XX:+UseAppCDS \
+      -XX:DumpLoadedClassList=/app/app.lst \
+      -XX:+UseCompressedOops \
+      -cp /app/app.jar com.example.Main --warmup-only || true
+
+# 步骤 2：根据类列表生成归档文件
+RUN java -Xshare:dump -XX:+UseAppCDS \
+      -XX:SharedClassListFile=/app/app.lst \
+      -XX:SharedArchiveFile=/app/app.jsa \
+      -XX:+UseCompressedOops \
+      -cp /app/app.jar
+
+# ============ 阶段 2：运行镜像 ============
+FROM eclipse-temurin:10-jre
+WORKDIR /app
+COPY --from=builder /app/app.jar /app/app.jar
+COPY --from=builder /app/app.jsa /app/app.jsa
+
+# 步骤 3：启动参数与 dump 阶段保持一致
+ENV JAVA_OPTS="-Xshare:on -XX:+UseAppCDS -XX:SharedArchiveFile=/app/app.jsa -XX:+UseCompressedOops"
+
+# 步骤 4：-cp 与 dump 阶段完全一致，JAR 用固定名
+ENTRYPOINT ["sh","-c","exec java $JAVA_OPTS -cp /app/app.jar com.example.Main"]</code></pre>
+
+<div class="warning">
+<div class="warning-title">为什么不直接用 <code>-jar</code>？</div>
+<p><code>-jar</code> 只是把 jar 加到 classpath 的语法糖，路径仍然会参与 CDS 的来源匹配。用 <code>-cp /app/app.jar</code> 更显式，也更容易保证 dump 与运行两阶段的路径字符串完全一致。</p>
+</div>
+
+<h3>怎么验证 AppCDS 真的生效了？</h3>
+
+<pre><code># 方式 1：直接打印归档信息，然后退出（不会真的启动应用）
+java -XX:+PrintSharedArchiveAndExit \
+     -XX:SharedArchiveFile=app.jsa -cp app.jar
+
+# 方式 2：看类是从哪加载的 —— 命中归档的类会显示 shared objects file
+java -Xshare:on -XX:+UseAppCDS \
+     -XX:SharedArchiveFile=app.jsa \
+     -Xlog:class+load=info \
+     -cp app.jar com.example.Main 2>&1 | head -50
+# 输出示例：
+#   [class,load] com.example.Main source: shared objects file
+#   [class,load] java.lang.String source: shared objects file
+#   [class,load] com.example.SomeProxy source: file:/app/app.jar   ← 没进归档
+
+# 方式 3：对比启动耗时（最直观）
+time java -Xshare:off -cp app.jar com.example.Main --warmup-only
+time java -Xshare:on  -cp app.jar com.example.Main --warmup-only</code></pre>
+
+<div class="key-point">
+<strong>上线后必做</strong>：把「应用启动到就绪的耗时」做成监控指标并配告警。AppCDS 失效往往是静默的——只有启动耗时曲线会告诉你真相。
+</div>
+
+<h3>开发者视角的一句话总结</h3>
+
+<p>AppCDS <strong>不改你的代码，只改你的纪律</strong>：让类路径稳定、让启动参数一致、让 JDK 升级流程里带上一句「重新 dump 归档」。做到这三点，它就是白送的启动加速；做不到，它就是一个安静的摆设。</p>
+
+<h2>L6 · 面试层</h2>
 
 <div class="qa-block">
 <div class="question">Q1: AppCDS 为什么能减少内存占用？</div>
 <div class="answer">
 <p>因为归档文件被 mmap 为只读映射。操作系统对同一文件的只读 mmap 在不同进程间共享物理页——多个 JVM 进程看到的归档内容映射到同一块物理内存。类元数据只在内存中保留一份，而非每个进程一份。</p>
-<div class="key-point"><strong>关键点</strong>：共享的是物理内存页，不是虚拟地址空间。</div>
+<div class="key-point"><strong>关键点</strong>：共享的是物理内存页，不是虚拟地址空间。前提是这些 JVM 在同一台宿主机上。</div>
 </div>
 </div>
 
 <div class="qa-block">
 <div class="question">Q2: 追问 — 如果 JDK 升级了，AppCDS 归档会怎样？</div>
 <div class="answer">
-<p>JVM 在启动时会检查归档文件的 JDK 版本。如果不匹配，会<strong>静默忽略</strong>归档，回退到文件系统加载类。不会报错，但也不会有加速效果。这是生产环境中的隐形坑——部署新 JDK 后如果忘记重新生成归档，启动优化会悄悄失效。</p>
-<div class="key-point"><strong>关键点</strong>：静默回退是设计选择（保证兼容性），但需要监控启动时间来发现。</div>
+<p>JVM 在启动时会检查归档文件的 JDK 版本。如果不匹配：<code>-Xshare:auto</code> 下会<strong>静默忽略</strong>归档，回退到文件系统加载，不报错但也没有加速；<code>-Xshare:on</code> 下会直接<strong>启动失败</strong>。</p>
+<p>生产环境推荐用 <code>-Xshare:on</code> 让问题快速暴露，同时把「重新生成归档」写进 JDK 升级流程。</p>
+<div class="key-point"><strong>关键点</strong>：默认的 auto 模式静默回退是设计选择（保证兼容性），但需要监控启动时间来发现。</div>
 </div>
 </div>
 
@@ -182,7 +594,19 @@ timeline
     // 未命中，正常从文件系统加载
     return loadFromFileSystem(className, classLoader)</code></pre>
 <p><strong>核心判断</strong>：先查共享归档，未命中再走常规加载。</p>
-<div class="key-point"><strong>关键点</strong>：归档查找在类加载路径的最前端，零成本（一次哈希查找）。</div>
+<div class="key-point"><strong>关键点</strong>：归档查找在类加载路径的最前端，成本极低（一次哈希查找）。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 追问 — 多个 JVM 是怎么共享同一份物理内存的？</div>
+<div class="answer">
+<p>三个要点：<br/>
+① mmap 建立的是<strong>虚拟地址 → 文件页</strong>的映射，不是数据拷贝；<br/>
+② 内核的 <strong>page cache 是全局的</strong>，同一文件同一偏移的页只有一份物理页帧；<br/>
+③ 只读映射下内核可以让多个进程的页表项指向<strong>同一个物理页帧</strong>——因为不会被写，不存在一致性问题。</p>
+<p>所以两个 JVM 的虚拟地址可以完全不同，但物理页是同一批。前提是它们必须在同一台宿主机上 mmap 同一个文件。</p>
+<div class="key-point"><strong>关键点</strong>：跨机器的 JVM 不可能共享物理内存；K8s 下这是概率性收益。</div>
 </div>
 </div>
 
@@ -191,7 +615,8 @@ timeline
 <ul>
 <li class="done">能解释 AppCDS 的三步流程（interviewer 角度）</li>
 <li class="done">能说出 mmap 共享内存的原理（architect 角度）</li>
-<li>能指出 JDK 版本不匹配的静默回退风险（code reviewer 角度）</li>
+<li class="done">能指出 JDK 版本不匹配的静默回退风险（code reviewer 角度）</li>
+<li class="done">能说清开发与运维在 AppCDS 上的职责边界（tech lead 角度）</li>
 <li>能排查「AppCDS 不生效」的根因（incident responder 角度）</li>
 <li>能用大白话解释 CDS 与 AppCDS 的关系（instructor 角度）</li>
 </ul>
@@ -205,7 +630,198 @@ timeline
 </main>
 </div>
 <script>
-(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+(function(){
+  var toc=document.getElementById('toc');
+  var hs=document.querySelectorAll('.article-body h2,.article-body h3');
+  hs.forEach(function(h){
+    var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();
+    h.id=id;
+    var a=document.createElement('a');
+    a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();
+    toc.appendChild(a);
+  });
+  var links=toc.querySelectorAll('a');
+  var els=[];
+  links.forEach(function(l){
+    var id=l.getAttribute('href').replace('#','');
+    var e=document.getElementById(id);
+    if(e)els.push({el:e,link:l});
+  });
+  window.addEventListener('scroll',function(){
+    var y=window.scrollY+120;var cur=null;
+    els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});
+    links.forEach(function(l){l.classList.remove('active')});
+    if(cur)cur.link.classList.add('active');
+  });
+})();
+
+/* ===================== 动画控制 ===================== */
+(function(){
+  'use strict';
+
+  function makeController(root){
+    var svg = root.querySelector('svg');
+    var hint = root.querySelector('.anim-hint');
+    var playBtn = root.querySelector('[data-act="play"]');
+    var resetBtn = root.querySelector('[data-act="reset"]');
+    var timers = [];
+    return {
+      svg: svg, hint: hint, playBtn: playBtn, resetBtn: resetBtn,
+      clear: function(){ timers.forEach(clearTimeout); timers = []; },
+      after: function(ms, fn){ timers.push(setTimeout(fn, ms)); },
+      freeze: function(on){
+        if(on){ svg.classList.add('no-trans'); void svg.getBoundingClientRect(); }
+        else  { svg.classList.remove('no-trans'); }
+      }
+    };
+  }
+
+  function autoPlayWhenVisible(root, play){
+    if(!('IntersectionObserver' in window)) return;
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){ play(); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.45 });
+    io.observe(root);
+  }
+
+  /* ---------- 动画 1：三步流程 ---------- */
+  function initStepsAnim(root){
+    if(!root) return;
+    var c = makeController(root);
+    var cards = [1,2,3].map(function(i){ return c.svg.querySelector('#as-card'+i); });
+    var chips = [1,2,3].map(function(i){ return c.svg.querySelector('#as-chip'+i); });
+    var flows = [1,2].map(function(i){ return c.svg.querySelector('#as-flow'+i); });
+    var texts = [
+      '① JVM 正常运行，把每个被加载的类名写进 hello.lst',
+      '② dump 进程解析类文件，把整理好的类元数据写入 hello.jsa',
+      '③ JVM 启动时 mmap 归档，类元数据直接从映射内存中取'
+    ];
+
+    function reset(){
+      c.clear();
+      c.freeze(true);
+      cards.forEach(function(el){ el.classList.remove('on'); });
+      chips.forEach(function(el){ el.classList.remove('show'); });
+      flows.forEach(function(el){ el.classList.remove('on'); });
+      c.hint.textContent = '点击播放，观看三步流程';
+      c.playBtn.disabled = false;
+      requestAnimationFrame(function(){ c.svg.classList.remove('no-trans'); });
+    }
+
+    function play(){
+      reset();
+      c.playBtn.disabled = true;
+
+      c.after(200, function(){
+        cards[0].classList.add('on');
+        c.hint.textContent = texts[0];
+        c.after(300, function(){ chips[0].classList.add('show'); });
+      });
+
+      c.after(1700, function(){
+        flows[0].classList.add('on');
+        cards[1].classList.add('on');
+        c.hint.textContent = texts[1];
+        c.after(400, function(){ chips[1].classList.add('show'); });
+      });
+
+      c.after(3300, function(){
+        flows[1].classList.add('on');
+        cards[2].classList.add('on');
+        c.hint.textContent = texts[2];
+        c.after(400, function(){ chips[2].classList.add('show'); });
+      });
+
+      c.after(4600, function(){
+        c.hint.textContent = '✓ 三步完成：hello.jsa 已就位，后续每次启动都能享受加速';
+        c.playBtn.disabled = false;
+      });
+    }
+
+    c.playBtn.addEventListener('click', play);
+    c.resetBtn.addEventListener('click', reset);
+    reset();
+    autoPlayWhenVisible(root, play);
+  }
+
+  /* ---------- 动画 2：mmap 共享物理内存 ---------- */
+  function initMmapAnim(root){
+    if(!root) return;
+    var c = makeController(root);
+    var jvmA = c.svg.querySelector('#mm-jvmA');
+    var jvmB = c.svg.querySelector('#mm-jvmB');
+    var flowA = c.svg.querySelector('#mm-flowA');
+    var flowB = c.svg.querySelector('#mm-flowB');
+    var flowFile = c.svg.querySelector('#mm-flowFile');
+    var pages = Array.prototype.slice.call(c.svg.querySelectorAll('.mm-page'));
+    var ram = c.svg.querySelector('#mm-ram');
+    var badge = c.svg.querySelector('#mm-badge');
+    var vpA = Array.prototype.slice.call(jvmA.querySelectorAll('.vpage'));
+    var vpB = Array.prototype.slice.call(jvmB.querySelectorAll('.vpage'));
+
+    function reset(){
+      c.clear();
+      c.freeze(true);
+      [jvmA, jvmB, ram].forEach(function(el){ el.classList.remove('on'); });
+      [flowA, flowB, flowFile].forEach(function(el){ el.classList.remove('on'); });
+      pages.forEach(function(el){ el.classList.remove('on'); });
+      vpA.concat(vpB).forEach(function(el){ el.classList.remove('on'); });
+      badge.classList.remove('show');
+      c.hint.textContent = '点击播放，观看两个 JVM 如何共享同一份物理内存';
+      c.playBtn.disabled = false;
+      requestAnimationFrame(function(){ c.svg.classList.remove('no-trans'); });
+    }
+
+    function play(){
+      reset();
+      c.playBtn.disabled = true;
+
+      c.after(200, function(){
+        jvmA.classList.add('on');
+        flowA.classList.add('on');
+        vpA.forEach(function(el){ el.classList.add('on'); });
+        c.hint.textContent = '① JVM A 调用 mmap(hello.jsa, PROT_READ) —— 只建立虚拟地址映射，不复制数据';
+      });
+
+      c.after(1000, function(){
+        flowFile.classList.add('on');
+        c.hint.textContent = '② 首次访问触发缺页中断，内核把归档页读入物理内存（page cache）';
+      });
+
+      pages.forEach(function(p, i){
+        c.after(1200 + i * 150, function(){ p.classList.add('on'); });
+      });
+
+      c.after(2150, function(){
+        ram.classList.add('on');
+        badge.classList.add('show');
+        c.hint.textContent = '③ 归档页全部驻留物理内存，而且只保留这一份';
+      });
+
+      c.after(2900, function(){
+        jvmB.classList.add('on');
+        flowB.classList.add('on');
+        vpB.forEach(function(el){ el.classList.add('on'); });
+        c.hint.textContent = '④ JVM B 也 mmap 同一个 hello.jsa —— 内核直接把已有的物理页映射给它';
+      });
+
+      c.after(3900, function(){
+        c.hint.textContent = '⑤ 两个进程的虚拟地址不同，但指向同一批物理页 —— 内存零复制共享';
+        c.playBtn.disabled = false;
+      });
+    }
+
+    c.playBtn.addEventListener('click', play);
+    c.resetBtn.addEventListener('click', reset);
+    reset();
+    autoPlayWhenVisible(root, play);
+  }
+
+  initStepsAnim(document.getElementById('anim-steps'));
+  initMmapAnim(document.getElementById('anim-mmap'));
+})();
 </script>
 </body>
 </html>

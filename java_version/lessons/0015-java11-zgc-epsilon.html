@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZGC 与 Epsilon GC（实验性）· Java 11</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 11 · ZGC &amp; Epsilon</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>ZGC 与 Epsilon GC —— 两个极端的实验性收集器</h1>
+<div class="article-meta"><span>📚 L1–L5 · JVM 底层</span><span>🔬 JEP 333 · JEP 318 · HotSpot C++ 源码</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 11 / ZGC 与 Epsilon GC</div>
+
+<h2>L1 · 概念层：一个求「最快停顿」，一个求「完全不停顿」</h2>
+
+<p>Java 11 同时引入了两个方向相反的实验性 GC，它们共同依赖 <a href="./0010-java10-thread-local-handshake.html">Java 10 的 JEP 304（GC 接口）</a> 和 <a href="./0010-java10-thread-local-handshake.html">JEP 312（Thread-Local Handshakes）</a>：</p>
+
+<table>
+<tr><th></th><th>ZGC（JEP 333）</th><th>Epsilon（JEP 318）</th></tr>
+<tr><td>一句话</td><td><strong>可伸缩的低延迟收集器</strong></td><td><strong>只分配、不回收的 no-op 收集器</strong></td></tr>
+<tr><td>回收</td><td>并发标记 + 并发重定位，全程几乎不 STW</td><td>永不回收；堆满即 <code>OutOfMemoryError</code></td></tr>
+<tr><td>核心机制</td><td>着色指针（colored pointers）+ 加载屏障（load barrier）</td><td>线性分配 + 空屏障集（no-op barrier set）</td></tr>
+<tr><td>目标</td><td>停顿 &lt; 10ms；吞吐相对 G1 降幅 ≤ 15%</td><td>延迟开销趋近于 0，用内存换</td></tr>
+<tr><td>定位</td><td>生产方向（当时为 experimental）</td><td>测试/基准/短任务工具</td></tr>
+<tr><td>启用</td><td><code>-XX:+UnlockExperimentalVMOptions -XX:+UseZGC</code></td><td><code>-XX:+UnlockExperimentalVMOptions -XX:+UseEpsilonGC</code></td></tr>
+<tr><td>平台</td><td>JDK 11 仅 <strong>Linux/x64</strong></td><td>跨平台（纯共享代码）</td></tr>
+</table>
+
+<div class="note">
+<div class="note-title">为什么 JDK 11 同时上两个「不像话」的 GC？</div>
+<p>它们其实是 <strong>JEP 304「Garbage Collector Interface」的验收测试</strong>。JEP 304 把 GC 从 HotSpot 里解耦成可插拔组件；Epsilon 的存在意义之一就是<strong>证明这个接口足够「空」</strong>——一个什么都不做的 GC 只要实现默认屏障就能跑起来，说明接口抽象是对的。ZGC 则反过来证明接口<strong>足够「强」</strong>，能容纳一个带全新屏障模型的收集器。</p>
+</div>
+
+<h2>L2 · 原理层</h2>
+
+<h3>ZGC：着色指针 + 加载屏障</h3>
+
+<p>JEP 333 的原话：<em>“A core design principle/choice in ZGC is the use of load barriers in combination with colored object pointers.”</em></p>
+
+<p><strong>着色指针</strong>：把 64 位引用拆成三段——低段是<strong>对齐偏移</strong>（4 字节粒度），中段是 <strong>4 bit 元数据</strong>（<code>Marked0</code> / <code>Marked1</code> / <code>Remapped</code> / <code>Finalizable</code>），高段是<strong>真实地址</strong>。元数据位不描述「对象在哪」，而描述「这个引用处于哪种视图/状态」。</p>
+
+<p><strong>加载屏障</strong>：Java 线程每次<strong>读取</strong>一个引用字段时都会过一道 <code>LoadReferenceBarrier</code>。屏障检查指针的元数据位，若发现「这是个坏指针（BadMask）」就地修正（heal）——比如把指向已重定位对象的旧地址改写为新地址。这就是 ZGC 能<strong>让应用线程和重定位并发跑</strong>的原因：不需要 STW 去统一改指针，谁读到旧的谁负责修。</p>
+
+<div class="mermaid">
+flowchart TB
+    A[并发周期开始] --> B[并发标记 Mark<br/>标记存活对象 + 更新 Marked 位]
+    B --> C[短暂 STW: 根扫描<br/>暂停与堆大小无关]
+    C --> D[并发重定位 Relocate<br/>把存活对象搬到新 Page]
+    D --> E[并发重映射 Remap<br/>把引用改到新地址]
+    E --> F[周期结束<br/>BadMask 随相位切换]
+    C -.->|只此一处 STW| G[停顿 &lt; 10ms 目标]
+</div>
+
+<p>JEP 333 对 STOP-THE-WORLD 的约束是：<strong>STW 阶段只限于根扫描（root scanning）</strong>，因此停顿时间<strong>不随堆大小或存活集增长而增长</strong>——这是它与 G1/CMS 最本质的区别。</p>
+
+<table>
+<tr><th>ZGC 设计目标（JEP 333 原文）</th><th>数值</th></tr>
+<tr><td>GC 停顿</td><td><strong>不超过 10ms</strong>（SPECjbb 2015 实测 avg 1.09ms，max 1.68ms；G1 avg 156.8ms，max 543.8ms）</td></tr>
+<tr><td>堆规模</td><td>几百 MB 到 <strong>数 TB</strong></td></tr>
+<tr><td>吞吐损失</td><td>相对 G1 <strong>不超过 15%</strong>（实测 max-jOPS 100% vs 91.2%，critical-jOPS 76.1% vs 54.7%）</td></tr>
+<tr><td>初始平台</td><td>Linux/x64</td></tr>
+</table>
+
+<h3>Epsilon：把 GC 做到「空」</h3>
+
+<p>Epsilon 的实现只有两件正事：<strong>在一块连续内存上做线性分配</strong>，以及<strong>发 TLAB（thread-local allocation buffer）</strong>。</p>
+
+<table>
+<tr><th>机制</th><th>实现</th></tr>
+<tr><td>分配</td><td>单块连续内存上的线性分配；发 TLAB 是无锁的，TLAB 内分配复用 VM 现有代码</td></tr>
+<tr><td>屏障</td><td><strong>完全为空</strong>（BarrierSet 全部 no-op）——因为不做标记、不看对象图</td></tr>
+<tr><td>堆满</td><td>抛带描述信息的 <code>OutOfMemoryError</code>；可配合 <code>-XX:+HeapDumpOnOutOfMemoryError</code>、<code>-XX:OnOutOfMemoryError=...</code></td></tr>
+<tr><td><code>System.gc()</code></td><td>什么都不做，实现可能警告「这次 GC 是徒劳的」</td></tr>
+</table>
+
+<h3>关键判断逻辑伪代码：Epsilon 堆满时的处置</h3>
+
+<pre><code>function allocate(size):
+    if currentTop + size &lt; heapEnd:
+        currentTop += size          # 线性 bump，O(1)，无锁
+        return ptr
+    # 分配失败 —— 唯一的「回收」路径就是退出
+    if -XX:+HeapDumpOnOutOfMemoryError:  dumpHeap()
+    if -XX:OnOutOfMemoryError=CMD:       runExternal(CMD)
+    throw OutOfMemoryError("Epsilon GC needs X MB more heap")</code></pre>
+
+<h3>四维度生产检查（deep-mastery 硬性清单）</h3>
+
+<table>
+<tr><th>维度</th><th>ZGC</th><th>Epsilon</th></tr>
+<tr><td><strong>并发语义</strong></td><td>标记/重定位全程并发；只有根扫描 STW。依赖 <strong>JEP 312 Thread-Local Handshakes</strong> 让单线程握手替代全局 Safepoint。</td><td>分配是无锁 TLAB + 线性 bump，<strong>天然无 GC 线程并发</strong>。</td></tr>
+<tr><td><strong>异常容错</strong></td><td>JDK 11 实验版<strong>不支持类卸载</strong>（<code>ClassUnloading</code> 被禁用，开了也无效）；<strong>不支持 JVMCI/Graal</strong>（<code>EnableJVMCI</code> 会报错）。</td><td>堆满 = 进程终止。<strong>没有任何降级路径</strong>，只能靠预估 <code>-Xmx</code> + OOM 钩子兜底。</td></tr>
+<tr><td><strong>边界判断</strong></td><td>仅 Linux/x64；需 <code>UnlockExperimentalVMOptions</code>；着色指针要预留巨大虚拟地址空间（依赖 64 位平台）。</td><td><strong>绝对不能开在长期运行的服务上</strong>；<code>System.gc()</code> 无效会让依赖 GC 的代码静默失效。</td></tr>
+<tr><td><strong>性能开销</strong></td><td>每读引用过一次屏障（成本被 JEP 312 + 编译器屏障移除优化摊薄）；着色指针带来 <strong>multi-mapping 的虚拟内存占用</strong>。</td><td>延迟开销≈0，但<strong>空间不释放</strong>；非移动式分配还会让对象保持分配顺序，随机分配的负载<strong>空间局部性变差</strong>。</td></tr>
+</table>
+
+<h2>L3 · 源码层：HotSpot C++ 走读</h2>
+
+<div class="info">
+<div class="info-title">源码出处与获取方式</div>
+<p><strong>HotSpot 的 GC 是 C++，不在 JDK 的 <code>lib/src.zip</code> 里</strong>（src.zip 只含 Java 类库与 javac/jshell 等工具的 Java 源码）。本层的文件清单与片段来自 <strong>openjdk/jdk11u 仓库</strong>（<code>src/hotspot/share/gc/</code>），已在本机核对目录清单与 <code>zGlobals.hpp</code> 全文。要逐行走读请 <code>hg clone</code>/<code>git clone</code> 该仓库后打开对应文件。</p>
+</div>
+
+<h3>ZGC 关键文件清单（已核对，openjdk/jdk11u）</h3>
+
+<table>
+<tr><th>文件</th><th>作用</th></tr>
+<tr><td><code>gc/z/zGlobals.hpp / .cpp</code></td><td><strong>着色指针的位布局与相位常量</strong>（下片段出处）</td></tr>
+<tr><td><code>gc/z/zAddress.hpp / .inline.hpp</code></td><td>地址封装、GoodMask/BadMask 切换</td></tr>
+<tr><td><code>gc/z/zBarrier.* / zBarrierSet.*</code></td><td><strong>加载屏障</strong>与屏障集（含解释器/C1/C2 的装配件 <code>zBarrierSetAssembler.*</code>、运行时 <code>zBarrierSetRuntime.*</code>）</td></tr>
+<tr><td><code>gc/z/zHeap.*</code>、<code>zCollectedHeap.*</code></td><td>堆主体与 <code>CollectedHeap</code> 抽象实现（JEP 304 的产物）</td></tr>
+<tr><td><code>gc/z/zDriver.*</code>、<code>zDirector.*</code></td><td>GC 周期驱动与<strong>启动决策</strong>（heuristics）</td></tr>
+<tr><td><code>gc/z/zForwardingTable.*</code></td><td>转发表：老地址 → 新地址</td></tr>
+<tr><td><code>gc/z/zPage.*</code>、<code>zAllocation*</code>、<code>zLargePages.*</code></td><td>Small/Medium/Large 三种页的分配</td></tr>
+<tr><td><code>gc/z/zCollectorPolicy.*</code>、<code>zArguments.*</code></td><td>策略与 JVM 参数接入</td></tr>
+</table>
+
+<h3>源码片段：着色指针的位布局（zGlobals.hpp，openjdk/jdk11u）</h3>
+
+<pre><code>// src/hotspot/share/gc/z/zGlobals.hpp   (openjdk/jdk11u)
+
+// Global phase state
+const uint32_t    ZPhaseMark         = 0;
+const uint32_t    ZPhaseMarkCompleted= 1;
+const uint32_t    ZPhaseRelocate     = 2;
+
+// Page types
+const uint8_t     ZPageTypeSmall     = 0;
+const uint8_t     ZPageTypeMedium    = 1;
+const uint8_t     ZPageTypeLarge     = 2;
+
+// Pointer part of address（低位：对齐偏移）
+const uintptr_t   ZAddressOffsetShift = 0;
+const uintptr_t   ZAddressOffsetBits  = ZPlatformAddressOffsetBits;
+
+// Metadata part of address（中段：固定 4 bit）
+const uintptr_t   ZAddressMetadataBits = 4;
+const uintptr_t   ZAddressMetadataMarked0      = 1 &lt;&lt; (Shift + 0);
+const uintptr_t   ZAddressMetadataMarked1      = 1 &lt;&lt; (Shift + 1);
+const uintptr_t   ZAddressMetadataRemapped     = 1 &lt;&lt; (Shift + 2);
+const uintptr_t   ZAddressMetadataFinalizable  = 1 &lt;&lt; (Shift + 3);
+
+//          GoodMask   BadMask   WeakGoodMask  WeakBadMask
+// Marked0    001        110        101          010
+// Marked1    010        101        110          001
+// Remapped   100        011        100          011
+extern uintptr_t  ZAddressGoodMask;
+extern uintptr_t  ZAddressBadMask;
+extern uintptr_t  ZAddressWeakBadMask;</code></pre>
+
+<p><strong>怎么读这张表</strong>：ZGC 有两套「标记位」（Marked0 / Marked1），每次周期<strong>交替使用</strong>（双缓冲），这样上一轮的指针与本轮的指针可以用位模式区分开。<code>GoodMask</code> 是「当前相位下合法的指针位模式」，<code>BadMask</code> 是「需要被屏障修正的模式」——<strong>屏障的全部逻辑就是 <code>(ptr &amp; BadMask) != 0</code> 则修正</strong>。相位切换时全局翻转 GoodMask/BadMask，旧指针自动变成「坏的」，谁读到谁 heal，无需 STW 扫全堆。</p>
+
+<h3>Epsilon 关键文件清单（已核对，openjdk/jdk11u）</h3>
+
+<table>
+<tr><th>文件</th><th>作用</th></tr>
+<tr><td><code>gc/epsilon/epsilonHeap.hpp / .cpp</code></td><td>堆主体：线性分配、<code>allocate</code> 实现、堆满报错</td></tr>
+<tr><td><code>gc/epsilon/epsilonBarrierSet.hpp / .cpp</code></td><td><strong>全 no-op 屏障集</strong>——JEP 304 接口「能多空」的证明</td></tr>
+<tr><td><code>gc/epsilon/epsilonCollectorPolicy.hpp</code></td><td>堆大小策略</td></tr>
+<tr><td><code>gc/epsilon/epsilonMemoryPool.* / epsilonMonitoringSupport.*</code></td><td>JMX 内存池与监控暴露</td></tr>
+<tr><td><code>gc/epsilon/epsilonThreadLocalData.hpp</code></td><td>每线程 TLAB 状态</td></tr>
+<tr><td><code>gc/epsilon/epsilon_globals.hpp</code></td><td><code>UseEpsilonGC</code> 等参数</td></tr>
+</table>
+
+<h3>核心调用链对比</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant T as Java 线程
+    participant ZB as ZBarrier (加载屏障)
+    participant Z as ZHeap
+    participant E as EpsilonHeap
+
+    Note over T,Z: ZGC：每次读引用都会经过
+    T->>ZB: load_reference_field(o, offset)
+    ZB->>ZB: if (ptr &amp; BadMask) != 0 ?
+    ZB->>Z: 取转发表/新地址 (并发, 无锁)
+    Z-->>ZB: new_ptr（写回引用并放行）
+    ZB-->>T: 可用指针
+
+    Note over T,E: Epsilon：线性 bump，永不回头
+    T->>E: allocate(size)
+    alt 空间足够
+        E-->>T: 指针 (currentTop += size)
+    else 堆耗尽
+        E-->>T: throw OutOfMemoryError
+    end
+</div>
+
+<h2>L4 · 边界层：能不能上生产</h2>
+
+<h3>ZGC in JDK 11 的硬限制</h3>
+
+<table>
+<tr><th>限制</th><th>影响</th><th>后续解决（版本）</th></tr>
+<tr><td>实验性标记</td><td>必须 <code>-XX:+UnlockExperimentalVMOptions</code>，否则拒绝启动</td><td>JEP 377（JDK 15）转正 production</td></tr>
+<tr><td>仅 Linux/x64</td><td>macOS / Windows / AArch64 不可用</td><td>JEP 364/365（JDK 15）、JEP 408（JDK 17）</td></tr>
+<tr><td>无类卸载</td><td>动态生成类（反射 proxy、Groovy/脚本引擎）会堆涨</td><td>后续版本补上</td></tr>
+<tr><td>不支持 JVMCI/Graal</td><td>不能用 Graal JIT</td><td>后续版本</td></tr>
+<tr><td>单代（single-generation）</td><td>JDK 11 是 <strong>non-generational</strong>，分代 ZGC 到 JDK 21（JEP 439）</td><td>JDK 21</td></tr>
+<tr><td>虚拟内存预留</td><td>着色指针需要预留大地址空间（multi-mapping）</td><td>—</td></tr>
+</table>
+
+<h3>Epsilon 的适用与禁用场景</h3>
+
+<table>
+<tr><th>场景</th><th>是否可用</th><th>理由</th></tr>
+<tr><td>性能基准测试（要剥离 GC 噪声）</td><td>✅</td><td>JEP 318 列的第 1 个用例：得到「无 GC 干扰」的延迟基线</td></tr>
+<tr><td>内存压力测试（断言分配上限）</td><td>✅</td><td>用 <code>-Xmx1g</code> 当硬阈值，超了就 OOM + heap dump</td></tr>
+<tr><td>VM-GC 接口验证</td><td>✅</td><td>证明 JEP 304 接口足够抽象</td></tr>
+<tr><td>极短生命周期任务（跑完就退）</td><td>✅</td><td>堆本来就在退出时释放，做 GC 循环纯属浪费</td></tr>
+<tr><td>长驻微服务 / 应用服务器</td><td>❌</td><td>堆满即崩；<strong>误开是最危险的配置错误之一</strong></td></tr>
+<tr><td>分配型业务（缓存、批处理）</td><td>❌</td><td>必然 OOM；且非移动式分配让局部性劣化</td></tr>
+</table>
+
+<div class="production-note">
+<div class="header">GC 选型决策（Java 11 语境）</div>
+<ul>
+<li>默认吞吐优先 → <strong>G1</strong>（Java 9 起已是默认）</li>
+<li>要求 p99 停顿个位数毫秒、堆大、平台是 Linux/x64 → <strong>试 ZGC</strong>（先在灰度环境跑 SPECjbb / 业务压测，确认吞吐降幅在 15% 内）</li>
+<li>跑一次性批处理、不想等 GC → <strong>Epsilon</strong>，并把 <code>-Xmx</code> 卡到「预期峰值 + 安全余量」</li>
+<li>需要 CMS → <strong>别再用了</strong>（JEP 291 已弃用，JDK 14 移除）</li>
+</ul>
+</div>
+
+<h3>为什么不在 G1 上做并发压缩？（ZGC 的 Alternative 分析）</h3>
+
+<p>JEP 333 明确记录：给 G1 加并发压缩能力的原型<strong>被彻底验证后放弃</strong>——「把从没为此设计的功能塞进 G1，同时还要保住它的稳定性与其它优点，是不可行的」。CMS 路线也被否决：不压缩、remark 阶段无界、代码复杂、已被弃用。剩下的并行路线是 Shenandoah 的 Brooks 指针（JEP 189）。<strong>这个「为什么另起炉灶而不是改造老 GC」的论证，是架构师角度的经典追问。</strong></p>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: ZGC 的停顿为什么能做到与堆大小无关？</div>
+<div class="answer">
+<p>因为 ZGC 把<strong>唯一需要 STW 的阶段限制在根扫描</strong>，标记、重定位、重映射全部并发执行；而根扫描的规模只取决于线程栈与静态根的数量，与堆中对象数量无关。真正改指针的工作不是由 GC 统一做的，而是由<strong>加载屏障在应用线程读到旧指针时「顺手」修正</strong>，把成本分散到了整个并发周期里。</p>
+<div class="key-point"><strong>关键点</strong>：STW 范围受限 + 屏障摊薄成本，二者缺一不可。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — 写出加载屏障的判断逻辑伪代码，核心条件是什么？</div>
+<div class="answer">
+<pre><code>function loadReferenceBarrier(ptr):
+    if (ptr &amp; ZAddressBadMask) == 0:      # 核心判断：是不是「好指针」
+        return ptr                        # 好指针，零开销放行
+    # 坏指针 → 查转发表/新地址并写回
+    newPtr = (ptr &amp; ~MetadataMask) | GoodMask   # 转成当前相位的好指针
+    newPtr = forward(ptr)                       # 必要时查 ForwardingTable
+    store_back(newPtr)                          # heal：把引用改写成新的
+    return newPtr</code></pre>
+<p><strong>核心条件：<code>(ptr &amp; BadMask) != 0</code></strong>。GoodMask/BadMask 是一组全局变量，<strong>每完成一个相位就整体翻转</strong>——所以相位一变，全堆的旧指针自动落进 BadMask，不需要任何全局扫描就能「标记」出待处理的引用。</p>
+<div class="key-point"><strong>关键点</strong>：着色指针不是为了「找对象」，是为了「用位模式表达指针的时效性」。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — Epsilon 有什么用？一个不回收的 GC 怎么好意思进 JDK？</div>
+<div class="answer">
+<p>四个正经用途（JEP 318 原文）：<strong>性能测试</strong>（剥离 GC 噪声得到延迟基线）、<strong>内存压力测试</strong>（把 <code>-Xmx</code> 当分配上限断言）、<strong>VM 接口测试</strong>（验证 JEP 304 接口的最小实现）、<strong>极短生命周期任务</strong>（退出即释放，跑 GC 循环纯浪费）。它本质上是把「生态里很多人自己魔改 JVM 关掉 GC」这件事标准化、可配置化。</p>
+<p>代价是：<strong>堆满即崩</strong>、<code>System.gc()</code> 失效、非移动式分配让随机分配的负载空间局部性变差。</p>
+<div class="key-point"><strong>关键点</strong>：它是测试工具，不是生产 GC；误开是高危配置错误。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 追问 — Java 11 的 ZGC 有哪些「实验性」代价？</div>
+<div class="answer">
+<p>(1) 需要 <code>-XX:+UnlockExperimentalVMOptions</code>；(2) <strong>仅 Linux/x64</strong>；(3) <strong>不支持类卸载</strong>——<code>ClassUnloading</code> / <code>ClassUnloadingWithConcurrentMark</code> 被禁用，打开也无效，动态生成类的场景会堆涨；(4) <strong>不支持 JVMCI/Graal</strong>，开 <code>EnableJVMCI</code> 直接报错；(5) 单代（分代 ZGC 要到 JDK 21）。因此 JDK 11 的 ZGC 适合做评估和灰度，不适合做「无条件全量切换」。</p>
+<div class="key-point"><strong>关键点</strong>：JDK 15 才转正（JEP 377），JDK 11 的定位是 experimental。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: 追问 — 为什么不给 G1 加并发压缩，而要另造 ZGC？</div>
+<div class="answer">
+<p>JEP 333 的 Alternatives 章节记录了这个决策：<strong>G1 的并发压缩原型被大量验证后放弃</strong>，理由是「把从未为此目的设计的功能塞进 G1、同时还要保住其稳定性与其它优点，不可行」。CMS 路线也否决（不压缩、remark 无界、已弃用）。这体现了一个架构原则：<strong>当核心机制（并发转移）与现有设计前提（region 回收 + 写屏障模型）冲突时，改造成本高于新建成本</strong>。</p>
+<div class="key-point"><strong>关键点</strong>：ZGC 与 Shenandoah 是同一问题的两种解——着色指针+加载屏障 vs Brooks 指针。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能列出 ZGC 与 Epsilon 的目标、机制、启用方式（interviewer 角度）</li>
+<li class="done">能写出加载屏障伪代码、解释 GoodMask/BadMask 翻转（追问链要求）</li>
+<li class="done">能做 GC 选型并论证「为什么另起炉灶」（architect 角度）</li>
+<li class="done">能指出 JDK 11 ZGC 无类卸载、Epsilon 不能上生产（code reviewer 角度）</li>
+<li>能排查「开了 ZGC 报 JVMCI 错误」「Epsilon 突然 OOM」的根因（incident responder 角度）</li>
+<li>能用大白话讲清「读引用时顺手修指针」（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="./0014-java11-string-files-api.html">← 上一课：String / Files / toArray</a></span>
+<span><a href="./0016-java11-jdk-slim-tls-nashorn.html">下一课：模块移除 · TLS 1.3 · Nashorn →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

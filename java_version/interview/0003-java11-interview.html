@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 11 面试题库 · Deep Mastery</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 11 · 面试题库</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Java 11 面试题库</h1>
+<div class="article-meta"><span>🧪 L5 · 面试层</span><span>21 题 · 5 角度</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 11 / 面试题库</div>
+
+<h2>语言与语法特性（4 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q1: <code>java HelloWorld.java</code> 背后发生了什么？</div>
+<div class="answer"><p>JEP 330 为启动器新增第四种模式（source-file mode）。判定进入后，命令等价于 <code>java -m jdk.compiler/&lt;SourceLauncher&gt; HelloWorld.java</code>。SourceLauncher 读源文件 → 按白名单过滤编译选项 → 通过 <code>MemoryFileManager</code> 把 <code>.class</code> 写进内存 <code>Map</code>（不落盘）→ 用委托给 application class loader 的自定义 loader 加载首个顶层类 → 反射调用 <code>main</code>。全程在未命名模块中运行，等效 <code>--add-modules=ALL-DEFAULT</code>。</p>
+<div class="key-point">类文件不落盘；classpath 上的类看不到源文件里声明的类。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — 什么情况下必须显式写 <code>--source</code>？</div>
+<div class="answer"><p>(1) 文件名<strong>不以 <code>.java</code> 结尾</strong>——典型是 shebang 脚本（文件叫 <code>hello</code>、<code>factorial</code>）；(2) 使用 <code>--enable-preview</code> 时；(3) 想指定源码语言级别（同时作为 <code>--release</code> 生效）。反过来，<strong>遵循 <code>.java</code> 命名规范的文件禁止用 <code>#!</code> 首行</strong>。shebang 要求 <code>--source</code> 紧跟在可执行文件名之后。</p>
+<div class="key-point">核心判定条件：是否出现 <code>--source</code>；「类名」位置是否命中一个存在的 <code>.java</code> 文件。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 代码审查 — 这段 Lambda 有什么问题？</div>
+<div class="answer"><pre><code>(var x, y) -&gt; x.process(y)
+(var x, int y) -&gt; x.process(y)
+var x -&gt; x.foo()</code></pre>
+<p>三个<strong>全部编译失败</strong>。JEP 323 规定：隐式类型的 Lambda 必须<strong>要么全 <code>var</code>、要么全不写</strong>；显式类型的 Lambda 必须全给类型，不能插 <code>var</code>；也不允许 <code>var x -&gt; expr</code> 这种写法。允许的只有 <code>(var x, var y) -&gt; ...</code>、<code>(x, y) -&gt; ...</code>、<code>(int x, int y) -&gt; ...</code> 和 <code>(@Nonnull var x) -&gt; ...</code>。</p>
+<div class="key-point">「全有或全无」的动机：避免半显式类型冲击类型推断与重载决议。</div>
+</div>
+</div>
+
+<h3>故障排查者角度</h3>
+<div class="qa-block">
+<div class="question">Q4: 线上脚本 <code>java worker</code> 报「找不到主类」，但 <code>java worker.java</code> 正常，为什么？</div>
+<div class="answer"><p>因为没有 <code>.java</code> 后缀时<strong>不会进入 source-file 模式</strong>——启动器把它当 class 名解析，于是去找 <code>worker.class</code>（不存在）或 classpath 上的 <code>worker</code> 类。修复：要么写全 <code>worker.java</code>，要么显式 <code>--source 11</code> 强制 source 模式；若是 shebang 脚本，首行必须是 <code>#!/path/to/java --source 11</code>。</p>
+<div class="key-point">模式判定只看两件事：<code>--source</code> 是否出现、参数是否命中存在的 <code>.java</code> 文件。</div>
+</div>
+</div>
+
+<h2>HTTP Client（4 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q5: JEP 321 做了什么？核心抽象是什么？</div>
+<div class="answer"><p>把 <code>jdk.incubator.http</code>（JDK 9 的 JEP 110、JDK 10 的 JEP 162）转正为标准模块 <code>java.net.http</code>。核心抽象：<code>HttpClient</code>（线程安全、可复用）、<code>HttpRequest</code>（不可变）、<code>HttpResponse&lt;T&gt;</code>，以及基于 <code>java.util.concurrent.Flow</code> 的 <code>BodyHandler</code> / <code>BodyPublisher</code> / <code>BodySubscriber</code> 三件套。同时提供同步 <code>send</code>、异步 <code>sendAsync</code>（返回 <code>CompletableFuture</code>）与 <code>WebSocket</code> API。</p>
+<div class="key-point">从 incubator 转正意味着包名稳定、可长期依赖。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 追问 — 说出必须背下来的四个默认值。</div>
+<div class="answer"><p>(1) <code>followRedirects</code> 默认 <strong><code>Redirect.NEVER</code></strong>，3xx 直接返回；(2) <code>version</code> 默认 <strong><code>HTTP_2</code></strong>（HTTPS 走 ALPN，失败降级 1.1）；(3) <code>connectTimeout</code> 默认<strong>无</strong>；(4) <code>HttpRequest.timeout()</code> 默认<strong>无</strong>。另外 <code>executor</code> 默认是内部执行器——回调里做重活会占用 client 的事件循环。</p>
+<div class="key-point">默认全部「关到位」是 JDK API 的一贯风格：最小惊讶，能力自己开。</div>
+</div>
+</div>
+
+<h3>架构师角度</h3>
+<div class="qa-block">
+<div class="question">Q7: <code>java.net.http</code> 和 OkHttp / Apache HttpClient 怎么选？</div>
+<div class="answer"><p><code>java.net.http</code> 是<strong>标准的传输层 + 协议层实现</strong>：零依赖、HTTP/2 多路复用、WebSocket、TLS 1.3、Flow 背压。它<strong>不提供</strong>应用层能力：连接池精细调优、自动重试与熔断、拦截器链、Cookie 持久化。因此：只做标准 HTTP 调用 → JDK 实现；需要治理能力（重试/熔断/拦截器/会话）→ Apache HttpClient 5 / OkHttp；gRPC / QUIC → 两者都不行，另选栈。</p>
+<div class="key-point">选型的分界线是「协议实现」还是「应用治理」。</div>
+</div>
+</div>
+
+<h3>代码审查者角度</h3>
+<div class="qa-block">
+<div class="question">Q8: 审查以下代码，指出至少三个问题。</div>
+<div class="answer"><pre><code>HttpResponse&lt;String&gt; call(String url) throws Exception {
+    HttpClient c = HttpClient.newHttpClient();          // ①
+    HttpRequest r = HttpRequest.newBuilder(URI.create(url)).GET().build();
+    return c.send(r, BodyHandlers.ofString());          // ② ③
+}</code></pre>
+<p>① <strong>每次新建 client</strong>：连接池无法复用，TCP/TLS 握手开销翻倍，应全局单例复用；② <strong>没有请求超时与连接超时</strong>：慢接口会长期占住调用线程；③ <strong>没有处理状态码</strong>：4xx/5xx 不抛异常，会被当成功返回；④ 隐式依赖 <code>ofString()</code> 的字符集解析——响应头没写 charset 就落 UTF-8，GBK 接口会乱码；⑤ 大响应体整包进堆，可能 OOM。</p>
+<div class="key-point">「HTTP 状态码不是异常」是最常被漏掉的一条。</div>
+</div>
+</div>
+
+<h2>String / Files / Collection API（4 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q9: <code>trim()</code> 与 <code>strip()</code> 的区别？<code>strip()</code> 就一定更强吗？</div>
+<div class="answer"><p>判据不同：<code>trim()</code> 剥离所有 <code>c &lt;= ' '</code> 的字符（ASCII 空白）；<code>strip()</code> 以 <code>Character.isWhitespace(int)</code> 为准，能处理全角空格 <code>\u3000</code>、EM 空格 <code>\u2003</code>。<strong>不是「更强」而是「换判据」</strong>：两者<strong>都剥不掉不换行空格 <code>\u00A0</code></strong>——<code>isWhitespace</code> 明确把非断行的 <code>SPACE_SEPARATOR</code> 排除在外。实测 <code>"\u00A0x\u00A0".strip().length() == 3</code>，<code>"\u00A0".isBlank() == false</code>。</p>
+<div class="key-point">网页抓取的文本常用 NBSP 排版，清洗时要先 <code>replace('\u00A0',' ')</code>。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q10: 追问 — 写出 <code>strip()</code> 的边界扫描伪代码。</div>
+<div class="answer"><pre><code>lo = 0; hi = len - 1
+while lo &lt;= hi &amp;&amp; isWhitespace(codePointAt(lo)): lo++
+while hi &gt;= lo &amp;&amp; isWhitespace(codePointAt(hi)): hi--
+if lo == 0 &amp;&amp; hi == len - 1: return this   # 无分配
+if lo &gt; hi: return ""
+return substring(lo, hi + 1)</code></pre>
+<p>核心判断条件：<code>Character.isWhitespace(codePoint)</code>。三个细节：用 <code>codePointAt</code> 而非 <code>charAt</code>（代理对安全）；无可剥时返回原对象（不分配）；<code>isBlank()</code> 就是 <code>indexOfNonWhitespace() == length()</code>。另外，因为 Java 9 Compact Strings，方法体必须按 <code>coder</code> 分派到 <code>StringLatin1</code> / <code>StringUTF16</code> 两套实现。</p>
+<div class="key-point">逐字符扫描的 String 方法都要双实现，否则会踩错字节边界。</div>
+</div>
+</div>
+
+<h3>代码审查者角度</h3>
+<div class="qa-block">
+<div class="question">Q11: 审查 <code>Files.readString(path)</code> 的使用。</div>
+<div class="answer"><p>源码只有两行：<code>readAllBytes(path)</code> + <code>new String(ba, cs)</code>。审查要点：(1) <strong>整文件进堆</strong>，大文件会 OOM——日志/CSV/大 JSON 必须改 <code>Files.lines()</code> 或 <code>BufferedReader</code>（且要关流）；(2) 默认 <strong>UTF-8</strong>，非 UTF-8 文件直接抛 <code>IOException</code>（不是替换成 <code>?</code>）；(3) 同目录 <code>writeString</code> <strong>不是原子写</strong>，中途失败会留下截断文件，关键数据要先写临时文件再 <code>ATOMIC_MOVE</code>；(4) <code>writeString</code> 默认截断已有内容。</p>
+<div class="key-point">readString 是「便捷」不是「流式」。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q12: <code>toArray(new String[0])</code> 和 <code>toArray(String[]::new)</code> 差别在哪？</div>
+<div class="answer"><p>语义等价，但 <code>IntFunction</code> 版本（JDK 11 新增，<code>Collection</code> 默认方法）把「创建数组」的意图表达清楚了。接口的 <code>@implSpec</code> 规定默认实现是<strong>先用 0 调用生成器，再把结果交给 <code>toArray(T[])</code></strong>。真正的价值是杜绝两类手写错误：<code>new String[10]</code> 这种定长数组（返回的往往不是你传的那个，且长度错时会 <code>ArrayStoreException</code>）；<code>new String[c.size()]</code> 在并发修改下的 <code>ArrayStoreException</code>。</p>
+<div class="key-point">生成器解决「数组怎么造」，不解决「快照语义」——并发修改仍会抛 CME。</div>
+</div>
+</div>
+
+<h2>ZGC 与 Epsilon GC（5 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q13: ZGC 的停顿为什么与堆大小无关？</div>
+<div class="answer"><p>JEP 333 规定 <strong>STW 只限于根扫描</strong>，标记、重定位、重映射全部并发；根扫描规模只取决于线程栈与静态根，与堆中对象数量无关。改指针的工作不由 GC 统一做，而是由<strong>加载屏障在应用线程读到旧指针时当场修正</strong>，成本被摊到整个并发周期。核心机制是<strong>着色指针（4 bit 元数据：Marked0/Marked1/Remapped/Finalizable）+ 加载屏障</strong>。</p>
+<div class="key-point">目标：停顿 &lt; 10ms（实测 avg 1.09ms vs G1 的 156ms），吞吐降幅 ≤ 15%。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q14: 追问 — 写出加载屏障的伪代码，核心判断条件是什么？</div>
+<div class="answer"><pre><code>function loadReferenceBarrier(ptr):
+    if (ptr &amp; ZAddressBadMask) == 0:   # 核心条件
+        return ptr                     # 好指针，零成本放行
+    newPtr = forward(ptr)              # 查转发表 / 取新地址
+    store_back(newPtr)                 # heal：写回引用
+    return newPtr</code></pre>
+<p>GoodMask/BadMask 是全局变量，<strong>每完成一个相位就整体翻转</strong>（ZGC 用 Marked0/Marked1 双缓冲标记位）。相位一变，全堆旧指针自动落进 BadMask——<strong>不需要任何全局扫描就能「标出」待处理引用</strong>，这是着色指针最精妙的地方。出处：<code>src/hotspot/share/gc/z/zGlobals.hpp</code>（openjdk/jdk11u）。</p>
+<div class="key-point">着色指针表达的是「指针的时效性」，不是「对象在哪」。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q15: 追问 — Java 11 的 ZGC 有哪些实验性代价？</div>
+<div class="answer"><p>(1) 必须 <code>-XX:+UnlockExperimentalVMOptions -XX:+UseZGC</code>；(2) <strong>仅 Linux/x64</strong>；(3) <strong>不支持类卸载</strong>——<code>ClassUnloading</code> 被禁用且开启无效，动态生成类的场景会堆涨；(4) <strong>不支持 JVMCI/Graal</strong>，开 <code>EnableJVMCI</code> 直接报错；(5) 单代实现（分代 ZGC 到 JDK 21 / JEP 439）；(6) 着色指针需要预留大虚拟地址空间。</p>
+<div class="key-point">JDK 15（JEP 377）才转正 production，JDK 11 只适合灰度评估。</div>
+</div>
+</div>
+
+<h3>架构师角度</h3>
+<div class="qa-block">
+<div class="question">Q16: 为什么不给 G1 加并发压缩，而要另造 ZGC？</div>
+<div class="answer"><p>JEP 333 的 Alternatives 章节记录了这个决策：<strong>G1 的并发压缩原型经过大量验证后放弃</strong>，理由是「把从未为此目的设计的功能塞进 G1、同时还要保住其稳定性与其它优点，不可行」。CMS 路线也否决（不压缩、remark 阶段无界、代码复杂、已被 JEP 291 弃用）。剩下的并行方案是 Shenandoah 的 Brooks 指针（JEP 189）。架构原则：<strong>当核心机制与现有设计前提冲突时，新建成本低于改造成本</strong>。</p>
+<div class="key-point">ZGC 与 Shenandoah 是同一问题的两种解法：着色指针+加载屏障 vs Brooks 指针。</div>
+</div>
+</div>
+
+<h3>故障排查者角度</h3>
+<div class="qa-block">
+<div class="question">Q17: <code>-XX:+UseEpsilonGC</code> 开在生产上会发生什么？怎么发现？</div>
+<div class="answer"><p>Epsilon 只分配不回收，堆满即抛 <code>OutOfMemoryError</code> 并按配置 dump / 执行 <code>-XX:OnOutOfMemoryError</code>，<strong>没有任何降级路径</strong>，服务必然反复重启。发现手段：启动日志 <code>[gc] Using Epsilon GC</code>；<code>jcmd &lt;pid&gt; GC.heap_info</code> 显示堆只增不减；<code>System.gc()</code> 完全无反应（Epsilon 下它是 no-op，可能打印「徒劳」警告）。修复：换回 G1/ZGC，并检查是谁把 <code>UseEpsilonGC</code> 写进了启动脚本——它属于 experimental，必须同时有 <code>UnlockExperimentalVMOptions</code>。</p>
+<div class="key-point">Epsilon 是测试工具（基准测试/内存压力测试/短任务），不是生产 GC。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q18: 代码审查 — 为什么这里的 <code>repeat</code> 要那样写？</div>
+<div class="answer"><pre><code>if (Integer.MAX_VALUE / count &lt; len) {
+    throw new OutOfMemoryError("Required length exceeds implementation limit");
+}</code></pre>
+<p>这是整数溢出的<strong>乘法前预检</strong>：如果写成 <code>len * count &gt; Integer.MAX_VALUE</code>，乘法会先溢出成负数，判定失效。用除法判断是标准做法。JDK 源码同样有三道防线：负数抛 <code>IllegalArgumentException</code>、<code>count == 1</code> 返回 <code>this</code>、长度溢出抛 <code>OutOfMemoryError</code>。审查点：<code>repeat</code> 抛的是 <code>OutOfMemoryError</code> 而非 <code>IllegalArgumentException</code>，调用方的 <code>catch</code> 要接得住。</p>
+<div class="key-point">溢出预检必须发生在运算之前。</div>
+</div>
+</div>
+
+<h2>模块移除 · TLS 1.3 · Nashorn（4 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q19: Java 11 删了哪些模块？为什么要删？</div>
+<div class="answer"><p>9 个：平台模块 <code>java.xml.ws</code>、<code>java.xml.bind</code>、<code>java.activation</code>、<code>java.xml.ws.annotation</code>、<code>java.corba</code>、<code>java.transaction</code>，聚合模块 <code>java.se.ee</code>，工具模块 <code>jdk.xml.ws</code>、<code>jdk.xml.bind</code>。同时删除工具：<code>wsgen</code>、<code>wsimport</code>、<code>schemagen</code>、<code>xjc</code>、<code>idlj</code>、<code>orbd</code>、<code>servertool</code>、<code>tnamesrv</code>，<code>rmic</code> 移除 <code>-idl</code>/<code>-iiop</code>。理由（JEP 320 原文）：Java SE 里是 EE 上游的快照+子集、裁剪成本高；Endorsed Standards Override 无人使用；Maven Central 有独立版本；CORBA 在现代 Java 中没有需求。<strong>例外：<code>javax.transaction.xa</code> 留在 <code>java.sql</code>，不受影响。</strong></p>
+<div class="key-point">这些模块在 Java SE 9 已标记 forRemoval，11 是执行删除。</div>
+</div>
+</div>
+
+<h3>故障排查者角度</h3>
+<div class="qa-block">
+<div class="question">Q20: 升 11 后报 <code>ClassNotFoundException: javax.xml.bind.JAXBContext</code>，为什么 <code>--add-modules</code> 没用？</div>
+<div class="answer"><p>因为 JDK 9/10 是「<strong>模块存在但默认不解析</strong>」，可用 <code>--add-modules java.xml.bind</code> 激活；而 JDK 11 是「<strong>模块的类根本不在运行时镜像里</strong>」，JEP 320 明确写「没有任何命令行开关能启用它们」。<code>--add-modules</code> 只能解析已存在的模块。正确做法：把 <code>javax.xml.bind:jaxb-api</code>（API）+ <code>com.sun.xml.bind:jaxb-ri</code>（实现）作为普通依赖加到 <strong>classpath</strong>（不是 module path）。</p>
+<div class="key-point">9/10 是不解析，11 是不存在——量变到质变。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q21: 追问 — 写出 JDK 11 升级编译失败的分类诊断伪代码。</div>
+<div class="answer"><pre><code>if 类型 ∈ {javax.xml.bind, javax.xml.ws, javax.activation,
+            javax.annotation, javax.transaction, javax.rmi, org.omg}:
+    → JEP 320：加 Maven 依赖到 classpath
+elif 类型 以 "sun.misc" / "jdk.internal" 开头:
+    → jdeps --jdk-internals 定位；改公开 API 或 --add-exports
+elif InaccessibleObjectException on setAccessible:
+    → JDK 16+ 强封装：--add-opens 模块/包=ALL-UNNAMED
+elif ScriptEngineManager.getEngineByName("js") == null:
+    → Nashorn 已移除（JDK 15 / JEP 372）：换 GraalJS</code></pre>
+<p><strong>核心判断条件是「报错包名属于哪一类」</strong>，它决定走「加依赖」「改代码」还是「改启动参数」三条完全不同的路。常见隐蔽迁移点：<code>javax.xml.bind.DatatypeConverter</code> 做 Base64 → 改用 <code>java.util.Base64</code>；<code>javax.annotation.Generated</code> → <code>javax.annotation.processing.Generated</code>。</p>
+<div class="key-point">先分类再修复，否则问题会反复横跳。</div>
+</div>
+</div>
+
+<h3>技术讲师角度</h3>
+<div class="qa-block">
+<div class="question">Q22: 用大白话解释 TLS 1.3 和 Nashorn 弃用分别意味着什么？</div>
+<div class="answer"><p><strong>TLS 1.3</strong>：可以理解成「握手从两趟减到一趟」——以前建安全连接要来回两次，现在一次，恢复连接还能更快（0-RTT，但因为有重放攻击风险默认不开）；同时把一批老的不安全加密算法直接踢出默认配置。对我们的影响是要复查协议白名单，否则会出现 <code>SSLHandshakeException</code>。<br/><strong>Nashorn</strong>：JDK 自带的 JavaScript 引擎。JDK 11 只是<strong>贴了「即将删除」的标签</strong>并打印警告，真正拔掉是 <strong>JDK 15</strong>——之后 JDK 里没有任何 JS 引擎，用 <code>ScriptEngineManager</code> 取 <code>"js"</code> 会得到 <code>null</code>，要换 GraalJS。</p>
+<div class="key-point">弃用（11）≠ 移除（15）；「11 上能跑」不代表「以后能跑」。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本题库 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能回答语言/API/GC/模块四大块的核心问题（interviewer 角度）</li>
+<li class="done">能写出 source 模式判定、strip 扫描、ZGC 屏障、升级诊断四段伪代码（追问链要求）</li>
+<li class="done">能做 HTTP Client 选型与「为什么另造 ZGC」的论证（architect 角度）</li>
+<li class="done">能审查超时缺失、状态码未处理、readString 内存风险（code reviewer 角度）</li>
+<li>能排查 source 模式不生效、JAXB 缺失、Epsilon OOM、TLS 握手失败（incident responder 角度）</li>
+<li>能用类比向新人讲清着色指针与 0-RTT（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="../lessons/0016-java11-jdk-slim-tls-nashorn.html">← 上一课：模块移除 · TLS 1.3 · Nashorn</a></span>
+<span><a href="../index.html">返回首页</a></span>
+</div>
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

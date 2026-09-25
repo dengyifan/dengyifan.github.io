@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>单文件源码直接运行与 Lambda 参数 var · Java 11</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 11 · 语言与语法</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>单文件源码直接运行与 Lambda 参数 var</h1>
+<div class="article-meta"><span>📚 L1–L5 · 语言与语法层</span><span>🔬 JEP 330 · JEP 323</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 11 / 单文件源码运行与 Lambda var</div>
+
+<h2>L1 · 概念层：Java 11 只动了两处语法</h2>
+
+<p>Java 11（2018-09，LTS）在语言层面非常克制：<strong>没有引入新的类型系统特性</strong>，只做了两件「减少仪式感」的事——一个是让 <code>java</code> 启动器能直接吃源文件，一个是让 Lambda 参数能写 <code>var</code> 并挂注解。</p>
+
+<h3>JEP 330：java 启动器的第四种模式</h3>
+
+<p>在此之前，<code>java</code> 启动器只有三种模式。JEP 330 加了第四种：</p>
+
+<table>
+<tr><th>模式</th><th>命令</th><th>JDK</th></tr>
+<tr><td>启动 class 文件</td><td><code>java HelloWorld</code></td><td>1.0</td></tr>
+<tr><td>启动 JAR 主类</td><td><code>java -jar app.jar</code></td><td>1.2</td></tr>
+<tr><td>启动模块主类</td><td><code>java -m com.app/com.app.Main</code></td><td>9</td></tr>
+<tr><td><strong>启动源文件中的类</strong></td><td><code>java HelloWorld.java</code></td><td><strong>11</strong></td></tr>
+</table>
+
+<p>语义上它<strong>等价于</strong>（JEP 330 原文用词是 <em>informally equivalent to</em>）：</p>
+
+<pre><code>java HelloWorld.java
+// 等价于
+javac -d &lt;memory&gt; HelloWorld.java
+java -cp &lt;memory&gt; HelloWorld
+
+// 带程序参数
+java Factorial.java 3 4 5
+// 等价于
+javac -d &lt;memory&gt; Factorial.java
+java -cp &lt;memory&gt; Factorial 3 4 5</code></pre>
+
+<div class="note">
+<div class="note-title">与 jshell 的分工</div>
+<p>JEP 330 的 Alternatives 一节明确写了：为什么不交给 jshell？因为 <strong>jshell 的设计目标是交互式体验</strong>，把「批处理跑一次」的任务塞进去会损害交互设计。所以：<strong>jshell 管 REPL，<code>java Foo.java</code> 管一次性脚本</strong>，两者不重叠。</p>
+</div>
+
+<h3>JEP 323：Lambda 参数的 var</h3>
+
+<p>Java 10 的 <code>var</code> 只能用于局部变量，Lambda 参数不行。JEP 323 补上了这个语法缺口：</p>
+
+<pre><code>// Java 11 允许
+(var x, var y) -&gt; x.process(y)
+// 与下面完全等价（推断出的类型一模一样）
+(x, y) -&gt; x.process(y)</code></pre>
+
+<p>它的<strong>真正价值不是省字，而是让注解能挂上去</strong>——这是 JEP 323 的 Motivation 原文给出的唯一示例：</p>
+
+<pre><code>// Java 10：注解无法应用于隐式类型的 Lambda 参数
+@Nonnull var x = new Foo();            // ✅ 局部变量可以挂注解
+(x, y) -&gt; x.process(y)                 // ❌ 参数上没地方挂注解
+
+// Java 11：语法对齐后
+(@Nonnull var x, @Nullable var y) -&gt; x.process(y)   // ✅</code></pre>
+
+<div class="warning">
+<div class="warning-title">常见误区：不存在「@Var 注解」</div>
+<p>学习者容易把这条特性记成「Lambda 参数可以加 <code>@Var</code> 注解」。<strong>正确理解</strong>：<code>var</code> 是 Java 10 引入的<strong>保留类型名</strong>（reserved type name，不是关键字），JEP 323 只是允许它出现在 Lambda 形参位置；<strong>可选的是 <code>var</code> 关键字本身，而由此解锁的才是任意注解</strong>（如 <code>@Nonnull</code>、<code>@Nullable</code>）。没有名为 <code>@Var</code> 的注解。</p>
+</div>
+
+<h2>L2 · 原理层：模式判定与编译执行</h2>
+
+<h3>关键判断逻辑伪代码：source-file 模式怎么被选中</h3>
+
+<pre><code>function selectMode(argv):
+    # 第一个「既不是选项、也不是某个选项的参数」的元素
+    item = firstNonOptionArgument(argv)
+
+    # 规则 1：显式 --source 强制 source 模式
+    if "--source" 存在于 argv:
+        return SOURCE_MODE
+
+    # 规则 2：item 指向一个存在的 .java 文件
+    if item 以 ".java" 结尾 and Files.exists(item):
+        return SOURCE_MODE
+
+    # 规则 3：按 class / jar / module 老规则解析
+    return resolveLegacyMode(item)</code></pre>
+
+<p>两个推论必须记住：</p>
+
+<ul>
+<li><strong>文件名不是 <code>.java</code> 结尾时，必须显式 <code>--source N</code> 才进 source 模式</strong>——这正是 shebang 脚本（文件名常叫 <code>hello</code>、<code>factorial</code>）的场景。</li>
+<li>使用 <code>--enable-preview</code> 时也<strong>必须</strong>给 <code>--source</code>。</li>
+</ul>
+
+<h3>编译期与执行期的硬约束（JEP 330 原文条款）</h3>
+
+<table>
+<tr><th>阶段</th><th>约束</th><th>等效于</th></tr>
+<tr><td>编译</td><td>不搜索其他源文件</td><td>source path 为空</td></tr>
+<tr><td>编译</td><td>注解处理被关闭</td><td><code>-proc:none</code></td></tr>
+<tr><td>编译</td><td><code>--source N</code> 作为 <code>--release N</code> 生效</td><td>同时约束语言级别与可用 API</td></tr>
+<tr><td>编译</td><td>在<strong>未命名模块</strong>（unnamed module）上下文中编译</td><td>—</td></tr>
+<tr><td>编译</td><td>源文件中第一个顶层类即为执行目标</td><td>不要求文件名 == 类名（放宽了 JLS §7.6 的可选限制）</td></tr>
+<tr><td>执行</td><td>自定义 class loader，<strong>委托给 application class loader</strong></td><td>classpath 上的类<strong>看不到</strong>源文件里声明的类</td></tr>
+<tr><td>执行</td><td>在未命名模块中运行，等效 <code>--add-modules=ALL-DEFAULT</code></td><td>—</td></tr>
+<tr><td>执行</td><td><strong>classpath 上存在同名类 → 报错</strong></td><td>避免「以为跑的是源码，实际跑的是 jar」</td></tr>
+</table>
+
+<h3>可传给编译环境的启动器选项（白名单）</h3>
+
+<p>JEP 330 规定只有一组选项会被识别并传给编译器：<code>--class-path</code>、<code>--module-path</code>、<code>--add-exports</code>、<code>--add-modules</code>、<code>--limit-modules</code>、<code>--patch-module</code>、<code>--upgrade-module-path</code> 及其变体形式，外加 <code>--enable-preview</code>。<strong>没有任何通道把 <code>-processor</code>、<code>-Werror</code> 这类 javac 选项透传进去。</strong></p>
+
+<h3>四维度生产检查（deep-mastery 硬性清单）</h3>
+
+<table>
+<tr><th>维度</th><th>本特性的情况</th></tr>
+<tr><td><strong>并发语义</strong></td><td>单次运行、单 main 线程；编译在启动线程内同步完成，编译产物只存于内存 <code>Map&lt;String,byte[]&gt;</code>，无跨进程共享，不存在并发写入问题。</td></tr>
+<tr><td><strong>异常容错</strong></td><td>编译报错 → 错误信息写 stderr、<strong>非零退出码</strong>；<code>main</code> 抛异常 → 启动器会<strong>剥掉到 main 为止的 launcher 栈帧</strong>，让堆栈看起来像直接执行；<code>System.exit</code> 正常传播。</td></tr>
+<tr><td><strong>边界判断</strong></td><td>classpath 同名类冲突；文件不存在 / 非 <code>.java</code> 且无 <code>--source</code>；第一个顶层类没有 <code>public static void main</code>。</td></tr>
+<tr><td><strong>性能开销</strong></td><td><strong>每次运行都从零编译，无任何缓存</strong>（这正是 JEP 458「多文件模式」仍未解决的痛点）。启动开销 ≈ 一次 javac + 一次 JVM 起动。</td></tr>
+</table>
+
+<h3>Lambda var 的全有或全无：判定伪代码</h3>
+
+<pre><code>function checkLambdaFormals(params):
+    hasVar    = params 中存在参数声明为 var
+    hasPlain  = params 中存在参数既无 var 也无显式类型
+    hasTyped  = params 中存在显式类型（如 int y）
+
+    # 规则 1：隐式类型 Lambda 要么全 var，要么全不写
+    if hasVar and hasPlain:
+        error("不能混用 var 与不写 var")
+
+    # 规则 2：显式类型 Lambda 必须全显式，不能插 var
+    if hasVar and hasTyped:
+        error("不能混用 var 与显式类型")
+
+    # 规则 3：禁止 var x -&gt; ... 这种「参数列表带 var 的箭头简写」
+    if 形如 "var x -&gt; expr":
+        error("不允许")</code></pre>
+
+<div class="java-comparison">
+<div class="header">设计原理追问：为什么不允许「半显式」<code>(var x, int y) -&gt; ...</code>？</div>
+<p>JEP 323 给了三层理由：(1) 它会<strong>深度影响类型推断与重载决议</strong>，超出本 JEP 范围；(2) 必须保证<strong>带不带 <code>var</code> 推断出的类型完全一致</strong>（否则会破坏向后兼容）；(3) 部分推断属于更复杂的问题，留给后续 JEP。代价是语法不够灵活，收益是<strong>零源码不兼容</strong>——JEP 323 的 Risks 一节直接声明「本特性没有源不兼容风险」。</p>
+</div>
+
+<h2>L3 · 源码层：SourceLauncher 走读</h2>
+
+<div class="info">
+<div class="info-title">源码出处</div>
+<p>走读对象：<code>jdk.compiler / com.sun.tools.javac.launcher</code> 包，本地 OpenJDK <strong>25</strong> 的 <code>lib/src.zip</code>。JEP 330 在 JDK 11 落地时实现更集中，后续版本把内部结构重构成多文件（<code>MemoryContext</code> / <code>ProgramDescriptor</code> / <code>RelevantJavacOptions</code> 等），<strong>核心机制（内存编译 + 自定义类加载器 + 反射调 main）未变</strong>。</p>
+</div>
+
+<h3>关键类清单</h3>
+
+<table>
+<tr><th>类</th><th>作用</th><th>所属文件</th></tr>
+<tr><td><code>SourceLauncher</code></td><td>入口：拿文件 → 编译 → 执行 main</td><td><code>jdk.compiler/.../javac/launcher/SourceLauncher.java</code></td></tr>
+<tr><td><code>ProgramDescriptor</code></td><td>解析源文件：包名、顶层类名列表、第一个可执行类</td><td><code>launcher/ProgramDescriptor.java</code></td></tr>
+<tr><td><code>RelevantJavacOptions</code></td><td>从启动器参数中<strong>筛出</strong>编译相关的白名单选项</td><td><code>launcher/RelevantJavacOptions.java</code></td></tr>
+<tr><td><code>MemoryContext</code></td><td>编译上下文：持有内存产物、创建类加载器</td><td><code>launcher/MemoryContext.java</code></td></tr>
+<tr><td><code>MemoryFileManager</code></td><td><code>ForwardingJavaFileManager</code> 子类，把 <code>.class</code> 写进内存 Map</td><td><code>launcher/MemoryFileManager.java</code></td></tr>
+<tr><td><code>MemoryClassLoader</code></td><td>从内存 Map 加载字节码，父 loader = application class loader</td><td><code>launcher/MemoryClassLoader.java</code></td></tr>
+<tr><td><code>Fault</code></td><td>预检失败的受控异常（文件缺失、找不到 main 等）</td><td><code>launcher/Fault.java</code></td></tr>
+</table>
+
+<h3>核心调用链</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant L as java 启动器
+    participant SL as SourceLauncher
+    participant RD as ProgramDescriptor
+    participant OP as RelevantJavacOptions
+    participant MF as MemoryFileManager
+    participant CL as MemoryClassLoader
+
+    L->>SL: -m jdk.compiler/SourceLauncher Foo.java [args]
+    SL->>SL: getFile(args) 校验文件存在
+    SL->>RD: ProgramDescriptor.of(ProgramFileObject)
+    RD-->>SL: 包名 + 顶层类名列表
+    SL->>OP: RelevantJavacOptions.of(program, runtimeArgs)
+    OP-->>SL: 白名单编译选项
+    SL->>MF: context.compileProgram() 内存编译
+    MF-->>MF: getJavaFileForOutput → byte[] 写入 Map
+    SL->>CL: newClassLoaderFor(parent, firstClassName)
+    CL->>CL: Class.forName(首个类, false, loader)
+    SL->>SL: MethodFinder.findMainMethod 静态则直接 invoke
+    SL-->>L: 返回 Result(主类名, 已编译类名列表)
+</div>
+
+<h3>源码片段一：编译 + 执行的主流程</h3>
+
+<pre><code>// OpenJDK 25 · jdk.compiler/com/sun/tools/javac/launcher/SourceLauncher.java
+public Result run(String[] runtimeArgs, String[] args) throws Fault, InvocationTargetException {
+    Path file = getFile(args);                                        // 1. 取源文件
+
+    ProgramDescriptor program = ProgramDescriptor.of(ProgramFileObject.of(file));
+    RelevantJavacOptions options = RelevantJavacOptions.of(program, runtimeArgs); // 2. 过滤白名单选项
+    MemoryContext context = new MemoryContext(out, program, options);
+    context.compileProgram();                                         // 3. 编译进内存
+
+    String[] mainArgs = Arrays.copyOfRange(args, 1, args.length);     // 4. 文件名之后的都是程序参数
+    var appClass = execute(context, mainArgs);                        // 5. 反射调 main
+    return new Result(appClass, context.getNamesOfCompiledClasses());
+}</code></pre>
+
+<h3>源码片段二：字节码如何「不落盘」</h3>
+
+<pre><code>// OpenJDK 25 · jdk.compiler/com/sun/tools/javac/launcher/MemoryFileManager.java
+final class MemoryFileManager extends ForwardingJavaFileManager&lt;JavaFileManager&gt; {
+    private final Map&lt;String, byte[]&gt; map;   // className → 字节码
+
+    @Override
+    public JavaFileObject getJavaFileForOutput(Location location, String className,
+                                               JavaFileObject.Kind kind, FileObject sibling) {
+        if (location == StandardLocation.CLASS_OUTPUT &amp;&amp; kind == JavaFileObject.Kind.CLASS) {
+            return createInMemoryClassFile(className);   // ← 关键：拦截 CLASS_OUTPUT
+        }
+        return super.getJavaFileForOutput(location, className, kind, sibling);
+    }
+
+    private JavaFileObject createInMemoryClassFile(String className) {
+        URI uri = URI.create("memory:///" + className.replace('.', '/') + ".class");
+        return new SimpleJavaFileObject(uri, JavaFileObject.Kind.CLASS) {
+            @Override
+            public OutputStream openOutputStream() {
+                return new ByteArrayOutputStream() {
+                    @Override
+                    public void close() throws IOException {
+                        super.close();
+                        map.put(className, toByteArray());  // close 时才落进内存 Map
+                    }
+                };
+            }
+        };
+    }
+}</code></pre>
+
+<p><strong>设计要点</strong>：只拦截 <code>CLASS_OUTPUT</code> + <code>KIND.CLASS</code> 两种情况，其他全部委托给真正的文件管理器——所以源文件读取、类路径查找照常走磁盘，只有<strong>产物</strong>被截胡。这就是 <code>ForwardingJavaFileManager</code> 装饰器模式的标准用法。</p>
+
+<h3>源码片段三：main 方法查找的兜底顺序</h3>
+
+<pre><code>// 1) 先在「第一个顶层类」上找 public static void main
+firstClass = Class.forName(firstClassName, false, loader);
+mainMethod = MethodFinder.findMainMethod(firstClass);
+
+// 2) 找不到 → 回退到「与文件同名的那个类」
+if (mainMethod == null) {
+    expectedName = (packageName.isEmpty() ? "" : packageName + ".") + 文件名去掉 .java;
+    actualName   = program.qualifiedTypeNames().stream()
+                         .filter(n -&gt; n.equals(expectedName)).findFirst()
+                         .orElseThrow(() -&gt; new Fault(Errors.CantFindClass(expectedName)));
+    mainMethod   = MethodFinder.findMainMethod(Class.forName(actualName, false, loader));
+}
+
+// 3) 还没有 → Fault("CantFindMainMethod")
+// 4) main 非 static → 反射 new 无参构造后再调用（实例方法 main 也被容忍）</code></pre>
+
+<h2>L4 · 边界层：限制、坑与最佳实践</h2>
+
+<h3>source-file 模式不能做什么</h3>
+
+<table>
+<tr><th>限制</th><th>原因</th><th>绕法</th></tr>
+<tr><td><strong>只能单文件</strong></td><td>JEP 330 标题即 <em>Single-File</em>；源文件里声明的类对 classpath 不可见</td><td>多文件场景等 <strong>JEP 458</strong>（Java 24 起的 multi-file source-code mode），或回退到 javac + java</td></tr>
+<tr><td>不能传 <code>-processor</code> / <code>-Werror</code></td><td>没有 javac 选项透传通道</td><td>用 javac 单独编译</td></tr>
+<tr><td>注解处理被强制关闭</td><td><code>-proc:none</code></td><td>Lombok / MapStruct 等不可用</td></tr>
+<tr><td>classpath 同名类冲突 → 直接报错</td><td>防止「跑错版本」</td><td>改名或清理 classpath</td></tr>
+<tr><td>每次运行都重新编译</td><td>无编译缓存</td><td>高频执行请先编译成 class</td></tr>
+<tr><td>文件名非 <code>.java</code> 时必须 <code>--source</code></td><td>模式判定规则</td><td>shebang 首行写 <code>#!/path/to/java --source 17</code></td></tr>
+<tr><td><code>.java</code> 文件<strong>禁止</strong>用 shebang 首行</td><td>JEP 330 明确：遵循命名规范的源文件不接受 shebang</td><td>shebang 脚本请去掉 <code>.java</code> 后缀</td></tr>
+</table>
+
+<div class="production-note">
+<div class="header">生产环境建议</div>
+<ul>
+<li>✅ 适合：一次性运维脚本、教学演示、CI 里的健康检查、快速复现 bug</li>
+<li>❌ 不适合：有依赖的项目（依赖管理不在 JEP 330 范围内）、需要注解处理的代码、高频调度的短任务</li>
+<li>⚠️ shebang 脚本记得 <code>chmod +x</code>，并且<strong>首行第一个参数必须是 <code>--source</code></strong>（JEP 330 规定：若要带 VM 选项，<code>--source</code> 必须紧跟在可执行文件名之后）</li>
+<li>⚠️ <code>--source N</code> 会作为 <code>--release N</code> 生效：<strong>同时限制语言版本和可调用的 JDK API</strong>。写 <code>--source 8</code> 就不能用 <code>List.of()</code></li>
+</ul>
+</div>
+
+<h3>Lambda var 的边界清单</h3>
+
+<table>
+<tr><th>写法</th><th>合法性</th><th>说明</th></tr>
+<tr><td><code>(var x, var y) -&gt; ...</code></td><td>✅</td><td>隐式类型，全 var</td></tr>
+<tr><td><code>(x, y) -&gt; ...</code></td><td>✅</td><td>隐式类型，全不写</td></tr>
+<tr><td><code>(var x, y) -&gt; ...</code></td><td>❌</td><td>混用 var 与不写</td></tr>
+<tr><td><code>(var x, int y) -&gt; ...</code></td><td>❌</td><td>混用 var 与显式类型</td></tr>
+<tr><td><code>(int x, int y) -&gt; ...</code></td><td>✅</td><td>全显式（Java 8 就有）</td></tr>
+<tr><td><code>var x -&gt; x.foo()</code></td><td>❌</td><td>JEP 323 明确禁止</td></tr>
+<tr><td><code>(@Nonnull var x) -&gt; ...</code></td><td>✅</td><td>本特性的主要收益</td></tr>
+<tr><td><code>(@Nonnull x) -&gt; ...</code></td><td>❌</td><td>不写 var 就没有挂注解的位置</td></tr>
+</table>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: <code>java HelloWorld.java</code> 背后发生了什么？</div>
+<div class="answer">
+<p>启动器判定进入 source-file 模式后，实际执行的是 <code>java -m jdk.compiler/&lt;SourceLauncher&gt; HelloWorld.java</code>。SourceLauncher 读取源文件 → 过滤出白名单编译选项 → 通过 <code>MemoryFileManager</code> 把 <code>.class</code> 写进内存 <code>Map</code>（不落盘）→ 创建委托给 application class loader 的自定义类加载器 → <code>Class.forName</code> 加载首个顶层类 → 反射定位并调用 <code>main</code>。整个过程在未命名模块中进行，等效 <code>--add-modules=ALL-DEFAULT</code>。</p>
+<div class="key-point"><strong>关键点</strong>：类文件从不写到磁盘，classpath 上的类也看不到源文件里声明的类。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — JEP 330 有哪些编译期「默认收紧」的设定？为什么这样设计？</div>
+<div class="answer">
+<p>三条：(1) <code>-proc:none</code> 关闭注解处理；(2) source path 视为空，不牵扯其他源文件；(3) 只接受固定白名单选项，不透传 javac 参数。设计动机是把 source-file 模式定位成<strong>「一次性的、无构建配置的小程序」</strong>——凡是需要构建配置的场景都应该用构建工具 + javac。代价是 Lombok 这类注解处理器无法使用。</p>
+<div class="key-point"><strong>关键点</strong>：这是 trade-off——用「配置能力」换「零配置的开箱即用」。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — 写出 source-file 模式的判定伪代码，核心判断条件是什么？</div>
+<div class="answer">
+<pre><code>item = argv 中第一个既非选项也非选项参数的元素
+if argv 含 "--source":            → SOURCE 模式
+else if item 以 ".java" 结尾 且文件存在: → SOURCE 模式
+else:                              → 按 class/jar/module 老规则</code></pre>
+<p><strong>核心判断条件只有两个</strong>：是否显式出现 <code>--source</code>；「类名」位置上的参数是否命中一个存在的 <code>.java</code> 文件。注意它带出的副作用：<code>java HelloWorld.java</code> 原本会被解析成「包 HelloWorld 里的类 java」，现在只要文件存在就优先按文件处理——JEP 330 承认这是可接受的歧义。</p>
+<div class="key-point"><strong>关键点</strong>：非 <code>.java</code> 文件名（如 shebang 脚本）<strong>必须</strong>靠 <code>--source</code> 才能进入该模式。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 追问 — 为什么 JEP 323 要求 Lambda 参数「全 var 或全不 var」？</div>
+<div class="answer">
+<p>三点：(1) 混写会产生「半显式类型」的 Lambda，会<strong>深度影响类型推断与重载决议</strong>；(2) 必须保证<strong>带 <code>var</code> 与不带 <code>var</code> 推断出的类型完全一致</strong>，否则引入源不兼容；(3) 部分推断是更复杂的问题，留给后续 JEP。收益是 JEP 323 声明「零源码不兼容风险」，同时让注解有了落点。</p>
+<div class="key-point"><strong>关键点</strong>：<code>var</code> 在这里是纯语法糖，不改变任何推断结果，只改变「能不能挂注解」。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能解释 source-file 模式的四步执行流程（interviewer 角度）</li>
+<li class="done">能写出模式判定与 Lambda var 校验的伪代码（追问链要求）</li>
+<li class="done">能说清为什么不交给 jshell、为什么不传 javac 选项（architect 角度）</li>
+<li class="done">能指出 classpath 同名类冲突、注解处理禁用等边界（code reviewer 角度）</li>
+<li>能排查「<code>java script</code> 报找不到主类」是没加 <code>--source</code>（incident responder 角度）</li>
+<li>能用大白话讲清「内存编译」到底编到哪了（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="./0011-java10-index.html">← Java 10 索引</a></span>
+<span><a href="./0013-java11-http-client.html">下一课：HTTP Client 标准化 →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

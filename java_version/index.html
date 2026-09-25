@@ -26,9 +26,9 @@
   </div>
 
   <div class="stats">
-    <div class="stat-card"><div class="number">10</div><div class="label">Lessons (L1–L4 + S1)</div></div>
-    <div class="stat-card"><div class="number">35</div><div class="label">Interview Questions</div></div>
-    <div class="stat-card"><div class="number">18</div><div class="label">Source Files Walked</div></div>
+    <div class="stat-card"><div class="number">15</div><div class="label">Lessons (L1–L5 + S1)</div></div>
+    <div class="stat-card"><div class="number">57</div><div class="label">Interview Questions</div></div>
+    <div class="stat-card"><div class="number">32</div><div class="label">Source Files Walked</div></div>
     <div class="stat-card"><div class="number">5</div><div class="label">Supporting Docs</div></div>
   </div>
 
@@ -54,6 +54,18 @@
       <div class="step"><div class="step-num">3</div><div class="step-title">L3: 源码</div><div class="step-desc">Infer.java / G1FullCollector</div></div>
       <div class="step"><div class="step-num">4</div><div class="step-title">L4: 边界</div><div class="step-desc">限制 / 坑 / trade-off</div></div>
       <div class="step"><div class="step-num">5</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度追问链</div></div>
+    </div>
+  </div>
+
+  <!-- Java 11 Roadmap -->
+  <div class="roadmap">
+    <h2>📖 Java 11 学习路径（2018.09 · LTS）</h2>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-title">L1: 概念</div><div class="step-desc">单文件运行 / Lambda var / HTTP Client</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-title">L2: 原理</div><div class="step-desc">模式判定 / 背压与默认值 / 着色指针</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-title">L3: 源码</div><div class="step-desc">SourceLauncher / zGlobals.hpp / String.java</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-title">L4: 边界</div><div class="step-desc">限制 / 坑 / 升级迁移清单</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度追问链 + 伪代码题</div></div>
     </div>
   </div>
 
@@ -156,12 +168,72 @@
         </div>
         <div class="arrow">→</div>
       </a>
-      <a class="item" href="./lessons/0010-java10-thread-local-handshake-gc.html">
+      <a class="item" href="./lessons/0010-java10-thread-local-handshake.html">
         <div class="icon l3">L5</div>
         <div class="info">
           <div class="title">Thread-Local Handshakes 与 GC 接口</div>
           <div class="desc">JEP 312 · JEP 304 · HandshakeState 信号量 · CollectedHeap 抽象</div>
           <div class="tags"><span class="tag">JEP 312</span><span class="tag">Safepoint</span><span class="tag">GC 接口</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Java 11 Core Lessons -->
+  <div class="section">
+    <div class="section-header"><h2>🎓 Java 11 Core Lessons</h2><span class="badge core">REQUIRED</span></div>
+    <div class="item-list">
+      <a class="item" href="./lessons/0012-java11-single-file-source.html">
+        <div class="icon l1">L1</div>
+        <div class="info">
+          <div class="title">单文件源码直接运行与 Lambda 参数 var</div>
+          <div class="desc">JEP 330 · JEP 323 · 模式判定伪代码 · SourceLauncher / MemoryFileManager 源码走读</div>
+          <div class="tags"><span class="tag">JEP 330</span><span class="tag">JEP 323</span><span class="tag">shebang</span><span class="tag">内存编译</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0013-java11-http-client.html">
+        <div class="icon l2">L2</div>
+        <div class="info">
+          <div class="title">HTTP Client 标准化 — java.net.http</div>
+          <div class="desc">JEP 321 · 同步/异步执行模型 · 四个必背默认值 · ofString 字符集真相</div>
+          <div class="tags"><span class="tag">JEP 321</span><span class="tag">Flow API</span><span class="tag">HTTP/2</span><span class="tag">WebSocket</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0014-java11-string-files-api.html">
+        <div class="icon l3">L3</div>
+        <div class="info">
+          <div class="title">String / Files / Collection API 增强</div>
+          <div class="desc">isBlank · strip 的 NBSP 陷阱 · lines 边界 · readString 内存风险 · toArray(IntFunction)</div>
+          <div class="tags"><span class="tag">String.java</span><span class="tag">Files.java</span><span class="tag">isWhitespace</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0015-java11-zgc-epsilon.html">
+        <div class="icon l4">L4</div>
+        <div class="info">
+          <div class="title">ZGC 与 Epsilon GC（实验性）</div>
+          <div class="desc">JEP 333 · JEP 318 · 着色指针与加载屏障伪代码 · zGlobals.hpp 位布局 · GC 选型</div>
+          <div class="tags"><span class="tag">JEP 333</span><span class="tag">JEP 318</span><span class="tag">Load Barrier</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0016-java11-jdk-slim-tls-nashorn.html">
+        <div class="icon l5">L5</div>
+        <div class="info">
+          <div class="title">JDK 瘦身 · TLS 1.3 · Nashorn 弃用</div>
+          <div class="desc">JEP 320 删除 9 个模块与 8 个工具 · 迁移坐标表 · JEP 332 · JEP 335</div>
+          <div class="tags"><span class="tag">JEP 320</span><span class="tag">JEP 332</span><span class="tag">JEP 335</span><span class="tag">升级清单</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0017-java11-index.html">
+        <div class="icon doc">🗺️</div>
+        <div class="info">
+          <div class="title">Java 11 索引页</div>
+          <div class="desc">本版本 5 篇课件 + 题库的总导航（前置依赖：Java 9 JPMS / Java 10 GC 接口）</div>
         </div>
         <div class="arrow">→</div>
       </a>
@@ -187,6 +259,15 @@
           <div class="title">Java 10 面试题库（五角度 · 20 题）</div>
           <div class="desc">var / copyOf / AppCDS / G1 / Handshake · 五角度追问链 + 伪代码题</div>
           <div class="tags"><span class="tag">面试官</span><span class="tag">架构师</span><span class="tag">代码审查</span><span class="tag">故障排查</span><span class="tag">讲师</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./interview/0003-java11-interview.html">
+        <div class="icon l5">L7</div>
+        <div class="info">
+          <div class="title">Java 11 面试题库（五角度 · 22 题）</div>
+          <div class="desc">JEP 330 / 321 / 320 / 333 + String·Files·toArray · 五角度追问链 + 四段伪代码</div>
+          <div class="tags"><span class="tag">SourceLauncher</span><span class="tag">HTTP Client</span><span class="tag">ZGC</span><span class="tag">JEP 320</span></div>
         </div>
         <div class="arrow">→</div>
       </a>
@@ -226,7 +307,7 @@
   </div>
 
   <div class="footer">
-    <p>Generated by Deep Mastery Skill · <code>OpenJDK 9-10</code> · 中文</p>
+    <p>Generated by Deep Mastery Skill · <code>OpenJDK 9-11</code> · 中文</p>
     <p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
   </div>
 

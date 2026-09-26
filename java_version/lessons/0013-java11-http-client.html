@@ -59,6 +59,176 @@ CompletableFuture&lt;HttpResponse&lt;String&gt;&gt; future =
 <p><code>BodyPublisher</code>（请求体 → 订阅者）、<code>BodySubscriber&lt;T&gt;</code>（响应字节 → T）、<code>BodyHandler&lt;T&gt;</code>（根据响应头「造一个 Subscriber」）。它们直接复用了 <code>java.util.concurrent.Flow</code>（JDK 9 引入的 Reactive Streams 规范接口），所以背压是一等公民，而不是事后补的。</p>
 </div>
 
+<h3>四个上手示例：POST JSON / 上传 / 下载 / 三件套落地</h3>
+
+<p>下面四段都能直接跑（示例 1 需要 Jackson，JDK 11+ 通用）。分工：<strong>Publisher 管「怎么发出去」</strong>、<strong>Handler 管「按响应头选 Subscriber」</strong>、<strong>Subscriber 管「字节怎么变成 T」</strong>。</p>
+
+<h4>示例 1 · POST JSON 并解析响应 JSON 报文</h4>
+
+<pre><code>// ---- 发：BodyPublisher（请求体 → 对端）----
+String payload = "{\"name\":\"dengyifan\",\"tags\":[\"java\",\"jvm\"]}";
+HttpRequest req = HttpRequest.newBuilder(URI.create("https://api.example.com/v1/users"))
+        .header("Content-Type", "application/json; charset=UTF-8")   // charset 必须显式写
+        .timeout(Duration.ofSeconds(3))
+        .POST(BodyPublishers.ofString(payload, StandardCharsets.UTF_8))  // 长度已知 → Content-Length
+        .build();
+
+// ---- 收：BodyHandler 按响应头造 Subscriber；ofString() 按头里的 charset 解码，拿不到一律 UTF-8 ----
+HttpResponse&lt;String&gt; resp = client.send(req, BodyHandlers.ofString());
+if (resp.statusCode() / 100 != 2) {
+    throw new IllegalStateException("HTTP " + resp.statusCode());    // 4xx/5xx 不是异常，要自己判
+}
+
+// ---- 解析：JDK 11 标准库没有 JSON API（ javax.json 属 Java EE，Java 11 已移除），必须用三方库 ----
+ObjectMapper mapper = new ObjectMapper();                 // Jackson（Gson / fastjson 同理）
+JsonNode node = mapper.readTree(resp.body());             // 或直接给类型：mapper.readValue(body, User.class)
+long   id   = node.at("/data/id").asLong();
+String name = node.path("data").path("name").asText();
+System.out.println(id + " " + name);</code></pre>
+
+<div class="tip">
+<div class="tip-title">字符集与「JSON 解析」的两个坑</div>
+<ul>
+<li><code>ofString()</code> 解码规则：先看响应头 <code>Content-Type</code> 里的 charset，<strong>拿不到或解不出一律落 UTF-8</strong>（不按 RFC 的 text/* 默认 ISO-8859-1）。老接口正文是 GBK 而头里没写 → 乱码，此时必须 <code>BodyHandlers.ofString(Charset.forName("GBK"))</code>。</li>
+<li>发送方向不自动：请求头里的 <code>application/json</code> 不会帮你编码，<code>BodyPublishers.ofString(json)</code> 默认 UTF-8，要明确就用 <code>ofString(json, UTF_8)</code>，同时把 charset 写进 Content-Type。</li>
+<li>JSON 解析永远是业务层的事：JDK 11 没有内置 JSON API，别去找 <code>Json.parse(...)</code>。</li>
+</ul>
+</div>
+
+<h4>示例 2 · POST 上传文件</h4>
+
+<pre><code>// A. 整个文件就是请求体：最省事，ofFile 边读边发，不整包进堆（长度 = Files.size）
+HttpRequest raw = HttpRequest.newBuilder(URI.create(url))
+        .header("Content-Type", "application/octet-stream")
+        .POST(BodyPublishers.ofFile(Path.of("/data/report.pdf")))
+        .build();
+
+// B. multipart/form-data（浏览器风格表单）：JDK 没有现成 builder，boundary 自己拼；
+//    注意 JDK 11 的 BodyPublishers 没有 concat(...)，只能靠 ofByteArrays / ofInputStream 组合
+String b = "----Java11" + UUID.randomUUID();
+byte[] head = ("--" + b + "\r\n"
+        + "Content-Disposition: form-data; name=\"file\"; filename=\"report.pdf\"\r\n"
+        + "Content-Type: application/octet-stream\r\n\r\n").getBytes(StandardCharsets.UTF_8);
+byte[] file = Files.readAllBytes(Path.of("/data/report.pdf"));
+byte[] tail = ("\r\n--" + b + "--\r\n").getBytes(StandardCharsets.UTF_8);
+
+HttpRequest form = HttpRequest.newBuilder(URI.create(url))
+        .header("Content-Type", "multipart/form-data; boundary=" + b)
+        .POST(BodyPublishers.ofByteArrays(List.of(head, file, tail)))   // 三段拼接，长度已知
+        .build();
+HttpResponse&lt;String&gt; resp = client.send(form, BodyHandlers.ofString());</code></pre>
+
+<div class="note">
+<div class="note-title">文件大了怎么办</div>
+<ul>
+<li><code>ofByteArrays</code> 仍要把整个文件读进堆。改成流式：<code>BodyPublishers.ofInputStream(() -&gt; new SequenceInputStream(new ByteArrayInputStream(head), new SequenceInputStream(Files.newInputStream(path), new ByteArrayInputStream(tail))))</code>——长度变未知 → HTTP/1.1 走 <code>Transfer-Encoding: chunked</code>，<strong>部分网关/WAF 对 chunked 的 POST 不友好</strong>，需要 Content-Length 就只能预读或用已知长度的 <code>ofFile</code> 单独发。</li>
+<li><code>Content-Type</code> 不会自动补：multipart 的 boundary 必须与 header 里的一致，否则服务端解析出空 part。</li>
+</ul>
+</div>
+
+<h4>示例 3 · POST 下载文件</h4>
+
+<pre><code>// A. 最省事：Handler 直接落盘，边收边写不进堆，返回 HttpResponse&lt;Path&gt;
+HttpRequest dl = HttpRequest.newBuilder(URI.create(url)).GET().build();
+HttpResponse&lt;Path&gt; saved = client.send(dl, BodyHandlers.ofFile(Path.of("/tmp/pkg.tar.gz")));
+System.out.println(saved.body());                       // 落盘路径
+
+// B. 流式：拿 InputStream 自己控制（进度条 / 限速 / 校验和）
+HttpResponse&lt;InputStream&gt; st = client.send(dl, BodyHandlers.ofInputStream());
+try (InputStream in = st.body()) {                      // apiNote：必须读到 EOF 或显式 close
+    Files.copy(in, Path.of("/tmp/pkg.tar.gz"), StandardCopyOption.REPLACE_EXISTING);
+}
+// 提前 close（没读完）可能连底层 HTTP 连接一起关掉 → Keep-Alive 连接无法复用</code></pre>
+
+<div class="warning">
+<div class="warning-title">下载三件配套齐</div>
+<ul>
+<li><code>BodyHandlers.ofFile(path[, openOptions])</code>：返回 <code>HttpResponse&lt;Path&gt;</code>，字节到达即写文件；文件在 handler 创建时就做安全检查。</li>
+<li><code>BodyHandlers.ofInputStream()</code>：返回时<strong>header 已读完、body 可能没到齐</strong>，<code>body()</code> 是边收边读的流；<strong>读到 EOF 或 close 必须二选一</strong>。</li>
+<li><code>BodyHandlers.ofFileDownload(dir, openOptions...)</code>：按响应头里的文件名下载到目录（带目录穿越保护），不想自己解析 filename 时用它。</li>
+</ul>
+</div>
+
+<h4>示例 4 · 三件套自定义（Handler 选型 / Subscriber 背压限流 / Publisher 分片）</h4>
+
+<pre><code>// import java.net.http.HttpResponse.ResponseInfo; import java.util.concurrent.Flow;
+// ① BodyHandler：读完响应头、还没读正文时被调用（@FunctionalInterface），职责只有一个——选 Subscriber
+static BodyHandler&lt;String&gt; pick(ResponseInfo info) {
+    if (info.statusCode() == 204) return BodySubscribers.replacing("");   // 无正文 → 直接给占位值
+    String ct = info.headers().firstValue("Content-Type").orElse("");
+    Charset cs = ct.toUpperCase(Locale.ROOT).contains("GBK")
+              ? Charset.forName("GBK") : StandardCharsets.UTF_8;
+    return BodySubscribers.mapping(                    // 组合用法：byte[] 先收齐，再映射成 String
+            BodySubscribers.ofByteArray(), ba -&gt; new String(ba, cs));
+}
+// 用法：HttpResponse&lt;String&gt; r = client.send(req, Info -&gt; pick(Info));  或直接 client.send(req, this::pick)
+
+// ② BodySubscriber：自己实现背压 + 体积上限——三件套里最硬核的一环
+static BodySubscriber&lt;byte[]&gt; capped(int limit) {
+    return new BodySubscriber&lt;&gt;() {                   // 即 Flow.Subscriber&lt;List&lt;ByteBuffer&gt;&gt;
+        private final CompletableFuture&lt;byte[]&gt; future = new CompletableFuture&lt;&gt;();
+        private final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        private Subscription sub;
+        private long got;
+
+        @Override public void onSubscribe(Subscription s) { sub = s; s.request(1); }   // 先要 1 批
+        @Override public void onNext(List&lt;ByteBuffer&gt; bufs) {
+            for (ByteBuffer b : bufs) {
+                byte[] a = new byte[b.remaining()]; b.get(a); out.writeBytes(a);
+                if ((got += a.length) &gt; limit) {
+                    future.completeExceptionally(new IOException("响应体超过 " + limit + " 字节"));
+                    sub.cancel(); return;             // 主动掐断——限流的落点就在 cancel()
+                }
+            }
+            sub.request(1);                           // 处理完再要下一批 → 拉式驱动，这就是背压
+        }
+        @Override public void onError(Throwable t)   { future.completeExceptionally(t); }
+        @Override public void onComplete()           { future.complete(out.toByteArray()); }
+        @Override public CompletionStage&lt;byte[]&gt; getBody() { return future; }
+    };
+}
+// 用法：client.send(req, info -&gt; capped(1 &lt;&lt; 20));      // 1 MB 上限，超了就 cancel
+
+// ③ BodyPublisher：自己实现只要两件事——contentLength() + subscribe()
+static BodyPublisher chunks(Path f, int chunk) {
+    long total;
+    try   { total = Files.size(f); }
+    catch (IOException e) { throw new UncheckedIOException(e); }
+    return new BodyPublisher() {
+        @Override public long contentLength() { return total; }   // -1 表示未知 → chunked
+        @Override public void subscribe(Flow.Subscriber&lt;? super ByteBuffer&gt; out) {
+            out.onSubscribe(new Subscription() {
+                long pos = 0; volatile boolean cancelled;
+                @Override public void request(long n) {          // 拉式：订阅者要 n 个，我才读 n 段
+                    for (long i = 0; i &lt; n &amp;&amp; !cancelled &amp;&amp; pos &lt; total; i++) {
+                        ByteBuffer b = readChunk(f, pos, (int) Math.min(chunk, total - pos));
+                        pos += b.remaining();
+                        out.onNext(b);                           // 一次只吐一块，读盘被对方速度牵引
+                    }
+                    if (pos &gt;= total &amp;&amp; !cancelled) out.onComplete();
+                }
+                @Override public void cancel() { cancelled = true; }
+            });
+        }
+    };
+}
+// readChunk(p, off, n)：FileChannel 定位到 off 读 n 字节 → ByteBuffer（略）
+// 不想手写就用现成的：BodyPublishers.fromPublisher(flowPub) / fromPublisher(flowPub, knownLen)，
+// 以及流式现成品 ofInputStream(supplier)、ofByteArrays(iterable)、ofFile(path)</code></pre>
+
+<div class="qa-block">
+<div class="question">追问：三个泛型怎么串起来的？</div>
+<div class="answer">
+<ol>
+<li><code>BodyHandler&lt;T&gt;.apply(ResponseInfo)</code> 在<strong>读响应体字节之前</strong>被调用，产出 <code>BodySubscriber&lt;T&gt;</code>；</li>
+<li><code>BodySubscriber&lt;T&gt; extends Flow.Subscriber&lt;List&lt;ByteBuffer&gt;&gt;</code>，靠 <code>request(n)</code> 拉字节，结果通过 <code>CompletionStage&lt;T&gt; getBody()</code> 交回；</li>
+<li><code>BodyPublisher extends Flow.Publisher&lt;ByteBuffer&gt;</code>，多一个 <code>long contentLength()</code>（未知填 -1 → chunked）；</li>
+<li>三者的泛型 <code>T</code> 必须一致，这就是为什么 <code>discarding()</code>（<code>Void</code>）不能塞进 <code>BodyHandler&lt;String&gt;</code>——要用 <code>replacing("")</code>。</li>
+</ol>
+<div class="key-point"><strong>关键点</strong>：Handler 决定「怎么收」，Subscriber 决定「收成什么、何时要更多」，Publisher 决定「怎么发、要不要 Content-Length」。</div>
+</div>
+</div>
+
 <h3>Java 视角对照：它替代了谁</h3>
 
 <div class="java-comparison">
@@ -100,7 +270,7 @@ CompletableFuture&lt;HttpResponse&lt;String&gt;&gt; future =
     exchange.applyFilters(RedirectFilter, AuthenticationFilter, CookieFilter, ...)
     exchange.sendAsync()  # 或阻塞等待</code></pre>
 
-<h3>四维度生产检查（deep-mastery 硬性清单）</h3>
+<h3>四维度生产检查</h3>
 
 <table>
 <tr><th>维度</th><th>本特性的覆盖情况</th></tr>
@@ -215,13 +385,17 @@ public static Charset charsetFrom(HttpHeaders headers) {
 
 <div class="production-note">
 <div class="header">生产级最小骨架</div>
-<pre><code>// 全局唯一，随应用生命周期创建
+<pre><code>// 全局唯一，随应用生命周期创建 —— executor 用显式 ThreadPoolExecutor，不用 Executors.newFixedThreadPool
+private static final ExecutorService CALLBACKS = new ThreadPoolExecutor(
+        16, 16, 60L, TimeUnit.SECONDS,
+        new ArrayBlockingQueue&lt;&gt;(512),                  // 有界队列：宁可显式拒绝，也不静默堆积
+        r -&gt; { Thread t = new Thread(r, "http-cb"); t.setDaemon(true); return t; },
+        new ThreadPoolExecutor.AbortPolicy());          // 明确的拒绝策略（见下方说明）
+
 private static final HttpClient HTTP = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(3))
         .followRedirects(HttpClient.Redirect.NORMAL)
-        .executor(Executors.newFixedThreadPool(16, r -&gt; {
-            Thread t = new Thread(r, "http-cb"); t.setDaemon(true); return t;
-        }))
+        .executor(CALLBACKS)                            // 不设则 JDK 用 newCachedThreadPool（线程数无界）
         .build();
 
 public String getJson(String url) throws Exception {
@@ -235,6 +409,23 @@ public String getJson(String url) throws Exception {
     }
     return resp.body();
 }</code></pre>
+</div>
+
+<div class="warning">
+<div class="warning-title">追问：生产里到底能不能用 Executors.newFixedThreadPool？</div>
+<p>能用，但<strong>不该当默认</strong>——问题不在「fixed」三个字，在 <code>Executors.*</code> 工厂方法把有界性藏了起来：</p>
+<ul>
+<li><code>Executors.newFixedThreadPool(n, tf)</code> 内部是 <code>ThreadPoolExecutor(n, n, 0, ms, LinkedBlockingQueue)</code>：<strong>队列无界、没有拒绝策略</strong>。下游变慢时任务在队列里无限堆积，症状是延迟爬升直到堆耗尽，而 CPU 看着很闲——<strong>没有背压、没有告警</strong>。这正是 Effective Java / JCiP 反复强调的「显式 <code>ThreadPoolExecutor</code> + 有界队列 + 明确 <code>RejectedExecutionHandler</code>」。</li>
+<li><code>Executors.newCachedThreadPool</code> 反过来是<strong>线程数无界</strong>：回调一旦阻塞，线程会一路涨。而 JDK 给 HttpClient 的<strong>默认</strong> executor 恰恰就是 <code>newCachedThreadPool</code>（<code>jdk.internal.net.http.HttpClientImpl</code>，未调用 <code>.executor(...)</code> 时创建），所以不设池时的风险是「回调阻塞 → 线程暴涨」，设成 fixed 的风险是「回调堆积 → 队列膨胀」。</li>
+<li>这个 executor 到底跑什么：看 <code>HttpClientImpl.DelegatingExecutor.execute</code>——<strong>当前在 selector 线程上 → 转交你设的 executor；在其它线程 → 直接 <code>command.run()</code> 内联执行</strong>。它只负责异步任务/回调派发，连接 I/O 仍在 selector 线程。</li>
+</ul>
+<ol>
+<li><strong>回调里不许阻塞</strong>：不做同步 <code>send</code>、不解析大 JSON、不查库——重活提交到业务线程池，回调只做转发。</li>
+<li><strong>池要有界且可诊断</strong>：有界队列 + 具名线程（上面代码的 <code>http-cb</code>），容量按峰值回调并发量估。</li>
+<li><strong>别用 <code>CallerRunsPolicy</code></strong>：拒绝若发生在 selector 线程提交路径上，回调会被直接跑在 selector 线程里，<strong>卡住整个 client 的 I/O 循环</strong>（所有连接一起变慢）。Java 11 的实现没有「拒绝后回退到内部池」的兜底（JDK 25 才加），异常会抛回提交处——所以宁可 <code>AbortPolicy</code> + 埋点报警，或把队列调大。</li>
+<li><code>newFixedThreadPool</code> 并非禁用项：内部小工具、回调确定极短且量可控时完全够用。被否的是「拿它当 HTTP 回调池的默认答案」。</li>
+</ol>
+<div class="key-point"><strong>关键点</strong>：问「能不能用 Executors」之前先问「队列有没有界、拒绝了怎么办、回调会不会阻塞」——这三个问题答不上来，换成显式 ThreadPoolExecutor 也不会自动变好。</div>
 </div>
 
 <h3>选型：什么时候不该用 java.net.http</h3>

@@ -31,7 +31,13 @@
 
 <div class="qa-block">
 <div class="question">Q2: 追问 — 什么情况下必须显式写 <code>--source</code>？</div>
-<div class="answer"><p>(1) 文件名<strong>不以 <code>.java</code> 结尾</strong>——典型是 shebang 脚本（文件叫 <code>hello</code>、<code>factorial</code>）；(2) 使用 <code>--enable-preview</code> 时；(3) 想指定源码语言级别（同时作为 <code>--release</code> 生效）。反过来，<strong>遵循 <code>.java</code> 命名规范的文件禁止用 <code>#!</code> 首行</strong>。shebang 要求 <code>--source</code> 紧跟在可执行文件名之后。</p>
+<div class="answer">
+<ol>
+<li>文件名<strong>不以 <code>.java</code> 结尾</strong>——典型是 shebang 脚本（文件叫 <code>hello</code>、<code>factorial</code>）；</li>
+<li>使用 <code>--enable-preview</code> 时；</li>
+<li>想指定源码语言级别（同时作为 <code>--release</code> 生效）。</li>
+</ol>
+<p>反过来，<strong>遵循 <code>.java</code> 命名规范的文件禁止用 <code>#!</code> 首行</strong>。shebang 要求 <code>--source</code> 紧跟在可执行文件名之后。</p>
 <div class="key-point">核心判定条件：是否出现 <code>--source</code>；「类名」位置是否命中一个存在的 <code>.java</code> 文件。</div>
 </div>
 </div>
@@ -66,7 +72,14 @@ var x -&gt; x.foo()</code></pre>
 
 <div class="qa-block">
 <div class="question">Q6: 追问 — 说出必须背下来的四个默认值。</div>
-<div class="answer"><p>(1) <code>followRedirects</code> 默认 <strong><code>Redirect.NEVER</code></strong>，3xx 直接返回；(2) <code>version</code> 默认 <strong><code>HTTP_2</code></strong>（HTTPS 走 ALPN，失败降级 1.1）；(3) <code>connectTimeout</code> 默认<strong>无</strong>；(4) <code>HttpRequest.timeout()</code> 默认<strong>无</strong>。另外 <code>executor</code> 默认是内部执行器——回调里做重活会占用 client 的事件循环。</p>
+<div class="answer">
+<ol>
+<li><code>followRedirects</code> 默认 <strong><code>Redirect.NEVER</code></strong>，3xx 直接返回；</li>
+<li><code>version</code> 默认 <strong><code>HTTP_2</code></strong>（HTTPS 走 ALPN，失败降级 1.1）；</li>
+<li><code>connectTimeout</code> 默认<strong>无</strong>；</li>
+<li><code>HttpRequest.timeout()</code> 默认<strong>无</strong>。</li>
+</ol>
+<p>另外 <code>executor</code> 默认是内部执行器——回调里做重活会占用 client 的事件循环。</p>
 <div class="key-point">默认全部「关到位」是 JDK API 的一贯风格：最小惊讶，能力自己开。</div>
 </div>
 </div>
@@ -83,11 +96,17 @@ var x -&gt; x.foo()</code></pre>
 <div class="qa-block">
 <div class="question">Q8: 审查以下代码，指出至少三个问题。</div>
 <div class="answer"><pre><code>HttpResponse&lt;String&gt; call(String url) throws Exception {
-    HttpClient c = HttpClient.newHttpClient();          // ①
+    HttpClient c = HttpClient.newHttpClient();          // 1
     HttpRequest r = HttpRequest.newBuilder(URI.create(url)).GET().build();
-    return c.send(r, BodyHandlers.ofString());          // ② ③
+    return c.send(r, BodyHandlers.ofString());          // 2 3
 }</code></pre>
-<p>① <strong>每次新建 client</strong>：连接池无法复用，TCP/TLS 握手开销翻倍，应全局单例复用；② <strong>没有请求超时与连接超时</strong>：慢接口会长期占住调用线程；③ <strong>没有处理状态码</strong>：4xx/5xx 不抛异常，会被当成功返回；④ 隐式依赖 <code>ofString()</code> 的字符集解析——响应头没写 charset 就落 UTF-8，GBK 接口会乱码；⑤ 大响应体整包进堆，可能 OOM。</p>
+<ol>
+<li><strong>每次新建 client</strong>：连接池无法复用，TCP/TLS 握手开销翻倍，应全局单例复用；</li>
+<li><strong>没有请求超时与连接超时</strong>：慢接口会长期占住调用线程；</li>
+<li><strong>没有处理状态码</strong>：4xx/5xx 不抛异常，会被当成功返回；</li>
+<li>隐式依赖 <code>ofString()</code> 的字符集解析——响应头没写 charset 就落 UTF-8，GBK 接口会乱码；</li>
+<li>大响应体整包进堆，可能 OOM。</li>
+</ol>
 <div class="key-point">「HTTP 状态码不是异常」是最常被漏掉的一条。</div>
 </div>
 </div>
@@ -118,7 +137,13 @@ return substring(lo, hi + 1)</code></pre>
 <h3>代码审查者角度</h3>
 <div class="qa-block">
 <div class="question">Q11: 审查 <code>Files.readString(path)</code> 的使用。</div>
-<div class="answer"><p>源码只有两行：<code>readAllBytes(path)</code> + <code>new String(ba, cs)</code>。审查要点：(1) <strong>整文件进堆</strong>，大文件会 OOM——日志/CSV/大 JSON 必须改 <code>Files.lines()</code> 或 <code>BufferedReader</code>（且要关流）；(2) 默认 <strong>UTF-8</strong>，非 UTF-8 文件直接抛 <code>IOException</code>（不是替换成 <code>?</code>）；(3) 同目录 <code>writeString</code> <strong>不是原子写</strong>，中途失败会留下截断文件，关键数据要先写临时文件再 <code>ATOMIC_MOVE</code>；(4) <code>writeString</code> 默认截断已有内容。</p>
+<div class="answer"><p>源码只有两行：<code>readAllBytes(path)</code> + <code>new String(ba, cs)</code>。审查要点：</p>
+<ol>
+<li><strong>整文件进堆</strong>，大文件会 OOM——日志/CSV/大 JSON 必须改 <code>Files.lines()</code> 或 <code>BufferedReader</code>（且要关流）；</li>
+<li>默认 <strong>UTF-8</strong>，非 UTF-8 文件直接抛 <code>IOException</code>（不是替换成 <code>?</code>）；</li>
+<li>同目录 <code>writeString</code> <strong>不是原子写</strong>，中途失败会留下截断文件，关键数据要先写临时文件再 <code>ATOMIC_MOVE</code>；</li>
+<li><code>writeString</code> 默认截断已有内容。</li>
+</ol>
 <div class="key-point">readString 是「便捷」不是「流式」。</div>
 </div>
 </div>
@@ -155,7 +180,15 @@ return substring(lo, hi + 1)</code></pre>
 
 <div class="qa-block">
 <div class="question">Q15: 追问 — Java 11 的 ZGC 有哪些实验性代价？</div>
-<div class="answer"><p>(1) 必须 <code>-XX:+UnlockExperimentalVMOptions -XX:+UseZGC</code>；(2) <strong>仅 Linux/x64</strong>；(3) <strong>不支持类卸载</strong>——<code>ClassUnloading</code> 被禁用且开启无效，动态生成类的场景会堆涨；(4) <strong>不支持 JVMCI/Graal</strong>，开 <code>EnableJVMCI</code> 直接报错；(5) 单代实现（分代 ZGC 到 JDK 21 / JEP 439）；(6) 着色指针需要预留大虚拟地址空间。</p>
+<div class="answer">
+<ol>
+<li>必须 <code>-XX:+UnlockExperimentalVMOptions -XX:+UseZGC</code>；</li>
+<li><strong>仅 Linux/x64</strong>；</li>
+<li><strong>不支持类卸载</strong>——<code>ClassUnloading</code> 被禁用且开启无效，动态生成类的场景会堆涨；</li>
+<li><strong>不支持 JVMCI/Graal</strong>，开 <code>EnableJVMCI</code> 直接报错；</li>
+<li>单代实现（分代 ZGC 到 JDK 21 / JEP 439）；</li>
+<li>着色指针需要预留大虚拟地址空间。</li>
+</ol>
 <div class="key-point">JDK 15（JEP 377）才转正 production，JDK 11 只适合灰度评估。</div>
 </div>
 </div>

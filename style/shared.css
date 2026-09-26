@@ -404,10 +404,7 @@ tr:hover { background: #fafafa; }
 .warning { border-color: var(--orange);     background: var(--orange-bg); }
 .tip     { border-color: var(--green);      background: var(--green-bg); }
 .info    { border-color: #5bc0de;           background: #f0f9fb; }
-.note strong, .warning strong, .tip strong, .info strong {
-  display: block; margin-bottom: 4px;
-}
-.note-title, .warning-title, .tip-title {
+.note-title, .warning-title, .tip-title, .info-title {
   font-weight: 700;
   margin-bottom: 0.3rem;
   display: flex; align-items: center; gap: 0.4rem;
@@ -416,6 +413,7 @@ tr:hover { background: #fafafa; }
 .note-title    { color: var(--accent-blue); }
 .warning-title { color: var(--orange); }
 .tip-title     { color: var(--green); }
+.info-title    { color: #2a9d9f; }
 
 /* ---------- Java Comparison Box ---------- */
 .java-comparison {

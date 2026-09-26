@@ -93,7 +93,7 @@ flowchart TB
     if -XX:OnOutOfMemoryError=CMD:       runExternal(CMD)
     throw OutOfMemoryError("Epsilon GC needs X MB more heap")</code></pre>
 
-<h3>四维度生产检查（deep-mastery 硬性清单）</h3>
+<h3>四维度生产检查</h3>
 
 <table>
 <tr><th>维度</th><th>ZGC</th><th>Epsilon</th></tr>
@@ -265,7 +265,14 @@ sequenceDiagram
 <div class="qa-block">
 <div class="question">Q3: 追问 — Epsilon 有什么用？一个不回收的 GC 怎么好意思进 JDK？</div>
 <div class="answer">
-<p>四个正经用途（JEP 318 原文）：<strong>性能测试</strong>（剥离 GC 噪声得到延迟基线）、<strong>内存压力测试</strong>（把 <code>-Xmx</code> 当分配上限断言）、<strong>VM 接口测试</strong>（验证 JEP 304 接口的最小实现）、<strong>极短生命周期任务</strong>（退出即释放，跑 GC 循环纯浪费）。它本质上是把「生态里很多人自己魔改 JVM 关掉 GC」这件事标准化、可配置化。</p>
+<p>四个正经用途（JEP 318 原文）：</p>
+<ul>
+<li><strong>性能测试</strong>——剥离 GC 噪声得到延迟基线；</li>
+<li><strong>内存压力测试</strong>——把 <code>-Xmx</code> 当分配上限断言；</li>
+<li><strong>VM 接口测试</strong>——验证 JEP 304 接口的最小实现；</li>
+<li><strong>极短生命周期任务</strong>——退出即释放，跑 GC 循环纯浪费。</li>
+</ul>
+<p>它本质上是把「生态里很多人自己魔改 JVM 关掉 GC」这件事标准化、可配置化。</p>
 <p>代价是：<strong>堆满即崩</strong>、<code>System.gc()</code> 失效、非移动式分配让随机分配的负载空间局部性变差。</p>
 <div class="key-point"><strong>关键点</strong>：它是测试工具，不是生产 GC；误开是高危配置错误。</div>
 </div>
@@ -274,7 +281,15 @@ sequenceDiagram
 <div class="qa-block">
 <div class="question">Q4: 追问 — Java 11 的 ZGC 有哪些「实验性」代价？</div>
 <div class="answer">
-<p>(1) 需要 <code>-XX:+UnlockExperimentalVMOptions</code>；(2) <strong>仅 Linux/x64</strong>；(3) <strong>不支持类卸载</strong>——<code>ClassUnloading</code> / <code>ClassUnloadingWithConcurrentMark</code> 被禁用，打开也无效，动态生成类的场景会堆涨；(4) <strong>不支持 JVMCI/Graal</strong>，开 <code>EnableJVMCI</code> 直接报错；(5) 单代（分代 ZGC 要到 JDK 21）。因此 JDK 11 的 ZGC 适合做评估和灰度，不适合做「无条件全量切换」。</p>
+<p>五条：</p>
+<ol>
+<li>需要 <code>-XX:+UnlockExperimentalVMOptions</code>；</li>
+<li><strong>仅 Linux/x64</strong>；</li>
+<li><strong>不支持类卸载</strong>——<code>ClassUnloading</code> / <code>ClassUnloadingWithConcurrentMark</code> 被禁用，打开也无效，动态生成类的场景会堆涨；</li>
+<li><strong>不支持 JVMCI/Graal</strong>，开 <code>EnableJVMCI</code> 直接报错；</li>
+<li>单代（分代 ZGC 要到 JDK 21）。</li>
+</ol>
+<p>因此 JDK 11 的 ZGC 适合做评估和灰度，不适合做「无条件全量切换」。</p>
 <div class="key-point"><strong>关键点</strong>：JDK 15 才转正（JEP 377），JDK 11 的定位是 experimental。</div>
 </div>
 </div>

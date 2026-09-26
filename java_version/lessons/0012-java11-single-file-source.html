@@ -24,6 +24,23 @@
 
 <p>Java 11（2018-09，LTS）在语言层面非常克制：<strong>没有引入新的类型系统特性</strong>，只做了两件「减少仪式感」的事——一个是让 <code>java</code> 启动器能直接吃源文件，一个是让 Lambda 参数能写 <code>var</code> 并挂注解。</p>
 
+<div class="java-comparison">
+<div class="header">先跑一个：从写到执行，中间没有 <code>javac</code>，也没有 <code>.class</code></div>
+<pre><code>$ cat Hello.java
+public class Hello {
+    public static void main(String[] args) {
+        System.out.println("Hello, " + String.join(" ", args));
+    }
+}
+
+$ java Hello.java Java 11
+Hello, Java 11
+
+$ ls Hello*.class
+ls: Hello*.class: No such file or directory</code></pre>
+<p>两条命令走完全程：<code>cat</code> 写文件、<code>java</code> 跑文件。程序参数跟在文件名之后原样传给 <code>main</code>，编译在内存里完成、进程退出即消失，目录里一个 <code>.class</code> 都不会多。</p>
+</div>
+
 <h3>JEP 330：java 启动器的第四种模式</h3>
 
 <p>在此之前，<code>java</code> 启动器只有三种模式。JEP 330 加了第四种：</p>
@@ -121,7 +138,7 @@ java -cp &lt;memory&gt; Factorial 3 4 5</code></pre>
 
 <p>JEP 330 规定只有一组选项会被识别并传给编译器：<code>--class-path</code>、<code>--module-path</code>、<code>--add-exports</code>、<code>--add-modules</code>、<code>--limit-modules</code>、<code>--patch-module</code>、<code>--upgrade-module-path</code> 及其变体形式，外加 <code>--enable-preview</code>。<strong>没有任何通道把 <code>-processor</code>、<code>-Werror</code> 这类 javac 选项透传进去。</strong></p>
 
-<h3>四维度生产检查（deep-mastery 硬性清单）</h3>
+<h3>四维度生产检查</h3>
 
 <table>
 <tr><th>维度</th><th>本特性的情况</th></tr>
@@ -152,7 +169,13 @@ java -cp &lt;memory&gt; Factorial 3 4 5</code></pre>
 
 <div class="java-comparison">
 <div class="header">设计原理追问：为什么不允许「半显式」<code>(var x, int y) -&gt; ...</code>？</div>
-<p>JEP 323 给了三层理由：(1) 它会<strong>深度影响类型推断与重载决议</strong>，超出本 JEP 范围；(2) 必须保证<strong>带不带 <code>var</code> 推断出的类型完全一致</strong>（否则会破坏向后兼容）；(3) 部分推断属于更复杂的问题，留给后续 JEP。代价是语法不够灵活，收益是<strong>零源码不兼容</strong>——JEP 323 的 Risks 一节直接声明「本特性没有源不兼容风险」。</p>
+<p>JEP 323 给了三层理由：</p>
+<ol>
+<li>它会<strong>深度影响类型推断与重载决议</strong>，超出本 JEP 范围；</li>
+<li>必须保证<strong>带不带 <code>var</code> 推断出的类型完全一致</strong>（否则会破坏向后兼容）；</li>
+<li>部分推断属于更复杂的问题，留给后续 JEP。</li>
+</ol>
+<p>代价是语法不够灵活，收益是<strong>零源码不兼容</strong>——JEP 323 的 Risks 一节直接声明「本特性没有源不兼容风险」。</p>
 </div>
 
 <h2>L3 · 源码层：SourceLauncher 走读</h2>
@@ -198,6 +221,125 @@ sequenceDiagram
     CL->>CL: Class.forName(首个类, false, loader)
     SL->>SL: MethodFinder.findMainMethod 静态则直接 invoke
     SL-->>L: 返回 Result(主类名, 已编译类名列表)
+</div>
+
+<h3>一图看懂：run() 的五步流水线</h3>
+
+<p>下面这张图先建立整体感：<strong>左边是启动器依次做的 5 件事</strong>（编号与「源码片段一」里的行内注释 <code>1</code>~<code>5</code> 一一对应），<strong>右边是这一步真正在发生什么</strong>。视线只需要盯住第 ③ 步——编译产物从头到尾待在内存的 <code>Map</code> 里，磁盘上不会多出任何 <code>.class</code>。</p>
+
+<div class="java-comparison">
+<div class="header"><code>java Foo.java a b c</code> 五步走完，磁盘上不会多出一个 .class</div>
+<svg viewBox="0 0 940 692" role="img" aria-label="java Foo.java a b c 的五步执行流水线：取源文件、解析与过滤选项、编译进内存、切出 main 参数、加载类并反射调用 main" style="width:100%;height:auto;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif">
+<title>java Foo.java a b c 的五步执行流水线</title>
+<defs>
+<marker id="arw" markerWidth="8" markerHeight="7" refX="7" refY="3.5" orient="auto">
+<path d="M0,0 L7,3.5 L0,7 z" fill="#8a94a6"/>
+</marker>
+<marker id="arwOrange" markerWidth="8" markerHeight="7" refX="7" refY="3.5" orient="auto">
+<path d="M0,0 L7,3.5 L0,7 z" fill="#e8913a"/>
+</marker>
+</defs>
+
+<!-- 输入 -->
+<rect x="40" y="16" width="420" height="48" rx="8" fill="#eef4ff" stroke="#4a9eff"/>
+<text x="60" y="36" font-size="11" fill="#4a7fd4">启动器入口（JEP 330 新增的第四种模式）</text>
+<text x="60" y="55" font-size="14" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#1a1a1a">$ java Foo.java a b c</text>
+
+<!-- 图例 -->
+<rect x="470" y="16" width="430" height="48" rx="8" fill="#fafafa" stroke="#b8c0cc" stroke-dasharray="4 3"/>
+<text x="488" y="36" font-size="12" fill="#333">①–⑤ 与下方「源码片段一」的行内注释一一对应</text>
+<text x="488" y="55" font-size="12" fill="#666">虚线框 = 这一步的关键机制或边界条件</text>
+
+<line x1="250" y1="64" x2="250" y2="92" stroke="#8a94a6" stroke-width="2" marker-end="url(#arw)"/>
+
+<!-- 阶段 1 -->
+<rect x="40" y="96" width="400" height="72" rx="8" fill="#ffffff" stroke="#cfd8dc"/>
+<rect x="40" y="96" width="5" height="72" rx="2.5" fill="#4a9eff"/>
+<circle cx="76" cy="132" r="15" fill="#4a9eff"/>
+<text x="76" y="137" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
+<text x="102" y="127" font-size="14" font-weight="700" fill="#1f1f1f">取源文件、切分参数</text>
+<text x="102" y="149" font-size="12" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#5f6368">SourceLauncher.getFile(args)</text>
+
+<line x1="444" y1="132" x2="466" y2="132" stroke="#b8c0cc" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arw)"/>
+<rect x="470" y="96" width="430" height="72" rx="8" fill="#fbfbfc" stroke="#b8c0cc" stroke-dasharray="4 3"/>
+<text x="488" y="130" font-size="11.5" fill="#444">文件不存在 → 抛 Fault（受控异常，不是 NPE）</text>
+<text x="488" y="150" font-size="11.5" fill="#444">文件名之后的 token 全部作为 main 参数，启动器不解析</text>
+
+<line x1="240" y1="172" x2="240" y2="198" stroke="#8a94a6" stroke-width="2" marker-end="url(#arw)"/>
+
+<!-- 阶段 2 -->
+<rect x="40" y="202" width="400" height="72" rx="8" fill="#ffffff" stroke="#cfd8dc"/>
+<rect x="40" y="202" width="5" height="72" rx="2.5" fill="#4a9eff"/>
+<circle cx="76" cy="238" r="15" fill="#4a9eff"/>
+<text x="76" y="243" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+<text x="102" y="233" font-size="14" font-weight="700" fill="#1f1f1f">解析程序结构 + 过滤选项</text>
+<text x="102" y="255" font-size="12" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#5f6368">ProgramDescriptor + RelevantJavacOptions</text>
+
+<line x1="444" y1="238" x2="466" y2="238" stroke="#b8c0cc" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arw)"/>
+<rect x="470" y="202" width="430" height="72" rx="8" fill="#fbfbfc" stroke="#b8c0cc" stroke-dasharray="4 3"/>
+<text x="488" y="230" font-size="11.5" fill="#444">ProgramDescriptor：包名、顶层类列表、首个可执行类</text>
+<text x="488" y="250" font-size="11.5" fill="#444">RelevantJavacOptions：只留白名单选项</text>
+<text x="488" y="270" font-size="11.5" fill="#666">（--class-path / --add-modules / --enable-preview …）</text>
+
+<line x1="240" y1="278" x2="240" y2="304" stroke="#8a94a6" stroke-width="2" marker-end="url(#arw)"/>
+
+<!-- 阶段 3（核心） -->
+<rect x="40" y="308" width="400" height="72" rx="8" fill="#fff8ef" stroke="#e8913a" stroke-width="1.5"/>
+<rect x="40" y="308" width="5" height="72" rx="2.5" fill="#e8913a"/>
+<circle cx="76" cy="344" r="15" fill="#e8913a"/>
+<text x="76" y="349" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
+<text x="102" y="339" font-size="14" font-weight="700" fill="#1f1f1f">编译进内存（核心机制）</text>
+<text x="102" y="361" font-size="12" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#5f6368">MemoryContext.compileProgram()</text>
+
+<line x1="444" y1="344" x2="466" y2="344" stroke="#e8913a" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arwOrange)"/>
+<rect x="470" y="308" width="430" height="72" rx="8" fill="#fffaf4" stroke="#e8913a" stroke-dasharray="4 3"/>
+<text x="488" y="336" font-size="11.5" fill="#444">MemoryFileManager 拦截 CLASS_OUTPUT + KIND.CLASS</text>
+<text x="488" y="356" font-size="11.5" fill="#444">openOutputStream().close() 时 map.put(类名, 字节)</text>
+<text x="488" y="376" font-size="11.5" fill="#a35a12">URI = memory:///Foo.class，磁盘上没有这个文件</text>
+
+<line x1="240" y1="384" x2="240" y2="410" stroke="#8a94a6" stroke-width="2" marker-end="url(#arw)"/>
+
+<!-- 阶段 4 -->
+<rect x="40" y="414" width="400" height="72" rx="8" fill="#ffffff" stroke="#cfd8dc"/>
+<rect x="40" y="414" width="5" height="72" rx="2.5" fill="#4a9eff"/>
+<circle cx="76" cy="450" r="15" fill="#4a9eff"/>
+<text x="76" y="455" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">4</text>
+<text x="102" y="445" font-size="14" font-weight="700" fill="#1f1f1f">取出 main 的参数</text>
+<text x="102" y="467" font-size="12" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#5f6368">Arrays.copyOfRange(args, 1, args.length)</text>
+
+<line x1="444" y1="450" x2="466" y2="450" stroke="#b8c0cc" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arw)"/>
+<rect x="470" y="414" width="430" height="72" rx="8" fill="#fbfbfc" stroke="#b8c0cc" stroke-dasharray="4 3"/>
+<text x="488" y="446" font-size="11.5" fill="#444">注意：下标 0 是源文件名本身，已被启动器消费掉</text>
+<text x="488" y="466" font-size="11.5" fill="#444">所以 java Foo.java a b c 里，main 拿到的是 a b c</text>
+
+<line x1="240" y1="490" x2="240" y2="516" stroke="#8a94a6" stroke-width="2" marker-end="url(#arw)"/>
+
+<!-- 阶段 5 -->
+<rect x="40" y="520" width="400" height="72" rx="8" fill="#ffffff" stroke="#cfd8dc"/>
+<rect x="40" y="520" width="5" height="72" rx="2.5" fill="#4a9eff"/>
+<circle cx="76" cy="556" r="15" fill="#4a9eff"/>
+<text x="76" y="561" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">5</text>
+<text x="102" y="551" font-size="14" font-weight="700" fill="#1f1f1f">加载类并反射调用 main</text>
+<text x="102" y="573" font-size="12" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#5f6368">MemoryClassLoader + MethodFinder</text>
+
+<line x1="444" y1="556" x2="466" y2="556" stroke="#b8c0cc" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arw)"/>
+<rect x="470" y="520" width="430" height="72" rx="8" fill="#fbfbfc" stroke="#b8c0cc" stroke-dasharray="4 3"/>
+<text x="488" y="548" font-size="11.5" fill="#444">父 loader = application class loader，classpath 照常可见</text>
+<text x="488" y="568" font-size="11.5" fill="#444">静态 main → setAccessible + invoke，否则报错</text>
+<text x="488" y="588" font-size="11.5" fill="#666">main 抛的异常会剥掉 launcher 栈帧，堆栈像直接执行</text>
+
+<line x1="240" y1="596" x2="240" y2="616" stroke="#8a94a6" stroke-width="2" marker-end="url(#arw)"/>
+
+<!-- 输出 -->
+<rect x="40" y="620" width="420" height="56" rx="8" fill="#eaf7ef" stroke="#2e9e5b"/>
+<text x="60" y="644" font-size="13" font-weight="700" fill="#1e7a44">main 返回 → 进程退出，内存 Map 与类一起回收</text>
+<text x="60" y="665" font-size="12" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" fill="#1e7a44">$ ls Foo*.class → No such file or directory</text>
+
+<!-- 代价 -->
+<rect x="470" y="620" width="430" height="56" rx="8" fill="#fffaf0" stroke="#e8d5b0"/>
+<text x="488" y="644" font-size="12" fill="#7a5a1e">代价：每次运行都从零编译，没有任何缓存</text>
+<text x="488" y="665" font-size="12" fill="#7a5a1e">启动开销 ≈ 一次 javac + 一次 JVM 起动（详见 L4）</text>
+</svg>
 </div>
 
 <h3>源码片段一：编译 + 执行的主流程</h3>
@@ -320,7 +462,13 @@ if (mainMethod == null) {
 <div class="qa-block">
 <div class="question">Q2: 追问 — JEP 330 有哪些编译期「默认收紧」的设定？为什么这样设计？</div>
 <div class="answer">
-<p>三条：(1) <code>-proc:none</code> 关闭注解处理；(2) source path 视为空，不牵扯其他源文件；(3) 只接受固定白名单选项，不透传 javac 参数。设计动机是把 source-file 模式定位成<strong>「一次性的、无构建配置的小程序」</strong>——凡是需要构建配置的场景都应该用构建工具 + javac。代价是 Lombok 这类注解处理器无法使用。</p>
+<p>三条：</p>
+<ol>
+<li><code>-proc:none</code> 关闭注解处理；</li>
+<li>source path 视为空，不牵扯其他源文件；</li>
+<li>只接受固定白名单选项，不透传 javac 参数。</li>
+</ol>
+<p>设计动机是把 source-file 模式定位成<strong>「一次性的、无构建配置的小程序」</strong>——凡是需要构建配置的场景都应该用构建工具 + javac。代价是 Lombok 这类注解处理器无法使用。</p>
 <div class="key-point"><strong>关键点</strong>：这是 trade-off——用「配置能力」换「零配置的开箱即用」。</div>
 </div>
 </div>
@@ -340,7 +488,13 @@ else:                              → 按 class/jar/module 老规则</code></pr
 <div class="qa-block">
 <div class="question">Q4: 追问 — 为什么 JEP 323 要求 Lambda 参数「全 var 或全不 var」？</div>
 <div class="answer">
-<p>三点：(1) 混写会产生「半显式类型」的 Lambda，会<strong>深度影响类型推断与重载决议</strong>；(2) 必须保证<strong>带 <code>var</code> 与不带 <code>var</code> 推断出的类型完全一致</strong>，否则引入源不兼容；(3) 部分推断是更复杂的问题，留给后续 JEP。收益是 JEP 323 声明「零源码不兼容风险」，同时让注解有了落点。</p>
+<p>三点：</p>
+<ol>
+<li>混写会产生「半显式类型」的 Lambda，会<strong>深度影响类型推断与重载决议</strong>；</li>
+<li>必须保证<strong>带 <code>var</code> 与不带 <code>var</code> 推断出的类型完全一致</strong>，否则引入源不兼容；</li>
+<li>部分推断是更复杂的问题，留给后续 JEP。</li>
+</ol>
+<p>收益是 JEP 323 声明「零源码不兼容风险」，同时让注解有了落点。</p>
 <div class="key-point"><strong>关键点</strong>：<code>var</code> 在这里是纯语法糖，不改变任何推断结果，只改变「能不能挂注解」。</div>
 </div>
 </div>

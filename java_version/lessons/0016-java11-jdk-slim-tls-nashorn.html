@@ -107,7 +107,7 @@
 <p>JEP 320 特别点名了这个迁移陷阱：<strong>很多人用 <code>javax.xml.bind.DatatypeConverter</code> 只是为了做 Base64</strong>，删掉后会莫名编译失败。正确做法是用 <strong>Java 8 就有的 <code>java.util.Base64</code></strong>。同理，<code>@Generated</code> 注解应从 <code>javax.annotation.Generated</code> 换成 <strong>JDK 9 引入的 <code>javax.annotation.processing.Generated</code></strong>——两者都在，只是你原来那个被删了。</p>
 </div>
 
-<h3>四维度生产检查（deep-mastery 硬性清单）</h3>
+<h3>四维度生产检查</h3>
 
 <table>
 <tr><th>维度</th><th>本组特性的情况</th></tr>

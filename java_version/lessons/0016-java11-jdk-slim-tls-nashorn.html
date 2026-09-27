@@ -20,7 +20,7 @@
 <div class="article-body">
 <div class="breadcrumb"><a href="../index.html">首页</a> / Java 11 / 模块移除 · TLS 1.3 · Nashorn</div>
 
-<h2>L1 · 概念层：三件「减法」的事</h2>
+<h2>L1 · 概念层：删掉的、补上的、标上记号的</h2>
 
 <p>Java 11 的工具链主题词是<strong>瘦身与止损</strong>：把 JDK 里背了二十年的遗留技术删掉、把安全协议补到最新、把注定要删的引擎先标上记号。</p>
 
@@ -54,7 +54,7 @@
 
 <h3>JEP 335：Nashorn 弃用（为移除做准备）</h3>
 
-<p>JDK 11 把内置的 Nashorn JavaScript 引擎标记为 <strong>deprecated for removal</strong>。<code>jjs</code> 工具与相关 API 从此带删除警告，最终在 <strong>JDK 15（JEP 372）</strong>被移除——JDK 11 之后<strong>没有任何 JDK 版本内置 JS 引擎</strong>。</p>
+<p>JDK 11 把内置的 Nashorn JavaScript 引擎标记为 <strong>deprecated for removal</strong>。<code>jjs</code> 工具与相关 API 从此带删除警告，最终在 <strong>JDK 15（JEP 372）</strong>被移除——<strong>从 JDK 15 起</strong>任何 JDK 版本都不再内置 JS 引擎（11–14 里 Nashorn 一直都在，只是带警告）。</p>
 
 <h2>L2 · 原理层：为什么要删，以及迁移怎么走</h2>
 
@@ -91,7 +91,7 @@
 <h3>迁移对照表（JEP 320 原文给出的 Maven 坐标）</h3>
 
 <table>
-<tr><th>原 JDK 内置</th><th>替代（部署到 classpath）</th></tr>
+<tr><th>原 JDK 内置</th><th>替代（Maven 依赖：API + RI）</th></tr>
 <tr><td><code>java.xml.ws</code>（JAX-WS/SAAJ/Metadata）</td><td>API：<code>javax.xml.ws:jaxws-api</code>、<code>javax.xml.soap:javax.soap-api</code>、<code>javax.xml:webservices-api</code><br/>实现：<code>com.sun.xml.ws:jaxws-ri</code></td></tr>
 <tr><td><code>java.xml.bind</code>（JAXB）</td><td>API：<code>javax.xml.bind:jaxb-api</code><br/>实现：<code>com.sun.xml.bind:jaxb-ri</code></td></tr>
 <tr><td><code>java.activation</code>（JAF）</td><td><code>javax.activation:javax.activation-api</code></td></tr>
@@ -113,7 +113,7 @@
 <tr><th>维度</th><th>本组特性的情况</th></tr>
 <tr><td><strong>并发语义</strong></td><td>不适用（模块/协议/引擎层面改动，无并发模型变化）。但 <strong>TLS 1.3 握手次数减少直接影响连接建立耗时</strong>，长连接池收益可测。</td></tr>
 <tr><td><strong>异常容错</strong></td><td>删模块后典型错误：编译期 <code>程序包 javax.xml.bind 不存在</code>、运行期 <code>NoClassDefFoundError</code> / <code>ClassNotFoundException</code>。TLS 层：<code>SSLHandshakeException</code>（对端不支持 1.3 或 cipher 不匹配时的降级失败）、协议版本被禁用时的 <code>handshake_failure</code>。</td></tr>
-<tr><td><strong>边界判断</strong></td><td>迁移依赖必须<strong>部署到 classpath</strong>（JDK 9 时用 <code>--add-modules</code> 的写法在 11 上直接失效）；<code>javax.transaction.xa</code> 不用迁移；Nashorn 在 11 还能用（只是有警告），<strong>JDK 15 起直接没有</strong>——别把「11 上能跑」当成「以后都能跑」。</td></tr>
+<tr><td><strong>边界判断</strong></td><td>迁移依赖：<strong>API jar 放 classpath 或 module path 都可以</strong>（JEP 320 说 may also be deployed on the module path），但<strong>实现（RI）jar 必须放 classpath</strong>；JDK 9 时用 <code>--add-modules</code> 启用 <strong>JDK 内置版本</strong> 的写法在 11 上彻底失效（模块已不在镜像里，JEP 原文 “No command line flag will be capable of enabling them”）；<code>javax.transaction.xa</code> 不用迁移；Nashorn 在 11 还能用（只是有警告），<strong>JDK 15 起直接没有</strong>——别把「11 上能跑」当成「以后都能跑」。</td></tr>
 <tr><td><strong>性能开销</strong></td><td>JDK 体积与启动内存下降（删掉无用类与工具）；TLS 1.3 首次握手 1-RTT、会话恢复可 0-RTT；但 <strong>0-RTT early data 默认关闭</strong>（有重放攻击面，需显式评估后开启）。</td></tr>
 </table>
 
@@ -140,7 +140,7 @@ flowchart TB
     D --> F[运行期: ClassNotFoundException]
     E --> G[加 Maven 依赖 javax.xml.bind:jaxb-api]
     F --> G
-    G --> H[部署到 classpath<br/>（不是 module path）]
+    G --> H[API jar: classpath 或 module path<br/>实现 RI jar: 必须 classpath]
 </div>
 
 <h3>验证脚本</h3>
@@ -170,7 +170,7 @@ jdeps --jdk-internals --multi-release 11 --recursive app.jar</code></pre>
 
 <table>
 <tr><th>类别</th><th>现象</th><th>处理</th></tr>
-<tr><td>Java EE 模块被删</td><td>JAXB / JAX-WS / JAF / Common Annotations 编译或运行失败</td><td>加 Maven 依赖，部署到 <strong>classpath</strong></td></tr>
+<tr><td>Java EE 模块被删</td><td>JAXB / JAX-WS / JAF / Common Annotations 编译或运行失败</td><td>加 Maven 依赖（<strong>API 上 classpath/module path，RI 实现上 classpath</strong>）</td></tr>
 <tr><td>CORBA 被删</td><td><code>org.omg.*</code>、RMI-IIOP 无法编译</td><td>无官方替代，需改架构</td></tr>
 <tr><td>工具被删</td><td><code>xjc</code> / <code>wsimport</code> / <code>idlj</code> 找不到</td><td>改用 Maven 插件（<code>jaxb2-maven-plugin</code> 等）</td></tr>
 <tr><td><code>rmic</code> 选项被删</td><td><code>-idl</code> / <code>-iiop</code> 不再支持</td><td>不再生成 IDL/IIOP stub</td></tr>
@@ -183,7 +183,7 @@ jdeps --jdk-internals --multi-release 11 --recursive app.jar</code></pre>
 <ol>
 <li>在当前 JDK 上跑 <code>jdeps --jdk-internals</code>，消灭内部 API 依赖</li>
 <li>用 <code>--release 8</code> 编译，再切 <code>--release 11</code>，把报错分类：删模块 / 内部 API / 语言变更</li>
-<li>给 JAXB/JAX-WS 等补齐 Maven 依赖（注意是 <strong>classpath</strong>，不是 module path）</li>
+<li>给 JAXB/JAX-WS 等补齐 Maven 依赖（<strong>API jar 上 classpath 或 module path 均可；实现 RI jar 按 JEP 320 必须放 classpath</strong>）</li>
 <li>Base64 换 <code>java.util.Base64</code>，<code>@Generated</code> 换 <code>javax.annotation.processing.Generated</code></li>
 <li>审计 TLS：<code>jdk.tls.client.protocols</code>、禁用协议与 cipher 白名单是否仍指向 SSLv3/TLSv1.0</li>
 <li>审计脚本引擎：任何 <code>ScriptEngineManager</code> 调用都标记为待迁移</li>
@@ -196,7 +196,7 @@ jdeps --jdk-internals --multi-release 11 --recursive app.jar</code></pre>
 <ul>
 <li>Java 9 的 <strong>JPMS 强封装</strong>是前提：正因为 9 就把 Java EE 模块「从 classpath 编译的默认解析中剔除」，11 才能干净地删掉它们（JEP 320 原文强调了这一点）。</li>
 <li>Java 10 的 <strong>JEP 304 GC 接口 + JEP 312 Handshakes</strong> 是 ZGC/Epsilon 的依赖。</li>
-<li>Java 11 的 <strong>HTTP Client</strong> 经历了 9（JEP 110）、10（JEP 162）两轮孵化才转正——<strong>孵化模块（<code>jdk.incubator.*</code>）随时可能变</strong>，这就是 incubator 存在的意义。</li>
+<li>Java 11 的 <strong>HTTP Client</strong> 走了三步才转正：9（JEP 110，<code>jdk.incubator.http</code> 孵化）→ 10（实现更新，<strong>没有独立 JEP</strong>）→ 11（JEP 321 进入 <code>java.net.http</code>）。<strong>孵化模块（<code>jdk.incubator.*</code>）随时可能变</strong>，这就是 incubator 存在的意义。</li>
 </ul>
 
 <h2>L5 · 面试层：追问链</h2>
@@ -212,7 +212,7 @@ jdeps --jdk-internals --multi-release 11 --recursive app.jar</code></pre>
 <div class="qa-block">
 <div class="question">Q2: 追问 — 老项目从 JDK 8 升到 11，报 <code>ClassNotFoundException: javax.xml.bind.JAXBContext</code>，怎么处理？为什么不能用 <code>--add-modules</code>？</div>
 <div class="answer">
-<p>处理：把 JAXB 作为<strong>普通依赖加到 classpath</strong>——API 用 <code>javax.xml.bind:jaxb-api</code>，实现用 <code>com.sun.xml.bind:jaxb-ri</code>。不能用 <code>--add-modules</code> 的原因是 JEP 320 的原文规定：<strong>模块的类不再存在于 JDK 运行时镜像中，没有任何命令行开关能启用它们</strong>。<code>--add-modules</code> 只能解析「已存在」的模块，解析不了已被删除的模块；它只在 JDK 9/10 对这些模块有效。</p>
+<p>处理：把 JAXB 作为<strong>普通依赖加上</strong>——API 用 <code>javax.xml.bind:jaxb-api</code>，实现用 <code>com.sun.xml.bind:jaxb-ri</code>。<strong>API jar 放 classpath 或 module path 都行</strong>（JEP 320 明说 may also be deployed on the module path），<strong>实现 RI jar 要放 classpath</strong>。不能用 <code>--add-modules</code> 的原因是 JEP 320 的原文规定：<strong>模块的类不再存在于 JDK 运行时镜像中，没有任何命令行开关能启用它们</strong>（"No command line flag will be capable of enabling them"）。<code>--add-modules</code> 只能解析「已存在」的模块，解析不了已被删除的模块；它只在 JDK 9/10 对这些模块有效。</p>
 <div class="key-point"><strong>关键点</strong>：9/10 是「存在但默认不解析」，11 是「根本不存在」——这是量变到质变。</div>
 </div>
 </div>
@@ -242,6 +242,63 @@ elif ScriptEngineManager 取 "js" 返回 null:
 </div>
 </div>
 
+<div class="qa-block">
+<div class="question">Q5: 追问 — <code>--add-modules</code>、<code>--add-exports</code>、<code>--add-opens</code>、classpath 分别解决什么问题？</div>
+<div class="answer">
+<p>四者的输入不同，不能互相替代：</p>
+<ol>
+<li><strong>classpath</strong>：装「JDK 之外的代码」。JEP 320 删掉的模块只能靠它——类必须重新以 jar 形式提供；</li>
+<li><strong><code>--add-modules</code></strong>：告诉模块系统「额外解析哪个<strong>已存在</strong>的模块」。JDK 9/10 用它启用 <code>java.xml.bind</code>，11 上模块已删除，<strong>解析不了</strong>（“No command line flag will be capable of enabling them”）；</li>
+<li><strong><code>--add-exports</code></strong>：<strong>编译期/运行期把某个包导出</strong>给指定模块，用来访问「存在但未导出」的内部包（<code>jdk.internal.*</code>）；</li>
+<li><strong><code>--add-opens</code></strong>：<strong>运行期打开深反射</strong>，让 <code>setAccessible(true)</code> 能过强封装（典型报错 <code>InaccessibleObjectException</code>，JDK 16 起默认更严）。</li>
+</ol>
+<div class="key-point"><strong>关键点</strong>：删掉的用 classpath 找回；没导出的用 exports；打不开的用 opens；只在「模块还在」时才轮得到 add-modules。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 追问 — 升到 11 后出现 <code>SSLHandshakeException</code>，怎么定位？</div>
+<div class="answer">
+<p>JDK 11 默认协议集与算法白名单都变了，按这个顺序查：</p>
+<ol>
+<li><strong>先看对端支持什么</strong>：JDK 11 默认启用 TLS 1.3，老服务端/中间盒只认 1.2 时会协商失败，报 <code>handshake_failure</code>；</li>
+<li><strong>看本地是否把协议禁过头</strong>：<code>-Djdk.tls.client.protocols=TLSv1.2</code> 或 <code>jdk.tls.disabledAlgorithms</code>（<code>java.security</code> 里）仍写着 SSLv3/TLSv1/TLSv1.1 时，客户端根本不会发起；</li>
+<li><strong>看 cipher 白名单</strong>：TLS 1.3 的 4 组 cipher 与 1.2 不共用，白名单写死旧集合会导致无共同 cipher；</li>
+<li><strong>0-RTT 不要顺手开</strong>：early data 有重放攻击面，<strong>默认关闭</strong>，必须评估幂等性后再开；</li>
+<li>拿不到细节时开 <code>-Djavax.net.debug=ssl:handshake</code> 看协议与 cipher 协商全过程。</li>
+</ol>
+<div class="key-point"><strong>关键点</strong>：1.3 不是「打开就好」——它是默认开的，问题多出在「老配置白名单太窄」与「对端不支持」。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q7: 追问 — Nashorn 被弃用/删除后，代码里的 JS 引擎怎么迁？</div>
+<div class="answer">
+<p>按「先看还剩多久、再看要不要 JS」两条线走：</p>
+<ul>
+<li><strong>时间线</strong>：JDK 11 标记 <code>@Deprecated(forRemoval)</code> 并输出警告 → <strong>JDK 15（JEP 372）删除</strong>，之后 <code>ScriptEngineManager.getEngineByName("js")</code> 返回 <code>null</code>（注意是「返回 null」，不是抛异常）；</li>
+<li><strong>短期止血</strong>：仍在 11–14 上时可用 <code>jjs</code> 跑脚本，但把它当作待清理项；</li>
+<li><strong>替代一：GraalJS</strong>——<code>org.graalvm.js:js</code>，可作 <code>ScriptEngine</code>（<code>engine=nashorn</code> 兼容层）嵌入，也可上 GraalVM；</li>
+<li><strong>替代二：独立 Nashorn</strong>——OpenJDK 后来以 standalone 项目（<code>org.openjdk.nashorn:nashorn-core</code>）继续发布，代码改动最小；</li>
+<li><strong>替代三（推荐）</strong>：脚本改成 Java/Kotlin，或换 JSON/规则引擎等声明式方案——JS 在服务端本来就是遗留。</li>
+</ul>
+<div class="key-point"><strong>关键点</strong>：先判「<code>getEngineByName</code> 会不会是 null」，再决定是加依赖还是删功能。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q8: 追问 — 被删的 8 个工具分别怎么补？</div>
+<div class="answer">
+<p>JEP 320 删掉的工具是 <code>wsgen</code>、<code>wsimport</code>、<code>schemagen</code>、<code>xjc</code>、<code>idlj</code>、<code>orbd</code>、<code>servertool</code>、<code>tnamesrv</code>，分两类：</p>
+<ol>
+<li><strong>有 Maven 替代</strong>：<code>xjc</code>/<code>schemagen</code> → <code>com.sun.xml.bind:jaxb-xjc</code>、<code>jaxb-jxc</code>（或直接用 <code>jaxb2-maven-plugin</code> / <code>jaxb-maven-plugin</code> 在构建期生成）；<code>wsgen</code>/<code>wsimport</code> → <code>com.sun.xml.ws:jaxws-tools</code>；</li>
+<li><strong>没有官方替代</strong>：<code>idlj</code>、<code>orbd</code>、<code>servertool</code>、<code>tnamesrv</code> 全属 CORBA——要么引入第三方 ORB（如 GlassFish CORBA 一系），要么改设计去掉 CORBA。</li>
+</ol>
+<p>共同点：<strong>这些不再是 JDK 的职责</strong>，全部转交给构建工具或第三方，这正是 JEP 320「把 EE 子集还给生态」的意图。</p>
+<div class="key-point"><strong>关键点</strong>：JAXB/JAX-WS 有现成替代，CORBA 没有——所以「要不要保留 CORBA」是升级时唯一需要架构决策的一条。</div>
+</div>
+</div>
+
 <div class="deep-grill-readiness">
 <h4>本课 Deep-Grill 就绪度</h4>
 <ul>
@@ -249,6 +306,8 @@ elif ScriptEngineManager 取 "js" 返回 null:
 <li class="done">能解释「为什么删而不是继续同步维护」（architect 角度）</li>
 <li class="done">能写出升级失败的分类诊断伪代码（追问链要求）</li>
 <li class="done">能指出 Base64/@Generated 这类隐蔽迁移点（code reviewer 角度）</li>
+<li class="done">能分清 classpath / add-modules / add-exports / add-opens 四者边界（追问链要求）</li>
+<li class="done">能排查 TLS 1.3 协商失败并给出 Nashorn 迁移路径（incident responder 角度）</li>
 <li>能排查 JAXB 的 ClassNotFoundException 与 TLS 的 SSLHandshakeException（incident responder 角度）</li>
 <li>能用大白话讲清「9 是不解析、11 是不存在」（instructor 角度）</li>
 </ul>

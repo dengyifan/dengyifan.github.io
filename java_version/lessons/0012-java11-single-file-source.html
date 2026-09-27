@@ -41,6 +41,50 @@ ls: Hello*.class: No such file or directory</code></pre>
 <p>两条命令走完全程：<code>cat</code> 写文件、<code>java</code> 跑文件。程序参数跟在文件名之后原样传给 <code>main</code>，编译在内存里完成、进程退出即消失，目录里一个 <code>.class</code> 都不会多。</p>
 </div>
 
+<h3>为什么引入它：三类场景，以及被省掉的「仪式感」</h3>
+
+<p>JEP 330 的 Motivation 很短，但把动机说透了：<strong>整段程序塞得进一个源文件</strong>的情况，在 Java 学习早期和写小工具时极其常见；在这些场合里，「先编译再运行」是 <em>pure ceremony</em>（纯仪式感）；而且单文件往往声明多个类，编译后得到一堆 <code>.class</code>，对「把这个程序跑起来」这个简单目标来说，这等于额外的打包负担。于是有了 <code>java HelloWorld.java</code>。</p>
+
+<div class="java-comparison">
+<div class="header">三类真实场景</div>
+<ul>
+<li><strong>入门与教学</strong>：第一次写 Java 的人要同时记住 <code>javac Hello.java</code>、<code>java Hello</code>、classpath、<code>Hello.class</code> 到底跑哪去了——命令行的仪式感比语言本身还多，很多人的第一步就卡在这里（也正因如此，这条特性几乎是所有「Java 入门」文档的第一课）。</li>
+<li><strong>一次性小工具</strong>：探活、日志切分、批量重命名、生成示例数据、复现一个 bug……写完跑一次就扔，为它建工程目录和构建配置是纯亏。</li>
+<li><strong>可执行脚本位</strong>：希望像 <code>./check.sh</code>、<code>python x.py</code> 那样把文件放进 PATH 直接执行（Unix <code>#!</code>），写 cron、CI 步骤、运维脚本时不必先拼一段 <code>javac X.java &amp;&amp; java -cp . X</code> 的样板。</li>
+</ul>
+</div>
+
+<p>对应地，这个特性<strong>解决了四个问题</strong>：</p>
+
+<ol>
+<li><strong>两步压成一步</strong>：<code>java Hello.java</code> 一条命令完成编译 + 运行，不用先跑 <code>javac</code>，也不用手拼 <code>--class-path</code>。</li>
+<li><strong>磁盘零产物</strong>：编译进内存、进程结束即消失——单文件里的多个类也不会留下一堆 <code>.class</code> 残骸（对照上面 demo 的 <code>ls Hello*.class</code>）。</li>
+<li><strong>给 Java 补上脚本入口</strong>：macOS / Linux 上用 <code>#!</code> + <code>--source</code> 就能把 Java 源文件当脚本跑，与 shell、Python 小脚本同位竞争（可运行模板见 L4「shebang 脚本」）。</li>
+<li><strong>一次性程序默认收紧</strong>：禁用注解处理（<code>-proc:none</code>）、source path 置空、只透传白名单选项——「跑一下」不该被隐藏的构建配置影响（完整清单见 L2 硬约束表）。</li>
+</ol>
+
+<div class="java-comparison">
+<div class="header">为什么不选替代方案（JEP 330 Alternatives 一节的逐条否决）</div>
+<table>
+<tr><th>替代方案</th><th>否决理由（JEP 原文大意）</th></tr>
+<tr><td>维持现状：「二十多年都是 <code>javac</code> + <code>java</code> 两步」</td><td>代价原封不动地留给每个学习者和每个小工具，仪式感没有消失，只是被习惯掩盖</td></tr>
+<tr><td>用 <code>//!</code> 代替 <code>#!</code></td><td>编译器天然把它当普通注释，不必特殊处理；但要在 macOS/Linux 上引入新的 magic number，<strong>得改操作系统</strong>，超出本 JEP 范围</td></tr>
+<tr><td>shell 脚本 + here-document 把 Java 源码喂给 source launcher</td><td>确实更灵活，但简单场景下的 overhead 比 shebang 还大——为「省事」又加了一层壳</td></tr>
+<tr><td>另起一个启动器（比如叫 <code>jrun</code>）</td><td>启动器已经有 3 种模式，再立门户会被看成 gratuitous difference（无谓的差异），徒增记忆成本</td></tr>
+<tr><td>交给 jshell 跑一次性代码</td><td>jshell 的设计目标是<strong>交互式</strong>，批处理是它的显式非目标——详见下方 note</td></tr>
+<tr><td>用 <code>jrunscript</code></td><td>与运行环境交互的能力很有限，而且解决不了「用 Java 做入门」的诉求</td></tr>
+</table>
+</div>
+
+<div class="tip">
+<div class="tip-title">它刻意没做什么（JEP 330 Non-Goals）</div>
+<ul>
+<li>不改 JLS，也不为 shebang 去改 <code>javac</code> 的语义；</li>
+<li><strong>不把 Java 演变成通用脚本语言</strong>——例如不要求省掉 <code>public static void main(String[] args)</code> 这行仪式；</li>
+<li>不做依赖管理，也不支持多文件程序（多文件要等 JEP 458，Java 22 才部分解决，见 L4 限制表）。</li>
+</ul>
+</div>
+
 <h3>JEP 330：java 启动器的第四种模式</h3>
 
 <p>在此之前，<code>java</code> 启动器只有三种模式。JEP 330 加了第四种：</p>
@@ -145,8 +189,23 @@ java -cp &lt;memory&gt; Factorial 3 4 5</code></pre>
 <tr><td><strong>并发语义</strong></td><td>单次运行、单 main 线程；编译在启动线程内同步完成，编译产物只存于内存 <code>Map&lt;String,byte[]&gt;</code>，无跨进程共享，不存在并发写入问题。</td></tr>
 <tr><td><strong>异常容错</strong></td><td>编译报错 → 错误信息写 stderr、<strong>非零退出码</strong>；<code>main</code> 抛异常 → 启动器会<strong>剥掉到 main 为止的 launcher 栈帧</strong>，让堆栈看起来像直接执行；<code>System.exit</code> 正常传播。</td></tr>
 <tr><td><strong>边界判断</strong></td><td>classpath 同名类冲突；文件不存在 / 非 <code>.java</code> 且无 <code>--source</code>；第一个顶层类没有 <code>public static void main</code>。</td></tr>
-<tr><td><strong>性能开销</strong></td><td><strong>每次运行都从零编译，无任何缓存</strong>（这正是 JEP 458「多文件模式」仍未解决的痛点）。启动开销 ≈ 一次 javac + 一次 JVM 起动。</td></tr>
+<tr><td><strong>性能开销</strong></td><td><strong>每次运行都从零编译，无任何缓存</strong>（JEP 458 的多文件模式也没提供缓存）。启动开销 ≈ 一次 javac + 一次 JVM 起动，见下方实测。</td></tr>
 </table>
+
+<div class="production-note">
+<div class="header">启动开销实测（macOS · OpenJDK 25.0.1 · i7-8850H · 同一空程序取 3 次中位）</div>
+<table>
+<tr><th>方式</th><th>命令</th><th>耗时</th><th>说明</th></tr>
+<tr><td>source-file 模式</td><td><code>java Bench.java</code></td><td><strong>0.68 s</strong></td><td>编译 + JVM 起动合在一次进程里</td></tr>
+<tr><td>手跑两步</td><td><code>javac Bench.java</code> → <code>java Bench</code></td><td>0.76 s + 0.05 s ≈ <strong>0.81 s</strong></td><td>两次进程启动，首跑反而更慢</td></tr>
+<tr><td>已编译 class</td><td><code>java Bench</code></td><td><strong>0.05 s</strong></td><td>重复执行比 source-file 快 <strong>13×</strong></td></tr>
+<tr><td>可执行 jar</td><td><code>java -jar bench.jar</code></td><td><strong>0.06 s</strong></td><td>与直接跑 class 同量级</td></tr>
+</table>
+<ul>
+<li>一次性任务里 <code>java X.java</code> <strong>不比手跑 javac+java 慢</strong>（省掉一次 JVM 冷启动），别为了「快一点」先手动编译。</li>
+<li>真正的差距在<strong>重复执行</strong>：每次都 0.68 s vs 0.05 s。cron/调度器/CI 里要跑很多次的脚本，先 <code>javac</code> 或打包成 jar 再调。</li>
+</ul>
+</div>
 
 <h3>Lambda var 的全有或全无：判定伪代码</h3>
 
@@ -410,13 +469,24 @@ if (mainMethod == null) {
 // 3) 还没有 → Fault("CantFindMainMethod")
 // 4) main 非 static → 反射 new 无参构造后再调用（实例方法 main 也被容忍）</code></pre>
 
+<div class="java-comparison">
+<div class="header">真实反例：第一个顶层类没有 main</div>
+<pre><code>// 文件 Two.java
+class A { }                                   // 第一个顶层类：没有 main
+class B { public static void main(String[] x) { System.out.println("B"); } }
+
+$ java Two.java
+错误: 找不到类：Two</code></pre>
+<p>关键在判定顺序：启动器<strong>先认第一个顶层类</strong>，而不是挨个类找谁有 main。第一个类没有 main 时回退目标是「与文件同名的类」，而 <code>Two</code> 这个类并不存在 → 直接 <code>CantFindClass</code>，<code>B.main</code> 从头到尾没被看一眼。把文件改名为 <code>A.java</code> 又会变成另一种错：<code>A</code> 存在但没有 main → <code>CantFindMainMethod</code>。</p>
+</div>
+
 <h2>L4 · 边界层：限制、坑与最佳实践</h2>
 
 <h3>source-file 模式不能做什么</h3>
 
 <table>
 <tr><th>限制</th><th>原因</th><th>绕法</th></tr>
-<tr><td><strong>只能单文件</strong></td><td>JEP 330 标题即 <em>Single-File</em>；源文件里声明的类对 classpath 不可见</td><td>多文件场景等 <strong>JEP 458</strong>（Java 24 起的 multi-file source-code mode），或回退到 javac + java</td></tr>
+<tr><td><strong>只能单文件</strong></td><td>JEP 330 标题即 <em>Single-File</em>；源文件里声明的类对 classpath 不可见</td><td>多文件场景等 <strong>JEP 458</strong>（<strong>Java 22</strong> 起的 multi-file source-code mode）；但它仍有 non-goal：shebang 依旧只支持单文件、依旧不提供编译缓存</td></tr>
 <tr><td>不能传 <code>-processor</code> / <code>-Werror</code></td><td>没有 javac 选项透传通道</td><td>用 javac 单独编译</td></tr>
 <tr><td>注解处理被强制关闭</td><td><code>-proc:none</code></td><td>Lombok / MapStruct 等不可用</td></tr>
 <tr><td>classpath 同名类冲突 → 直接报错</td><td>防止「跑错版本」</td><td>改名或清理 classpath</td></tr>
@@ -429,11 +499,50 @@ if (mainMethod == null) {
 <div class="header">生产环境建议</div>
 <ul>
 <li>✅ 适合：一次性运维脚本、教学演示、CI 里的健康检查、快速复现 bug</li>
-<li>❌ 不适合：有依赖的项目（依赖管理不在 JEP 330 范围内）、需要注解处理的代码、高频调度的短任务</li>
+<li>❌ 不适合：需要<strong>依赖管理</strong>的项目——<code>--class-path lib.jar</code> 能直接带入<strong>单个</strong> jar（实测可跑第三方类），但没有传递依赖、没有版本解析、没有 lock 文件，这些仍归 Maven/Gradle；同理不适合需要注解处理的代码、高频调度的短任务</li>
 <li>⚠️ shebang 脚本记得 <code>chmod +x</code>，并且<strong>首行第一个参数必须是 <code>--source</code></strong>（JEP 330 规定：若要带 VM 选项，<code>--source</code> 必须紧跟在可执行文件名之后）</li>
 <li>⚠️ <code>--source N</code> 会作为 <code>--release N</code> 生效：<strong>同时限制语言版本和可调用的 JDK API</strong>。写 <code>--source 8</code> 就不能用 <code>List.of()</code></li>
 </ul>
 </div>
+
+<div class="java-comparison">
+<div class="header">实测：<code>--source 8</code> 的报错长什么样</div>
+<pre><code>$ java --source 8 S8.java
+S8.java:2: 错误: 找不到符号
+class S8 { public static void main(String[] x){ System.out.println(List.of("a")); } }
+                                                                       ^
+  符号:   方法 of(String)
+  位置: 接口 List
+1 个错误
+错误: 编译失败</code></pre>
+<p><code>List.of</code> 是 Java 9 的 API，<code>--source 8</code> 同时锁死语言版本与可调用的 API 范围（等价 <code>--release 8</code>），于是 API 检查在编译期直接拦下。想用新 API 就得把 <code>--source</code> 提上去——它不是「随便写个数字占位」的参数。</p>
+</div>
+
+<h3>shebang 脚本：可运行模板与四个坑</h3>
+
+<div class="production-note">
+<div class="header">模板（文件名不要带 .java）</div>
+<pre><code>#!/usr/bin/env -S java --source 11
+import java.util.List;
+
+class DiskUsage {                            // 建议不写 public：脚本文件名与类名本就不同
+    public static void main(String[] args) {
+        System.out.println(args.length + " " + List.of(args));   // --source 11 → Java 11 API 可用
+    }
+}
+
+$ chmod +x disk-usage
+$ ./disk-usage 服务器A 服务器B
+2 [服务器A, 服务器B]</code></pre>
+</div>
+
+<ul>
+<li><strong>为什么必须 <code>env -S</code></strong>：Linux 内核按 <code>execve(2)</code> 只把解释器后面的整串当<strong>一个</strong>参数传入，<code>--source 11</code> 两个词会粘成 <code>"--source 11"</code> 一个选项，JVM 报 unrecognized；<code>env -S</code> 的职责就是把这串按空格拆开再 exec。macOS/BSD 会自行拆分参数，实测不带 <code>-S</code> 也能跑——<strong>统一写成 <code>-S</code> 形式可跨平台</strong>。</li>
+<li><strong>不依赖 PATH 的绝对路径写法</strong>：<code>#!/Library/Java/JavaVirtualMachines/temurin-11.jdk/Contents/Home/bin/java --source 11</code>。路径里<strong>不要有空格</strong>，且各机器 JDK 位置不同，通常仍交给 <code>env</code>。</li>
+<li><strong>PATH 坑（本机实测）</strong>：PATH 上的 <code>java</code> 是 1.8 时执行脚本直接 <code>Unrecognized option: --source</code> + <code>Error: Could not create the Java Virtual Machine</code>——JDK 8 根本不认识这个选项。排查顺序：<code>head -1 脚本</code> → <code>which java</code> → <code>java -version</code>。</li>
+<li><strong>参数与类名</strong>：<code>./disk-usage A B</code> → <code>args = ["A", "B"]</code>，<strong>不含脚本名</strong>，shebang 行的选项也不进 args；实测脚本名与 <code>public class</code> 不一致也能跑（source-file 模式放宽了 JLS §7.6 同名要求），但仍建议不加 <code>public</code>，避免同一份源码被 javac 单独编译时报错。</li>
+<li><strong>Windows 没有 shebang 机制</strong>：用 <code>java --source 11 script</code> 显式调用，或配文件关联 / <code>.bat</code>。</li>
+</ul>
 
 <h3>Lambda var 的边界清单</h3>
 
@@ -496,6 +605,61 @@ else:                              → 按 class/jar/module 老规则</code></pr
 </ol>
 <p>收益是 JEP 323 声明「零源码不兼容风险」，同时让注解有了落点。</p>
 <div class="key-point"><strong>关键点</strong>：<code>var</code> 在这里是纯语法糖，不改变任何推断结果，只改变「能不能挂注解」。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: 追问 — shebang 脚本怎么写？为什么非加 <code>env -S</code>？</div>
+<div class="answer">
+<ol>
+<li>首行 <code>#!/usr/bin/env -S java --source 11</code>，<strong>第一个参数必须是 <code>--source</code></strong>（JEP 330：若要带 VM 选项，<code>--source</code> 紧跟在可执行文件名之后）。</li>
+<li>文件名<strong>不带 <code>.java</code></strong>；遵循 <code>.java</code> 命名规范的文件反而<strong>禁止</strong>有 shebang 首行。</li>
+<li><code>chmod +x</code> 后 <code>./script 参数…</code>，<code>args</code> 里<strong>只有脚本参数、没有脚本名</strong>。</li>
+<li><code>env -S</code> 的作用是把解释器后面那串按空格拆开：Linux 的 <code>execve(2)</code> 只允许一个附加参数，不拆就会传给 JVM 一个粘住的 <code>"--source 11"</code>；macOS/BSD 会自己拆，实测不带 <code>-S</code> 也能跑，统一写 <code>-S</code> 才跨平台。</li>
+<li>PATH 上的 <code>java</code> 版本决定成败：指向 JDK 8 时直接 <code>Unrecognized option: --source</code>；求稳可写绝对路径 <code>#!/&lt;jdk&gt;/bin/java --source 11</code>（路径不能有空格）。</li>
+<li>Windows 没有 shebang 机制，改用 <code>java --source 11 script</code>。</li>
+</ol>
+<div class="key-point"><strong>关键点</strong>：shebang 是「文件名非 .java」这条模式判定的配套产物，<code>--source</code> 既是语法版本又是 API 版本。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 追问 — <code>java --class-path lib.jar Script.java</code> 能跑吗？这算不算「支持依赖」？</div>
+<div class="answer">
+<p>能跑（实测带第三方 jar 输出正常），但这和「依赖管理」是两件事：</p>
+<ul>
+<li><strong>能做</strong>：把<strong>已下载好的</strong>单个 jar 或目录塞进 classpath，源文件里直接 import 其中的类；<code>--class-path '*'</code> 可把当前目录下所有 jar 一起带上。</li>
+<li><strong>不能做</strong>：传递依赖（jar A 依赖 jar B，需要你自己把 B 也带上）、版本解析与冲突仲裁、lock/复现构建——这些仍然归 Maven/Gradle。</li>
+<li><strong>看不见的边界</strong>：内存里编出的类对 classpath 不可见，classpath 上的源码类也不会自动编译进来（JEP 458 的多文件模式才引入「源码树优先于 classpath」的查找规则）。</li>
+<li><strong>仍然关闭</strong>：<code>-proc:none</code>，Lombok/MapStruct 这类注解处理器依旧不可用。</li>
+</ul>
+<div class="key-point"><strong>关键点</strong>：JEP 330 的定位是「无构建配置的一次性小程序」，它给你 classpath 的入口，但不替你解决依赖图。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q7: 追问 — 源文件第一个顶层类没有 <code>main</code> 会怎样？启动类怎么定？</div>
+<div class="answer">
+<ol>
+<li>先看<strong>第一个顶层类</strong>有没有标准 <code>main</code>（public/static 可有豁免，非 static 也容忍），有就用它。</li>
+<li>没有 → 回退到<strong>与文件同名的那个顶层类</strong>；该类必须存在，否则 <code>CantFindClass</code>。实测 <code>Two.java</code>（A 无 main、B 有 main）→ <code>错误: 找不到类：Two</code>——<code>B.main</code> 根本没机会被发现。</li>
+<li>类存在但仍无 main → <code>CantFindMainMethod</code>；<code>main</code> 抛异常时启动器会剥掉到 main 为止的 launcher 栈帧。</li>
+<li>JEP 458（Java 22）把同一套顺序用到了多文件场景：首个顶层类有标准 main 就用，否则找同名类，否则报错；启动类名用包名 + 文件路径推出。</li>
+</ol>
+<div class="key-point"><strong>关键点</strong>：是「先认第一个类，再退回文件名」，不是「挨个类找谁有 main」。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q8: 追问 — source-file 模式有编译缓存吗？高频调度为什么不合适？JEP 458 解决了吗？</div>
+<div class="answer">
+<ul>
+<li><strong>没有缓存</strong>：每次 <code>java X.java</code> 都从零编译，产物只进内存 <code>Map&lt;String,byte[]&gt;</code>，进程结束即丢。实测：source-file 0.68 s vs 已编译 class 0.05 s（13×），但一次性执行时它比手跑 <code>javac+java</code>（≈0.81 s）还快——省的是一次 JVM 冷启动。</li>
+<li><strong>高频调度为什么不适合</strong>：省不掉的 0.68 s 编译在每次触发时重复支付，1 分钟一次的任务里约 1% 的时间花在重复编译；再加上无法预编译做启动失败的提前拦截。</li>
+<li><strong>JEP 458 没解决</strong>：它解决的是「一个源文件写多个类/包」（按需延迟编译，甚至可能在程序已开始执行后才报编译错），non-goal 里明确不包含编译缓存，也不包含 shebang 多文件。</li>
+<li><strong>正确姿势</strong>：cron/调度器里的脚本先 <code>javac</code> 或打 jar，用 <code>java -cp ...</code> 调；开发期的临时脚本才用 <code>java X.java</code>。</li>
+</ul>
+<div class="key-point"><strong>关键点</strong>：单文件模式买的是「零配置」，不是「免费编译」——重复执行的次数一多，就把编译成本按次付清。</div>
 </div>
 </div>
 

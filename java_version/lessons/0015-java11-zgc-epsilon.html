@@ -22,14 +22,14 @@
 
 <h2>L1 · 概念层：一个求「最快停顿」，一个求「完全不停顿」</h2>
 
-<p>Java 11 同时引入了两个方向相反的实验性 GC，它们共同依赖 <a href="./0010-java10-thread-local-handshake.html">Java 10 的 JEP 304（GC 接口）</a> 和 <a href="./0010-java10-thread-local-handshake.html">JEP 312（Thread-Local Handshakes）</a>：</p>
+<p>Java 11 同时引入了两个方向相反的实验性 GC。它们与 <a href="./0010-java10-thread-local-handshake.html">Java 10 的 JEP 304（GC 接口）</a>、<a href="./0010-java10-thread-local-handshake.html">JEP 312（Thread-Local Handshakes）</a> 的关系并不对等：<strong>Epsilon 只是 JEP 304 接口的一个「空实现」</strong>，而 <strong>ZGC 既建立在 JEP 304 之上，也用到了 JEP 312 的握手机制</strong>（并发周期里替代全局 Safepoint）：</p>
 
 <table>
 <tr><th></th><th>ZGC（JEP 333）</th><th>Epsilon（JEP 318）</th></tr>
 <tr><td>一句话</td><td><strong>可伸缩的低延迟收集器</strong></td><td><strong>只分配、不回收的 no-op 收集器</strong></td></tr>
 <tr><td>回收</td><td>并发标记 + 并发重定位，全程几乎不 STW</td><td>永不回收；堆满即 <code>OutOfMemoryError</code></td></tr>
 <tr><td>核心机制</td><td>着色指针（colored pointers）+ 加载屏障（load barrier）</td><td>线性分配 + 空屏障集（no-op barrier set）</td></tr>
-<tr><td>目标</td><td>停顿 &lt; 10ms；吞吐相对 G1 降幅 ≤ 15%</td><td>延迟开销趋近于 0，用内存换</td></tr>
+<tr><td>目标</td><td>停顿 &lt; 10ms；吞吐相对 G1 降幅 ≤ 15%</td><td>延迟开销趋近于 0：<strong>用空间换「完全不跑 GC」</strong></td></tr>
 <tr><td>定位</td><td>生产方向（当时为 experimental）</td><td>测试/基准/短任务工具</td></tr>
 <tr><td>启用</td><td><code>-XX:+UnlockExperimentalVMOptions -XX:+UseZGC</code></td><td><code>-XX:+UnlockExperimentalVMOptions -XX:+UseEpsilonGC</code></td></tr>
 <tr><td>平台</td><td>JDK 11 仅 <strong>Linux/x64</strong></td><td>跨平台（纯共享代码）</td></tr>
@@ -44,9 +44,16 @@
 
 <h3>ZGC：着色指针 + 加载屏障</h3>
 
-<p>JEP 333 的原话：<em>“A core design principle/choice in ZGC is the use of load barriers in combination with colored object pointers.”</em></p>
+<p>JEP 333 的原话：<em>“A core design principle/choice in ZGC is the use of load barriers in combination with colored object pointers (i.e., colored oops).”</em></p>
 
-<p><strong>着色指针</strong>：把 64 位引用拆成三段——低段是<strong>对齐偏移</strong>（4 字节粒度），中段是 <strong>4 bit 元数据</strong>（<code>Marked0</code> / <code>Marked1</code> / <code>Remapped</code> / <code>Finalizable</code>），高段是<strong>真实地址</strong>。元数据位不描述「对象在哪」，而描述「这个引用处于哪种视图/状态」。</p>
+<p><strong>着色指针</strong>：把 64 位引用拆成几段（<code>os_cpu/linux_x86/gc/z/zGlobals_linux_x86.hpp</code> 注释原文）：</p>
+<ul>
+<li><strong>41–0 位（42 bit）</strong>：对象偏移，对应 4TB 的地址空间；</li>
+<li><strong>45–42 位（4 bit）</strong>：元数据 <code>Marked0</code> / <code>Marked1</code> / <code>Remapped</code> / <code>Finalizable</code>；</li>
+<li><strong>46 位</strong>：保留位，恒为 0；</li>
+<li><strong>63–47 位（17 bit）</strong>：固定位，恒为 0。</li>
+</ul>
+<p>所以 <strong>高位不是「真实地址」</strong>——地址段由元数据位决定：四个视图各占 4TB（Marked0 在 4–8TB、Marked1 在 8–12TB、Remapped 在 16–20TB），三视图 <strong>multi-mapping 到同一批物理页</strong>，总共预留 16TB（<code>(1 &lt;&lt; 42) * 4</code>）。元数据位不描述「对象在哪」，而描述「这个引用处于哪种视图/状态」。</p>
 
 <p><strong>加载屏障</strong>：Java 线程每次<strong>读取</strong>一个引用字段时都会过一道 <code>LoadReferenceBarrier</code>。屏障检查指针的元数据位，若发现「这是个坏指针（BadMask）」就地修正（heal）——比如把指向已重定位对象的旧地址改写为新地址。这就是 ZGC 能<strong>让应用线程和重定位并发跑</strong>的原因：不需要 STW 去统一改指针，谁读到旧的谁负责修。</p>
 
@@ -66,7 +73,7 @@ flowchart TB
 <tr><th>ZGC 设计目标（JEP 333 原文）</th><th>数值</th></tr>
 <tr><td>GC 停顿</td><td><strong>不超过 10ms</strong>（SPECjbb 2015 实测 avg 1.09ms，max 1.68ms；G1 avg 156.8ms，max 543.8ms）</td></tr>
 <tr><td>堆规模</td><td>几百 MB 到 <strong>数 TB</strong></td></tr>
-<tr><td>吞吐损失</td><td>相对 G1 <strong>不超过 15%</strong>（实测 max-jOPS 100% vs 91.2%，critical-jOPS 76.1% vs 54.7%）</td></tr>
+<tr><td>吞吐损失</td><td>相对 G1 <strong>不超过 15%</strong>（实测 max-jOPS 100% vs 91.2%，critical-jOPS 76.1% vs 54.7%；composite 模式、128G 堆）</td></tr>
 <tr><td>初始平台</td><td>Linux/x64</td></tr>
 </table>
 
@@ -78,8 +85,8 @@ flowchart TB
 <tr><th>机制</th><th>实现</th></tr>
 <tr><td>分配</td><td>单块连续内存上的线性分配；发 TLAB 是无锁的，TLAB 内分配复用 VM 现有代码</td></tr>
 <tr><td>屏障</td><td><strong>完全为空</strong>（BarrierSet 全部 no-op）——因为不做标记、不看对象图</td></tr>
-<tr><td>堆满</td><td>抛带描述信息的 <code>OutOfMemoryError</code>；可配合 <code>-XX:+HeapDumpOnOutOfMemoryError</code>、<code>-XX:OnOutOfMemoryError=...</code></td></tr>
-<tr><td><code>System.gc()</code></td><td>什么都不做，实现可能警告「这次 GC 是徒劳的」</td></tr>
+<tr><td>堆满</td><td>先试扩容（<code>EpsilonMinHeapExpand</code>），仍不足则返回 NULL，<strong>走 HotSpot 通用失败路径</strong>抛 <code>OutOfMemoryError: Java heap space</code>（epsilon 源码里没有自定义 OOM 消息）；可配合 <code>-XX:+HeapDumpOnOutOfMemoryError</code>、<code>-XX:OnOutOfMemoryError=...</code></td></tr>
+<tr><td><code>System.gc()</code></td><td>什么都不做，<code>-Xlog:gc</code> 只打一条 <code>GC request for "System.gc()" is handled</code>，<strong>没有警告</strong></td></tr>
 </table>
 
 <h3>关键判断逻辑伪代码：Epsilon 堆满时的处置</h3>
@@ -88,10 +95,13 @@ flowchart TB
     if currentTop + size &lt; heapEnd:
         currentTop += size          # 线性 bump，O(1)，无锁
         return ptr
-    # 分配失败 —— 唯一的「回收」路径就是退出
+    # 空间不够 —— 先试扩容（EpsilonMinHeapExpand / EpsilonHeap::expand）
+    if tryExpand(size):             # 把 heapEnd 往上挪，挪不动就返回 false
+        return allocate(size)
+    # 扩不动了 —— 返回 NULL，交给 HotSpot 通用分配失败路径
     if -XX:+HeapDumpOnOutOfMemoryError:  dumpHeap()
     if -XX:OnOutOfMemoryError=CMD:       runExternal(CMD)
-    throw OutOfMemoryError("Epsilon GC needs X MB more heap")</code></pre>
+    throw OutOfMemoryError("Java heap space")   # 消息来自通用路径，Epsilon 不自定义</code></pre>
 
 <h3>四维度生产检查</h3>
 
@@ -120,7 +130,7 @@ flowchart TB
 <tr><td><code>gc/z/zHeap.*</code>、<code>zCollectedHeap.*</code></td><td>堆主体与 <code>CollectedHeap</code> 抽象实现（JEP 304 的产物）</td></tr>
 <tr><td><code>gc/z/zDriver.*</code>、<code>zDirector.*</code></td><td>GC 周期驱动与<strong>启动决策</strong>（heuristics）</td></tr>
 <tr><td><code>gc/z/zForwardingTable.*</code></td><td>转发表：老地址 → 新地址</td></tr>
-<tr><td><code>gc/z/zPage.*</code>、<code>zAllocation*</code>、<code>zLargePages.*</code></td><td>Small/Medium/Large 三种页的分配</td></tr>
+<tr><td><code>gc/z/zPage.*</code>、<code>zAllocationFlags.hpp</code>、<code>zLargePages.*</code></td><td>Small/Medium/Large 三种页的分配</td></tr>
 <tr><td><code>gc/z/zCollectorPolicy.*</code>、<code>zArguments.*</code></td><td>策略与 JVM 参数接入</td></tr>
 </table>
 
@@ -144,10 +154,10 @@ const uintptr_t   ZAddressOffsetBits  = ZPlatformAddressOffsetBits;
 
 // Metadata part of address（中段：固定 4 bit）
 const uintptr_t   ZAddressMetadataBits = 4;
-const uintptr_t   ZAddressMetadataMarked0      = 1 &lt;&lt; (Shift + 0);
-const uintptr_t   ZAddressMetadataMarked1      = 1 &lt;&lt; (Shift + 1);
-const uintptr_t   ZAddressMetadataRemapped     = 1 &lt;&lt; (Shift + 2);
-const uintptr_t   ZAddressMetadataFinalizable  = 1 &lt;&lt; (Shift + 3);
+const uintptr_t   ZAddressMetadataMarked0      = 1 &lt;&lt; (ZAddressMetadataShift + 0);
+const uintptr_t   ZAddressMetadataMarked1      = 1 &lt;&lt; (ZAddressMetadataShift + 1);
+const uintptr_t   ZAddressMetadataRemapped     = 1 &lt;&lt; (ZAddressMetadataShift + 2);
+const uintptr_t   ZAddressMetadataFinalizable  = 1 &lt;&lt; (ZAddressMetadataShift + 3);
 
 //          GoodMask   BadMask   WeakGoodMask  WeakBadMask
 // Marked0    001        110        101          010
@@ -203,7 +213,7 @@ sequenceDiagram
 <table>
 <tr><th>限制</th><th>影响</th><th>后续解决（版本）</th></tr>
 <tr><td>实验性标记</td><td>必须 <code>-XX:+UnlockExperimentalVMOptions</code>，否则拒绝启动</td><td>JEP 377（JDK 15）转正 production</td></tr>
-<tr><td>仅 Linux/x64</td><td>macOS / Windows / AArch64 不可用</td><td>JEP 364/365（JDK 15）、JEP 408（JDK 17）</td></tr>
+<tr><td>仅 Linux/x64</td><td>macOS / Windows / AArch64 不可用</td><td>JEP 364（macOS）、JEP 365（Windows），均 JDK 15；AArch64 走 JDK-8214527，无独立 JEP</td></tr>
 <tr><td>无类卸载</td><td>动态生成类（反射 proxy、Groovy/脚本引擎）会堆涨</td><td>后续版本补上</td></tr>
 <tr><td>不支持 JVMCI/Graal</td><td>不能用 Graal JIT</td><td>后续版本</td></tr>
 <tr><td>单代（single-generation）</td><td>JDK 11 是 <strong>non-generational</strong>，分代 ZGC 到 JDK 21（JEP 439）</td><td>JDK 21</td></tr>
@@ -218,6 +228,8 @@ sequenceDiagram
 <tr><td>内存压力测试（断言分配上限）</td><td>✅</td><td>用 <code>-Xmx1g</code> 当硬阈值，超了就 OOM + heap dump</td></tr>
 <tr><td>VM-GC 接口验证</td><td>✅</td><td>证明 JEP 304 接口足够抽象</td></tr>
 <tr><td>极短生命周期任务（跑完就退）</td><td>✅</td><td>堆本来就在退出时释放，做 GC 循环纯属浪费</td></tr>
+<tr><td>最后一滴延迟（last-drop latency）</td><td>✅</td><td>JEP 318 第 5 个用例：近乎不产生垃圾的场景，GC 周期本身就被视为设计缺陷</td></tr>
+<tr><td>最后一滴吞吐（last-drop throughput）</td><td>✅</td><td>JEP 318 第 6 个用例：不跑 GC 就连引用写屏障都省了</td></tr>
 <tr><td>长驻微服务 / 应用服务器</td><td>❌</td><td>堆满即崩；<strong>误开是最危险的配置错误之一</strong></td></tr>
 <tr><td>分配型业务（缓存、批处理）</td><td>❌</td><td>必然 OOM；且非移动式分配让局部性劣化</td></tr>
 </table>
@@ -265,12 +277,14 @@ sequenceDiagram
 <div class="qa-block">
 <div class="question">Q3: 追问 — Epsilon 有什么用？一个不回收的 GC 怎么好意思进 JDK？</div>
 <div class="answer">
-<p>四个正经用途（JEP 318 原文）：</p>
+<p>六个正经用途（JEP 318 Motivation 原文，逐条对应）：</p>
 <ul>
 <li><strong>性能测试</strong>——剥离 GC 噪声得到延迟基线；</li>
-<li><strong>内存压力测试</strong>——把 <code>-Xmx</code> 当分配上限断言；</li>
-<li><strong>VM 接口测试</strong>——验证 JEP 304 接口的最小实现；</li>
-<li><strong>极短生命周期任务</strong>——退出即释放，跑 GC 循环纯浪费。</li>
+<li><strong>内存压力测试</strong>——把 <code>-Xmx</code> 当分配上限断言（超了就崩 + heap dump）；</li>
+<li><strong>VM 接口测试</strong>——证明 JEP 304 的 VM-GC 接口「足够空也足够健全」；</li>
+<li><strong>极短生命周期任务</strong>——退出即释放，跑 GC 循环纯浪费；</li>
+<li><strong>最后一滴延迟</strong>——几乎不产生垃圾的应用里，GC 周期本身就是设计问题；</li>
+<li><strong>最后一滴吞吐</strong>——不跑 GC 连引用写屏障都可以省掉。</li>
 </ul>
 <p>它本质上是把「生态里很多人自己魔改 JVM 关掉 GC」这件事标准化、可配置化。</p>
 <p>代价是：<strong>堆满即崩</strong>、<code>System.gc()</code> 失效、非移动式分配让随机分配的负载空间局部性变差。</p>
@@ -302,6 +316,56 @@ sequenceDiagram
 </div>
 </div>
 
+<div class="qa-block">
+<div class="question">Q6: 追问 — JDK 11 装好后直接 <code>-XX:+UseZGC</code> 就能跑吗？</div>
+<div class="answer">
+<p>不能，要过两道开关（JEP 333「Building and Invoking」原文）：</p>
+<ol>
+<li><strong>编译期</strong>：JVM 实验特性默认不参与构建，除非 configure 时显式加 <code>--with-jvm-features=zgc</code>——所以「这个 JDK 里到底有没有 ZGC」取决于构建方；JEP 333 特别注明 Oracle 产出的 <strong>所有 Linux/x64 JDK 都包含 ZGC</strong>；</li>
+<li><strong>运行期</strong>：<code>-XX:+UnlockExperimentalVMOptions -XX:+UseZGC</code>，且 <strong>unlock 必须写在前面</strong>。</li>
+</ol>
+<p>顺序错了或漏了 unlock，HotSpot 直接拒绝启动（Epsilon 同理，本机实测输出）：</p>
+<pre><code>Error: VM option 'UseEpsilonGC' is experimental and must be enabled via -XX:+UnlockExperimentalVMOptions.
+Error: The unlock option must precede 'UseEpsilonGC'.
+Improperly specified VM option 'UseEpsilonGC'
+Error: Could not create the Java Virtual Machine.</code></pre>
+<div class="key-point"><strong>关键点</strong>：实验特性 = 「构建时可能不存在 + 运行时必须解锁」两层，排查「怎么开了没生效」要先看这两层。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q7: 追问 — 画出 ZGC 在 Linux/x64 上的 64 位指针布局，各段多少位？</div>
+<div class="answer">
+<p>出处是 <code>os_cpu/linux_x86/gc/z/zGlobals_linux_x86.hpp</code> 的注释图：</p>
+<ol>
+<li><strong>41–0（42 bit）</strong>：对象偏移，4TB 地址空间；</li>
+<li><strong>45–42（4 bit）</strong>：元数据位 <code>Marked0</code>(0001) / <code>Marked1</code>(0010) / <code>Remapped</code>(0100) / <code>Finalizable</code>(1000)；</li>
+<li><strong>46（1 bit）</strong>：unused，恒 0；</li>
+<li><strong>63–47（17 bit）</strong>：fixed，恒 0。</li>
+</ol>
+<p>由此推出两个常考结论：<strong>不是「高位存真实地址」</strong>，而是元数据位决定当前属于哪个视图（Marked0 视图 4–8TB、Marked1 8–12TB、Remapped 16–20TB，中间 12–16TB 是 <code>Reserved, but unused</code>）；三个视图 <strong>multi-mapping 到同一批物理页</strong>，预留地址空间 <code>ZPlatformAddressSpaceSize = (1 &lt;&lt; 42) * 4 = 16TB</code>。</p>
+<div class="key-point"><strong>关键点</strong>：42 + 4 + 1 + 17 = 64，答位布局题先把这四段背全。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q8: 追问 — 想用 Epsilon 做「内存预算监控」，怎么配？堆满时能拿到什么？</div>
+<div class="answer">
+<p>把 <code>-Xmx</code> 当硬阈值，崩的时候顺手留证据：</p>
+<pre><code>java -XX:+UnlockExperimentalVMOptions -XX:+UseEpsilonGC \
+     -Xmx1g -XX:+HeapDumpOnOutOfMemoryError \
+     -XX:OnOutOfMemoryError='kill -USR1 %p' \
+     -jar app.jar</code></pre>
+<ul>
+<li><strong>拿到的是一次 <code>java.lang.OutOfMemoryError: Java heap space</code></strong>——Epsilon 源码不自定义消息，所以 <strong>别去匹配 OOM 的文案</strong>，要按「进程是否异常退出 / 有没有 dump / 阈值日志」来判定；</li>
+<li>堆满前会先试扩容（<code>EpsilonMinHeapExpand</code>），扩不动才失败，所以 <code>-Xmx</code> 之外还受物理内存与 <code>MaxHeapSize</code> 限制；</li>
+<li>钩子顺序是通用路径：<code>HeapDumpOnOutOfMemoryError</code> 先 dump，再执行 <code>OnOutOfMemoryError</code> 命令，然后抛出；</li>
+<li>这套只适合<strong>一次性/短命任务</strong>的预算断言，长驻服务用它等于「到点必崩」。</li>
+</ul>
+<div class="key-point"><strong>关键点</strong>：Epsilon 的价值是「把预算变成必然事件」，代价是「没有任何缓冲区」。</div>
+</div>
+</div>
+
 <div class="deep-grill-readiness">
 <h4>本课 Deep-Grill 就绪度</h4>
 <ul>
@@ -309,6 +373,8 @@ sequenceDiagram
 <li class="done">能写出加载屏障伪代码、解释 GoodMask/BadMask 翻转（追问链要求）</li>
 <li class="done">能做 GC 选型并论证「为什么另起炉灶」（architect 角度）</li>
 <li class="done">能指出 JDK 11 ZGC 无类卸载、Epsilon 不能上生产（code reviewer 角度）</li>
+<li class="done">能背出 42/4/1/17 的指针位布局与 16TB multi-mapping（追问链要求）</li>
+<li class="done">能说清「编译期 --with-jvm-features + 运行期 unlock」两道开关（incident responder 角度）</li>
 <li>能排查「开了 ZGC 报 JVMCI 错误」「Epsilon 突然 OOM」的根因（incident responder 角度）</li>
 <li>能用大白话讲清「读引用时顺手修指针」（instructor 角度）</li>
 </ul>

@@ -27,11 +27,11 @@
 <table>
 <tr><th>JDK</th><th>JEP</th><th>包名</th><th>状态</th></tr>
 <tr><td>9</td><td>JEP 110</td><td><code>jdk.incubator.http</code></td><td>孵化</td></tr>
-<tr><td>10</td><td>JEP 162</td><td><code>jdk.incubator.http</code></td><td>孵化（打磨 API）</td></tr>
+<tr><td>10</td><td>无独立 JEP</td><td><code>jdk.incubator.http</code></td><td>孵化：JEP 321 原文只写了 “updated in JDK 10”，同期<strong>实现几乎完全重写</strong>（HTTP/1.1 由阻塞改为全异步）</td></tr>
 <tr><td><strong>11</strong></td><td><strong>JEP 321</strong></td><td><strong><code>java.net.http</code></strong></td><td><strong>正式标准 API</strong></td></tr>
 </table>
 
-<p>正式版的 API 由四个核心抽象构成：</p>
+<p>正式版的 API 面貌是<strong>「四大对象 + 三件套」</strong>。四大对象：<code>HttpClient</code>（线程安全、可复用的客户端）、<code>HttpRequest</code>（不可变请求）、<code>HttpResponse&lt;T&gt;</code>（响应）、<code>WebSocket</code>（JEP 321 同期交付的第二套 API，见本层末尾）。三件套：<code>BodyPublisher</code> / <code>BodyHandler</code> / <code>BodySubscriber</code>。先看最小可用形态：</p>
 
 <pre><code>HttpClient client = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(5))
@@ -61,7 +61,7 @@ CompletableFuture&lt;HttpResponse&lt;String&gt;&gt; future =
 
 <h3>四个上手示例：POST JSON / 上传 / 下载 / 三件套落地</h3>
 
-<p>下面四段都能直接跑（示例 1 需要 Jackson，JDK 11+ 通用）。分工：<strong>Publisher 管「怎么发出去」</strong>、<strong>Handler 管「按响应头选 Subscriber」</strong>、<strong>Subscriber 管「字节怎么变成 T」</strong>。</p>
+<p>下面四段都是<strong>可直接编译的骨架</strong>（示例 1 需要 Jackson；示例 2/3 里的 <code>url</code>、示例 4 里的 <code>readChunk</code> 需自行补全），JDK 11+ 通用。分工：<strong>Publisher 管「怎么发出去」</strong>、<strong>Handler 管「按响应头选 Subscriber」</strong>、<strong>Subscriber 管「字节怎么变成 T」</strong>。</p>
 
 <h4>示例 1 · POST JSON 并解析响应 JSON 报文</h4>
 
@@ -239,6 +239,45 @@ static BodyPublisher chunks(Path f, int chunk) {
 </ul>
 </div>
 
+<h3>WebSocket：JEP 321 一起交付的第二套 API</h3>
+
+<p>JEP 321 在标准化 HTTP Client 的同时，把孵化中的 <code>java.net.http.WebSocket</code> 一并转正（JEP 的 “Changes” 一节专门列了「删掉 <code>WebSocket.MessagePart</code>」）。它<strong>复用同一个 <code>HttpClient</code></strong>——同一条连接池、同一套 SSLContext / proxy / authenticator 配置，不需要另起客户端。</p>
+
+<pre><code>// 1) 建连：uri 写在 buildAsync 里；Builder 只有 header / connectTimeout / subprotocols
+CompletableFuture&lt;WebSocket&gt; cf = client.newWebSocketBuilder()
+        .subprotocol("chat.v1")                       // 最优先子协议，可给多个候选
+        .connectTimeout(Duration.ofSeconds(5))
+        .buildAsync(URI.create("wss://echo.example.com/ws"), listener);
+WebSocket ws = cf.join();                             // 握手到 101 Switching Protocols 才完成
+
+// 2) 发送：last=false 表示消息未完（可分片），每帧都返回 CompletableFuture&lt;WebSocket&gt;
+ws.sendText("{\"op\":\"ping\"}", true);               // future 完成 = 该帧已交付发送方
+ws.sendBinary(ByteBuffer.wrap(bytes), true);
+ws.sendPing(ByteBuffer.wrap(new byte[]{1, 2}));       // 对端的 Pong 由框架自动回给 onPong
+ws.sendClose(WebSocket.NORMAL_CLOSURE, "ok");         // 只关输出方向，要等对端 onClose</code></pre>
+
+<div class="note">
+<div class="note-title">接收侧：背压靠 request(n)，不靠返回值</div>
+<pre><code>WebSocket.Listener listener = new WebSocket.Listener() {
+    @Override public void onOpen(WebSocket ws) {
+        ws.request(1);                                // 默认实现就是 request(1)：先要 1 条
+    }
+    @Override public CompletionStage&lt;?&gt; onText(WebSocket ws, CharSequence data, boolean last) {
+        System.out.print(data);                       // 整段 UTF-16 片段，last=true 才是完整消息
+        return handleAsync(data.toString())           // 异步处理
+                  .thenRun(() -&gt; ws.request(1));      // 处理完再要下一条 → 拉式背压
+    }
+    @Override public void onClose(WebSocket ws, int status, String reason) { /* 清理 */ }
+    @Override public void onError(WebSocket ws, Throwable t) { /* 断线重连的入口 */ }
+};</code></pre>
+<ul>
+<li><strong>supply 靠 <code>request(n)</code></strong>：<code>onOpen</code> 与每个回调的<strong>默认实现都会 <code>request(1)</code></strong>；一旦自己 <code>override</code> 却不调 <code>request</code>，就只会收到第一条消息然后静默卡住——这是 WebSocket 最常见的坑。</li>
+<li><code>onText</code> 返回的 <code>CompletionStage</code> <strong>不是背压信号</strong>，它只告诉框架「这个 <code>CharSequence</code> 什么时候可以回收」；返回 <code>null</code> 表示可以立刻回收。<code>onBinary</code> 的 <code>ByteBuffer</code> 同理。</li>
+<li>发送方向的 <code>last</code> 由你控制：<code>sendText(a,false)</code> + <code>sendText(b,true)</code> 才是一条完整消息；接收方向用回调的 <code>last</code> 参数判断片段是否收完。</li>
+<li><code>sendClose</code> 只是发起优雅关闭；<code>abort()</code> 是硬掐（不发关闭帧，用于超时放弃）。</li>
+</ul>
+</div>
+
 <h2>L2 · 原理层：执行模型与四维度</h2>
 
 <h3>同步 / 异步的执行语义</h3>
@@ -251,12 +290,40 @@ static BodyPublisher chunks(Path f, int chunk) {
 
 <p>关键点：<strong><code>send</code> 不是「另一套实现」</strong>——它建立在同一条异步链路上，只是用 <code>future.get()</code> 等到完成，并把中断（<code>InterruptedException</code>）如实抛给调用方。</p>
 
+<h3>异步组合：CompletableFuture 的正确用法</h3>
+
+<pre><code>// sendAsync 只是发起，真正的组合都发生在 CompletableFuture 上
+CompletableFuture&lt;HttpResponse&lt;String&gt;&gt; f =
+        client.sendAsync(req, BodyHandlers.ofString());
+
+f.thenApply(HttpResponse::body)                   // 成功链：拿到 body 往下走
+ .thenApply(String::length)
+ .exceptionally(t -&gt; { log(t); return -1; })      // 网络/超时异常走这里（CompletionException 包着 HttpTimeoutException）
+ .thenAcceptAsync(len -&gt; save(len), BIZ_POOL);    // 重活丢业务池：Async 后缀 + 显式 Executor
+
+f.cancel(true);                                   // 放弃这次请求：底层交换被中断，连接可能被关
+
+// 「整体超时」要自己造：HttpClient 只认 connectTimeout 与 HttpRequest.timeout() 两个
+CompletableFuture&lt;Integer&gt; slow = client.sendAsync(req2, BodyHandlers.ofString())
+        .thenApply(HttpResponse::statusCode)
+        .orTimeout(2, TimeUnit.SECONDS);          // JDK 9+：到点 → CompletionException(TimeoutException)</code></pre>
+
+<div class="tip">
+<div class="tip-title">四条纪律</div>
+<ul>
+<li><strong>默认回调跑在 client 的内部执行器上</strong>（不调 <code>executor(...)</code> 时就是 <code>newCachedThreadPool</code>）：里面不要做阻塞 IO、大 JSON 解析、DB 查询；重活一律 <code>*Async(fn, bizPool)</code> 显式切线程。</li>
+<li><strong>异常要收口</strong>：<code>sendAsync</code> 的所有失败都被封进 future，不加 <code>exceptionally</code>/<code>whenComplete</code> 的链路等于静默丢错。</li>
+<li><strong>HTTP 状态码不在异常路径上</strong>：4xx/5xx 让 future 正常完成，判断必须自己写。</li>
+<li><strong>取消不是「没发生」</strong>：<code>cancel(true)</code> 会中断底层交换，回调里不能有不可回滚的副作用（已发的埋点、已写的文件要能撤销或幂等）。</li>
+</ul>
+</div>
+
 <h3>关键判断逻辑伪代码：一次请求的分流</h3>
 
 <pre><code>function dispatch(client, request):
-    # 1. 选协议版本：默认 HTTP_2，失败则降级 HTTP_1_1
-    version = request.version()  # 默认 HttpClient.Version.HTTP_2
-    if version == HTTP_2 &amp;&amp; 明文(http://) &amp;&amp; 无 h2c 升级:
+    # 1. 选协议版本：request 指定优先，否则取 client 默认（Builder.version() 不设就是 HTTP_2）
+    version = request.version().orElseGet(client::version)   # HttpRequest.version() 是 Optional
+    if version == HTTP_2 &amp;&amp; (经代理且不支持 h2 || h2c 升级失败):
         version = HTTP_1_1
 
     # 2. 超时：三类互不覆盖
@@ -275,16 +342,33 @@ static BodyPublisher chunks(Path f, int chunk) {
 <table>
 <tr><th>维度</th><th>本特性的覆盖情况</th></tr>
 <tr><td><strong>并发语义</strong></td><td><code>HttpClient</code> 实例<strong>线程安全、可复用</strong>，内部是共享的 Selector 事件循环 + <code>ConnectionPool</code>；<strong>HTTP/2 在单连接上多路复用</strong>，多个并发请求可共享一条 TCP 连接。是否复用同一 client 决定了连接池能否收敛——不要每次请求 <code>HttpClient.newHttpClient()</code>。</td></tr>
-<tr><td><strong>异常容错</strong></td><td>传输层：<code>IOException</code> / <code>ConnectTimeoutException</code> / <code>HttpTimeoutException</code>（请求超时）/ <code>HttpConnectTimeoutException</code>；中断：<code>InterruptedException</code>。<strong>HTTP 状态码 4xx/5xx 不是异常</strong>，只体现在 <code>statusCode()</code>——这是最常见的误用点。</td></tr>
+<tr><td><strong>异常容错</strong></td><td>传输层：<code>IOException</code> / <code>HttpTimeoutException</code>（请求超时，<code>send</code> 超时抛出）/ <code>HttpConnectTimeoutException</code>（连接超时，是前者的子类）；中断：<code>InterruptedException</code>。<strong>HTTP 状态码 4xx/5xx 不是异常</strong>，只体现在 <code>statusCode()</code>——这是最常见的误用点。</td></tr>
 <tr><td><strong>边界判断</strong></td><td>重定向默认关；请求超时默认无；连接超时默认无；<code>ofString()</code> 的字符集由响应头决定（无 charset 时落 UTF-8，而非 RFC 的 ISO-8859-1）；HTTP/2 明文需 <code>h2c</code> 升级。</td></tr>
 <tr><td><strong>性能开销</strong></td><td>共享 client + Keep-Alive 池摊薄握手成本；HTTP/2 多路复用减少连接数；<code>ofString()</code> / <code>ofByteArray()</code> 会把整个响应体缓存在内存——<strong>大响应体必须改用 <code>ofInputStream()</code> 或自定义 <code>BodySubscriber</code> 流式消费</strong>。</td></tr>
 </table>
 
+<h3>HTTP/2 怎么被选中：ALPN、h2c 与 Push Promise</h3>
+
+<table>
+<tr><th>环节</th><th>JDK 的行为（已按 jdk11u 复核）</th></tr>
+<tr><td><strong>协商入口</strong></td><td>两级默认：<code>HttpRequest.Builder.version(...)</code> 指定了就用它；没指定就取 <code>HttpClient.Builder.version(...)</code>（<strong>不调用该方法 = <code>HTTP_2</code></strong>，javadoc 原话 “newly built clients will prefer HTTP/2”）。所以「默认 HTTP/2」是 <strong>client 级</strong>默认，request 只是可覆盖。</td></tr>
+<tr><td><strong>HTTPS 下</strong></td><td>用 <strong>ALPN</strong> 与服务端协商；服务端不支持 h2 → 同一次协商自然落回 HTTP/1.1，调用方无需降级逻辑。</td></tr>
+<tr><td><strong>明文 http://</strong></td><td>走 <strong>h2c 升级</strong>（源码 <code>Exchange.h2Upgrade()</code>：先按 HTTP/1.1 发、带 <code>Upgrade: h2c</code>；升级请求要求请求体长度为 0，有 body 就直接用 1.1），升级失败同样落在 1.1。</td></tr>
+<tr><td><strong>优先级</strong></td><td><code>HttpClient.Builder.priority(int)</code>，取值 1–256，给本 client 的所有 HTTP/2 请求设权重；<strong>HTTP/2 独有的 client 级配置</strong>，对 HTTP/1.1 无效。</td></tr>
+<tr><td><strong>服务端推送</strong></td><td><code>sendAsync(req, handler, pushPromiseHandler)</code> 三参重载，参数是 <code>HttpResponse.PushPromiseHandler</code>。JEP 321 把旧的 <code>MultiSubscriber</code>/<code>MultiResultMap</code> 重做成这个函数式接口：push 进来的请求由你决定要不要收、用哪个 <code>BodyHandler</code> 收。</td></tr>
+<tr><td><strong>连接模型</strong></td><td>同一 origin 的 HTTP/2 请求<strong>在一条 TCP 连接上多路复用</strong>（<code>Http2Connection</code> / <code>Stream</code>），高并发不会像 1.1 那样把连接池撑爆；连接仍按 origin 分组，不同 host / 代理各自成组。</td></tr>
+</table>
+
+<div class="note">
+<div class="note-title">排查顺序：先看 resp.version()</div>
+<p>「默认 h2 + 默认不重定向 + 默认无超时」是同一种设计取向——协议能力放开，行为策略交给调用方。出问题时按序查：先 <code>resp.version()</code> 确认<strong>实际协商结果</strong>（是 2 还是 1.1），再看两个 timeout 有没有设，最后才怀疑网络与服务端。</p>
+</div>
+
 <h2>L3 · 源码层：java.net.http 模块内部</h2>
 
 <div class="info">
-<div class="info-title">源码出处</div>
-<p>公开 API 在 <code>java.net.http/java/net/http/</code>，实现全部在 <code>java.net.http/jdk/internal/net/http/</code>。下表与代码片段取自本地 OpenJDK <strong>25</strong> 的 <code>lib/src.zip</code>（JEP 321 的类结构自 JDK 11 起一脉相承，JDK 11 没有 <code>websocket/</code> 子包之外的差异点主要是 <code>ImmutableHttpRequest</code> 等后续补充）。</p>
+<div class="info-title">源码出处与版本差异</div>
+<p>公开 API 在 <code>java.net.http/java/net/http/</code>，实现全部在 <code>java.net.http/jdk/internal/net/http/</code>。下表与代码片段取自本地 OpenJDK <strong>25</strong> 的 <code>lib/src.zip</code>，<strong>关键结论已回查 jdk11u（master 分支）确认在 Java 11 就成立</strong>：默认 executor、<code>DelegatingExecutor</code>（11 无拒绝兜底，25 才有）、<code>Utils.charsetFrom</code>、<code>WebSocket</code> 及其 <code>websocket/</code> 实现子包、<code>HttpClient.Builder</code> 的 <code>version(Version)</code> 与 <code>priority(int)</code>。已知的 11→25 差异：<code>ImmutableHttpRequest</code>、拒绝后回退到内部池的兜底，属后续补充，不影响本课结论。</p>
 </div>
 
 <h3>关键类清单</h3>
@@ -357,6 +441,57 @@ public static Charset charsetFrom(HttpHeaders headers) {
 <p>不是。<code>BodyHandlers.ofString()</code> <strong>从不按 RFC 2616 的 text/* 默认 ISO-8859-1 解码</strong>：拿不到 charset 一律落 <code>UTF-8</code>，连 <code>Charset.forName</code> 抛异常都静默回退 UTF-8。这意味着<strong>响应头没写 charset 但正文是 GBK 的老接口会拿到乱码</strong>，必须显式 <code>BodyHandlers.ofString(GBK)</code>。</p>
 </div>
 
+<h3>三件套工厂方法速查（按 jdk11u 逐个核对）</h3>
+<div class="java-comparison">
+<div class="header">命名约定：fromXxx 是适配，ofXxx 是造新</div>
+<p>JEP 321 专门定义了两个前缀的含义：<code>fromXxx</code> —— 把你<strong>已经有的</strong> <code>Flow.Publisher</code> / <code>BodySubscriber</code> 包成 JDK 需要的类型；<code>ofXxx</code> —— 用 JDK 的实现<strong>造一个新对象</strong>。按这个前缀读 API，一眼就知道该用哪个。</p>
+<table>
+<tr><th>工厂</th><th>方法</th><th>备注</th></tr>
+<tr><td rowspan="10"><code>HttpRequest.<br>BodyPublishers</code></td><td><code>fromPublisher(pub)</code> / <code>fromPublisher(pub, contentLength)</code></td><td>接自定义 <code>Flow.Publisher&lt;ByteBuffer&gt;</code>；不给长度 = 无长度；<strong>给的长度 &lt; 1 抛 IAE</strong></td></tr>
+<tr><td><code>ofString(s)</code> / <code>ofString(s, charset)</code></td><td>不给 charset = UTF-8</td></tr>
+<tr><td><code>ofInputStream(Supplier)</code></td><td><strong>Supplier 会被多次调用</strong>（重定向/重试时重新拿流）</td></tr>
+<tr><td><code>ofByteArray(b)</code> / <code>ofByteArray(b, off, len)</code></td><td>零拷贝出站</td></tr>
+<tr><td><code>ofFile(Path)</code></td><td>contentLength = 文件大小</td></tr>
+<tr><td><code>ofByteArrays(Iterable)</code></td><td>分块发送</td></tr>
+<tr><td><code>noBody()</code></td><td>contentLength = 0</td></tr>
+<tr><td colspan="2" style="color:var(--text-muted)"><strong>没有 concat</strong> —— 拼接发布者是更高版本才加的</td></tr>
+<tr><td colspan="2" style="color:var(--text-muted)">（出现在请求侧：<code>HttpRequest.BodyPublisher</code>）</td></tr>
+<tr><td colspan="2" style="color:var(--text-muted)">&nbsp;</td></tr>
+<tr><td rowspan="9"><code>HttpResponse.<br>BodyHandlers</code></td><td><code>fromSubscriber(sub)</code> / <code>fromSubscriber(sub, finisher)</code></td><td>finisher：完成后怎么得出最终类型 T</td></tr>
+<tr><td><code>fromLineSubscriber(sub)</code> / <code>fromLineSubscriber(sub, finisher, lineSep)</code></td><td>按行喂的适配器</td></tr>
+<tr><td><code>discarding()</code> / <code>replacing(U)</code></td><td>不读体 / 固定返回值</td></tr>
+<tr><td><code>ofString()</code> / <code>ofString(Charset)</code></td><td>拿不到 charset 一律 UTF-8</td></tr>
+<tr><td><code>ofByteArray()</code> / <code>ofInputStream()</code> / <code>ofLines()</code></td><td>整包 / 流式（必须读完或 close）/ 按行</td></tr>
+<tr><td><code>ofFile(Path[, OpenOption...])</code> ×2</td><td>先校验路径合法性再落盘</td></tr>
+<tr><td><code>ofFileDownload(dir, DownloadOptions)</code></td><td>由服务端 Content-Disposition 决定文件名</td></tr>
+<tr><td><code>ofByteArrayConsumer(Consumer&lt;Optional&lt;byte[]&gt;&gt;)</code></td><td><strong>回调收的是 Optional，不是 byte[]</strong> —— 结束靠一个空 Optional</td></tr>
+<tr><td><code>ofPublisher()</code> / <code>buffering(handler, n)</code></td><td>得到 <code>Publisher&lt;List&lt;ByteBuffer&gt;&gt;</code> / 缓冲 n 字节再交内层 handler</td></tr>
+<tr><td rowspan="9"><code>HttpResponse.<br>BodySubscribers</code></td><td><code>fromSubscriber(sub[, finisher])</code> / <code>fromLineSubscriber(sub[, finisher, lineSep])</code></td><td>与 BodyHandlers 同名同义，层级更低</td></tr>
+<tr><td><code>ofString(Charset)</code></td><td><strong>必须显式传 charset</strong>（与 ofString() 不同）</td></tr>
+<tr><td><code>ofLines(Charset)</code></td><td><strong>同样要 charset</strong></td></tr>
+<tr><td><code>ofByteArray()</code> / <code>ofInputStream()</code></td><td>与 BodyHandlers 同名对应</td></tr>
+<tr><td><code>ofFile(Path[, OpenOption...])</code> ×2</td><td>&nbsp;</td></tr>
+<tr><td><code>ofByteArrayConsumer(Consumer&lt;Optional&lt;byte[]&gt;&gt;)</code></td><td>流式吃体，结束收空 Optional</td></tr>
+<tr><td><code>mapping(upstream, mapper)</code></td><td><strong>在已有 subscriber 外面包一层映射</strong>（JEP 321 新增）</td></tr>
+<tr><td><code>discarding()</code> / <code>replacing(U)</code></td><td>顶替了旧 incubator 的 <code>discard(Object)</code></td></tr>
+<tr><td><code>ofPublisher()</code> / <code>buffering(sub, n)</code></td><td>&nbsp;</td></tr>
+</table>
+<div class="note">
+<div class="note-title">三件套的接口事实</div>
+<p><code>BodyPublisher extends Flow.Publisher&lt;ByteBuffer&gt;</code>，额外一个 <code>long contentLength()</code>（返回负值表示无长度）；<code>BodySubscriber&lt;T&gt; extends Flow.Subscriber&lt;List&lt;ByteBuffer&gt;&gt;</code>，额外 <code>CompletionStage&lt;T&gt; getBody()</code>；<code>BodyHandler&lt;T&gt;</code> 是 <code>@FunctionalInterface</code>，唯一方法 <code>BodySubscriber&lt;T&gt; apply(ResponseInfo)</code>，在读响应体字节<strong>之前</strong>被调用 —— 所以「看头决定怎么处理体」是类型系统保证的能力。</p>
+</div>
+<div class="tip">
+<div class="tip-title">JEP 321 的 Changes over incubated：迁移时会踩到什么</div>
+<p>从 <code>jdk.incubator.http</code> 升到 <code>java.net.http</code>，最小改动是<strong>包名/import 变了</strong>；语义层面 JEP 321 原文还列了这几条：</p>
+<ul>
+<li><code>WebSocket.MessagePart</code> 等类型被移除，收发改成回调式的 <code>sendText/sendBinary</code> + <code>last</code> 标志；</li>
+<li>旧的 <code>BodySubscriber.discard(Object)</code> 之类的丢弃入口，统一成 <code>discarding()</code> / <code>replacing(U)</code>；</li>
+<li>新增 <code>ofLines()</code>、<code>fromLineSubscriber</code>、<code>mapping</code> 三个工厂；</li>
+<li>异步相关的 MultiSubscriber、MultiResultMap 重做成函数式接口。</li>
+</ul>
+</div>
+</div>
+
 <h2>L4 · 边界层：默认值、坑与选型</h2>
 
 <h3>必须背下来的默认值</h3>
@@ -367,8 +502,41 @@ public static Charset charsetFrom(HttpHeaders headers) {
 <tr><td><code>version</code></td><td><code>Version.HTTP_2</code></td><td>HTTPS 下经 ALPN 协商；协商失败降级 1.1</td></tr>
 <tr><td><code>connectTimeout</code></td><td>无（无限）</td><td>网络黑洞时可能长时间挂起</td></tr>
 <tr><td><code>HttpRequest.timeout</code></td><td>无（无限）</td><td>必须显式设置，否则慢接口会拖垮线程</td></tr>
-<tr><td><code>executor</code></td><td>内部默认执行器</td><td><code>sendAsync</code> 的回调在内部线程执行，<strong>回调里做重活会占用 client 的事件循环</strong></td></tr>
+<tr><td><code>executor</code></td><td><code>Executors.newCachedThreadPool(...)</code></td><td>不调 <code>.executor(...)</code> 就用它（jdk11u <code>HttpClientImpl:276</code>）；<code>sendAsync</code> 回调默认跑在内部线程，<strong>做重活会占用 client 的事件循环</strong></td></tr>
 </table>
+
+<h3>接口面速查：HttpClient.Builder 与 HttpResponse</h3>
+<div class="java-comparison">
+<div class="header">HttpClient.Builder：10 个配置项</div>
+<table>
+<tr><th>方法</th><th>作用 / 不调时的默认</th></tr>
+<tr><td><code>version(Version)</code></td><td><strong>不调 = 新建 client prefer HTTP/2</strong>（javadoc 原话）</td></tr>
+<tr><td><code>priority(int)</code></td><td>1–256，<strong>只在 HTTP/2 下有意义</strong>（流优先级），11 默认 256</td></tr>
+<tr><td><code>followRedirects(Redirect)</code></td><td><code>NEVER</code></td></tr>
+<tr><td><code>connectTimeout(Duration)</code></td><td>无</td></tr>
+<tr><td><code>proxy(ProxySelector)</code></td><td>无代理（系统默认不自动生效）；例 <code>ProxySelector.of(new InetSocketAddress("proxy.example.com", 80))</code></td></tr>
+<tr><td><code>executor(Executor)</code></td><td>内部 newCachedThreadPool</td></tr>
+<tr><td><code>sslContext / sslParameters</code></td><td>JVM 默认 SSL 上下文</td></tr>
+<tr><td><code>cookieHandler(CookieHandler)</code></td><td>不设 = <strong>不自动带 Cookie</strong></td></tr>
+<tr><td><code>authenticator(Authenticator)</code></td><td>不设 = 401 不自动重试</td></tr>
+<tr><td colspan="2" style="color:var(--text-muted)">全是 <strong>Builder 上的 client 级配置</strong>；请求级的只有 <code>uri / header / timeout / version / method / body / expectContinue</code>（在 <code>HttpRequest.Builder</code> 上）</td></tr>
+</table>
+<div class="header" style="margin-top:1.2em">HttpResponse&lt;T&gt;：8 个访问器</div>
+<table>
+<tr><th>方法</th><th>含义</th></tr>
+<tr><td><code>statusCode()</code> / <code>headers()</code> / <code>body()</code></td><td>状态行 / 响应头 / 已交给 handler 处理完的体</td></tr>
+<tr><td><code>request()</code></td><td>发起的那个请求</td></tr>
+<tr><td><code>previousResponse()</code></td><td><code>Optional</code>，<strong>重定向链上的上一跳</strong>（NEVER 默认下为空）</td></tr>
+<tr><td><code>uri()</code></td><td><strong>重定向之后的最终 URI</strong>，可能 ≠ request().uri()</td></tr>
+<tr><td><code>version()</code></td><td><strong>实际协商到的协议版本</strong> —— 排查「为什么不是 HTTP/2」的第一手证据</td></tr>
+<tr><td><code>sslSession()</code></td><td><code>Optional&lt;SSLSession&gt;</code>，可拿协议/密码套件做审计</td></tr>
+<tr><td colspan="2" style="color:var(--text-muted)">另可补两个请求侧的生僻开关：<code>HttpRequest.Builder.expectContinue(true)</code>（100-Continue）、<code>method("PATCH", body)</code>（GET/POST/PUT/DELETE 之外的动词自定义）</td></tr>
+</table>
+<div class="note">
+<div class="note-title">从 jdk.incubator.http 迁过来的最小代价</div>
+<p>JEP 321 的 Risks 一节明确：包名从 <code>jdk.incubator.http</code> 变成 <code>java.net.http</code> 后，<strong>代码至少要改 import</strong>；其余方法名大体保持。模块声明里要加 <code>requires java.net.http;</code>（模块化工程），非模块工程只改 import 即可。</p>
+</div>
+</div>
 
 <h3>常见坑清单</h3>
 
@@ -458,7 +626,7 @@ public String getJson(String url) throws Exception {
 <div class="qa-block">
 <div class="question">Q3: 追问 — 写出请求分发的伪代码，重定向与超时的默认判断条件是什么？</div>
 <div class="answer">
-<pre><code>version       = req.version()      默认 HTTP_2（明文无 h2c 则降级 1.1）
+<pre><code>version       = req.version().orElse(client.version())  request 没设就用 client 默认，Builder.version 不设即 HTTP_2
 connectTO     = client.connectTimeout()   默认 null = 无限
 requestTO     = req.timeout()              默认 null = 无限
 redirectPolicy= client.followRedirects()   默认 NEVER = 不跟随
@@ -477,6 +645,61 @@ exchange      = MultiExchange + Filter 链(Redirect/Auth/Cookie)
 </div>
 </div>
 
+<div class="qa-block">
+<div class="question">Q5: 追问 — WebSocket 的背压怎么做？为什么我的 onText 只收到一条就再也不来了？</div>
+<div class="answer">
+<ol>
+<li>接收侧的背压完全靠 <code>Subscriber.request(n)</code>：<code>WebSocket.Listener</code> 的 <code>onOpen</code>、<code>onText</code> 等默认实现都会调一次 <code>request(1)</code>，也就是「一次只等下一条消息」。</li>
+<li><strong>一旦你 override 了这些方法却忘记调 request，需求就不会下发</strong>——对端永远发不过来，症状就是「只收到一条然后卡住」。这是 11 里最常见的 WebSocket 死锁式 bug。</li>
+<li><code>onText</code> 返回的 <code>CompletionStage&lt;Void&gt;</code> <strong>只表示这个 CharSequence 能不能被回收</strong>，不是背压信号，两个语义别混。</li>
+<li>发送侧：<code>sendText/sendBinary/sendPing/sendClose</code> 都返回 <code>CompletableFuture&lt;WebSocket&gt;</code>，<code>last=true</code> 表示消息结束；发送拥塞时用返回的 future 排队，而不是自己缓冲。</li>
+<li>取消用 <code>WebSocket.abort()</code>（硬断）；优雅收尾是 <code>sendClose(code, reason)</code> 后等它的 future。</li>
+</ol>
+<div class="key-point"><strong>关键点</strong>：WebSocket 的背压 = 手动的 request(n)，和 Flow 的语义一致；Listener 是回调式的，但 demand 必须你来发。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 追问 — HTTP/2 是怎么被选中的？一条连接上出问题怎么排查？</div>
+<div class="answer">
+<ol>
+<li>版本有两级默认：<code>HttpRequest.version()</code> 不设置是 <code>Optional.empty()</code>，回落到 <code>client.version()</code>；client 级 <code>Builder.version(...)</code> 不调用就 prefer HTTP/2。</li>
+<li>HTTPS 下走 <strong>ALPN</strong>，服务端不支持 h2 自动降 HTTP/1.1；明文 HTTP 走 <strong>h2c</strong> 升级，JDK 的升级前提是升级请求的 body 长度必须为 0。</li>
+<li>同一个 origin 会复用一条 TCP 做多路复用；<code>Builder.priority(int)</code> 只在 HTTP/2 下有流优先级含义。</li>
+<li>收到 <code>onPush</code>（Push Promise）时通过 <code>HttpResponse.PushPromiseHandler</code> 决定接受还是拒绝——但优先查「自己是不是根本没走 h2」。</li>
+<li>排查顺序永远是：<strong>先看 <code>resp.version()</code></strong>（本课新增小节的 .note 里同样写了），再看 ALPN、再看是不是明文 h2c 被降级。</li>
+</ol>
+<div class="key-point"><strong>关键点</strong>：version() 是「实际协商结果」，不是「期望值」——期望在 Builder 上，结果在 response 上。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q7: 追问 — <code>sendAsync</code> 的回调线程、异常与取消，分别有哪些纪律？</div>
+<div class="answer">
+<ul>
+<li><strong>回调线程</strong>：不设 executor 时跑在内部 newCachedThreadPool；重活（JSON 解析、DB 调用）要用 <code>thenAcceptAsync(fn, BIZ_POOL)</code> 挪出去。</li>
+<li><strong>异常要收口</strong>：<code>sendAsync</code> 只把网络/协议层异常塞进 <code>CompletableFuture</code>；不接 <code>exceptionally</code>，异常会静默消失。</li>
+<li><strong>4xx/5xx 不在异常路径</strong>：状态码非 2xx 依然返回正常 future，必须自己检查 <code>statusCode()</code>。</li>
+<li><strong>超时有两层</strong>：<code>HttpRequest.timeout</code> 管单次请求，<code>orTimeout(...)</code>（JDK 9+）管整条 future 链——两者管的范围不同，都要设。</li>
+<li><strong>cancel 不是没发生</strong>：<code>f.cancel(true)</code> 只取消 future 的完成等待，底层连接是否中断取决于实现与时机，不能假设请求没发出去。</li>
+</ul>
+<div class="key-point"><strong>关键点</strong>：JDK 的异步是「全默认关闭、全自己负责」——线程、异常、超时、取消四个口子都要封。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q8: 追问 — 除了四个默认值，还有哪些「生僻但致命」的 Builder / Response 配置？</div>
+<div class="answer">
+<ol>
+<li><code>HttpClient.Builder.proxy(...)</code> 默认<strong>无代理</strong>（不自动读系统代理），容器里走网关必须显式设。</li>
+<li><code>cookieHandler / authenticator</code> 默认不设——Cookie 和 401 认证<strong>不会自动处理</strong>，想「像浏览器一样」得自己配。</li>
+<li><code>Builder.priority(int)</code>（1–256）只在 HTTP/2 生效；<code>expectContinue(true)</code> 走 100-Continue；非标准动词用 <code>method("PATCH", body)</code>。</li>
+<li>响应侧：<code>uri()</code> 是<strong>重定向后</strong>的最终地址（可能 ≠ 请求地址），<code>previousResponse()</code> 是重定向链上一跳，<code>sslSession()</code> 可取协议与密码套件，<code>version()</code> 是实际协商协议。</li>
+</ol>
+<div class="key-point"><strong>关键点</strong>：JDK API 的默认值都偏「最小惊讶」——「以为框架会帮我做」的四件事（代理、Cookie、认证、跟随）在 11 里全都没做。</div>
+</div>
+</div>
+
 <div class="deep-grill-readiness">
 <h4>本课 Deep-Grill 就绪度</h4>
 <ul>
@@ -486,6 +709,8 @@ exchange      = MultiExchange + Filter 链(Redirect/Auth/Cookie)
 <li class="done">能指出 4xx 不抛异常、ofString 大响应 OOM 等审查点（code reviewer 角度）</li>
 <li>能排查「连接数暴涨 / 回调卡顿」是每次 new client 或在回调里做重活（incident responder 角度）</li>
 <li>能用大白话讲清 BodyHandler 三件套的分工（instructor 角度）</li>
+<li>能解释 WebSocket 的 request(n) 背压与「只收到一条」的经典 bug（code reviewer 角度）</li>
+<li>能给出 HTTP/2 协商失败的排查顺序（ALPN / h2c / resp.version()）（incident responder 角度）</li>
 </ul>
 </div>
 

@@ -53,7 +53,7 @@ body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--te
 <div class="container">
 <div class="hero">
 <h1>Java 11 — Deep Mastery Course</h1>
-<p class="subtitle">企业级升级与瘦身（2018.09 · LTS）：语言微调、标准 HTTP Client、API 补全、两个实验性 GC 与一次彻底的模块清理。</p>
+<p class="subtitle">企业级升级与瘦身（2018.09 · LTS）：语言微调、标准 HTTP Client（含 WebSocket、HTTP/2 协商、异步组合）、API 补全、两个实验性 GC 与一次彻底的模块清理。</p>
 <div class="meta">
 <span>📚 5-layer deep-mastery model</span>
 <span>🔬 JEP 原文 + OpenJDK 源码核对</span>
@@ -84,7 +84,7 @@ body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--te
 <div class="section-header"><h2>🎓 Core Lessons</h2><span class="badge core">REQUIRED</span></div>
 <div class="item-list">
 <a class="item" href="./0012-java11-single-file-source.html"><div class="icon l1">L1</div><div class="info"><div class="title">单文件源码直接运行与 Lambda 参数 var</div><div class="desc">JEP 330 · JEP 323 · 模式判定伪代码 · SourceLauncher / MemoryFileManager 源码走读</div><div class="tags"><span class="tag">JEP 330</span><span class="tag">JEP 323</span><span class="tag">shebang</span><span class="tag">内存编译</span></div></div><div class="arrow">→</div></a>
-<a class="item" href="./0013-java11-http-client.html"><div class="icon l2">L2</div><div class="info"><div class="title">HTTP Client 标准化 — java.net.http</div><div class="desc">JEP 321 · 同步/异步执行模型 · 四个必背默认值 · MultiExchange 与 ofString 字符集真相</div><div class="tags"><span class="tag">JEP 321</span><span class="tag">Flow API</span><span class="tag">HTTP/2</span><span class="tag">WebSocket</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./0013-java11-http-client.html"><div class="icon l2">L2</div><div class="info"><div class="title">HTTP Client 标准化 — java.net.http</div><div class="desc">JEP 321 · 同步/异步执行模型与 CompletableFuture 组合纪律 · 四个必背默认值 · WebSocket 背压 · ALPN/HTTP-2 · ofString 字符集真相</div><div class="tags"><span class="tag">JEP 321</span><span class="tag">Flow API</span><span class="tag">HTTP/2</span><span class="tag">WebSocket</span></div></div><div class="arrow">→</div></a>
 <a class="item" href="./0014-java11-string-files-api.html"><div class="icon l3">L3</div><div class="info"><div class="title">String / Files / Collection API 增强</div><div class="desc">isBlank · strip 的 NBSP 陷阱 · lines 边界 · readString 内存风险 · toArray(IntFunction)</div><div class="tags"><span class="tag">String.java</span><span class="tag">Files.java</span><span class="tag">Character.isWhitespace</span></div></div><div class="arrow">→</div></a>
 <a class="item" href="./0015-java11-zgc-epsilon.html"><div class="icon l4">L4</div><div class="info"><div class="title">ZGC 与 Epsilon GC（实验性）</div><div class="desc">JEP 333 · JEP 318 · 着色指针与加载屏障伪代码 · zGlobals.hpp 位布局 · GC 选型</div><div class="tags"><span class="tag">JEP 333</span><span class="tag">JEP 318</span><span class="tag">Load Barrier</span><span class="tag">No-Op GC</span></div></div><div class="arrow">→</div></a>
 <a class="item" href="./0016-java11-jdk-slim-tls-nashorn.html"><div class="icon l5">L5</div><div class="info"><div class="title">JDK 瘦身 · TLS 1.3 · Nashorn 弃用</div><div class="desc">JEP 320 删除 9 个模块与 8 个工具 · 迁移坐标表 · JEP 332 · JEP 335 · 升级诊断伪代码</div><div class="tags"><span class="tag">JEP 320</span><span class="tag">JEP 332</span><span class="tag">JEP 335</span><span class="tag">升级清单</span></div></div><div class="arrow">→</div></a>

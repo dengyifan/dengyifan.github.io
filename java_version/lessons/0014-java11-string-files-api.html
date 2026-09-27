@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>String / Files / Collection API 增强 · Java 11</title>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
 <link rel="stylesheet" href="../../style/shared.css">
 </head>
 <body>
@@ -22,7 +20,7 @@
 
 <h2>L1 · 概念层：一批「早就该有」的方法</h2>
 
-<p>Java 11 的类库增强没有新框架，全是<strong>把社区写了十年的工具方法收编进 JDK</strong>。四组：</p>
+<p>Java 11 的类库增强没有新框架，全是<strong>把社区写了十年的工具方法收编进 JDK</strong>。五组：</p>
 
 <table>
 <tr><th>组</th><th>新增</th><th>解决的老问题</th></tr>
@@ -30,10 +28,11 @@
 <tr><td><code>strip()</code> / <code>stripLeading()</code> / <code>stripTrailing()</code></td><td><code>trim()</code> 只按 <code>' '</code> 截断，处理不了全角空格与 NBSP</td></tr>
 <tr><td><code>lines()</code></td><td>拆行要写 <code>split("\r?\n")</code></td></tr>
 <tr><td><code>repeat(int)</code></td><td>拼分隔符/边框要写循环或 <code>Collections.nCopies</code></td></tr>
-<tr><td colspan="2" style="color:var(--text-muted)">（另：<code>indent</code> / <code>transform</code> 也同期加入）</td></tr>
+<tr><td colspan="2" style="color:var(--text-muted)">（Java 11 的 String 到此为止<strong>只有这 6 个</strong>；<code>indent</code> / <code>transform</code> 是 <strong>Java 12</strong> 才加的）</td></tr>
 <tr><td><strong>Files</strong></td><td><code>readString(Path)</code>、<code>writeString(Path, CharSequence, OpenOption...)</code></td><td>读小文件要 <code>new String(Files.readAllBytes(p), UTF_8)</code></td></tr>
 <tr><td><strong>Collection</strong></td><td><code>toArray(IntFunction&lt;T[]&gt;)</code></td><td><code>toArray(new String[0])</code> 的堆污染与误写 <code>new String[size]</code></td></tr>
 <tr><td><strong>其他</strong></td><td><code>Optional.isEmpty()</code>、<code>Path.of(...)</code></td><td>与 <code>optional.isPresent()</code> 对称；<code>Paths.get</code> 的静态工厂写法</td></tr>
+<tr><td><strong>流式读</strong></td><td><code>InputStream.readNBytes(int)</code>、<code>readNBytes(int,int)</code></td><td>分块读要手写 <code>while ((n = in.read(buf)) != -1)</code>；<code>readAllBytes()</code> 只有「一次全量」一档</td></tr>
 </table>
 
 <h3>用法速览</h3>
@@ -41,7 +40,7 @@
 <pre><code>// String
 "  \u3000\u3000 ".isBlank();                 // true —— 全角空格也算空白
 "\u3000x\u3000".strip().length();            // 1 —— 全角空格被剥掉
-"a\r\nb\nc".lines().toList();                // ["a", "b", "c"]，不含换行符
+"a\r\nb\nc".lines().collect(Collectors.toList()); // ["a", "b", "c"]，不含换行符（.toList() 要 Java 16）
 "-".repeat(20);                              // "--------------------"
 
 // Files —— UTF-8 默认
@@ -53,14 +52,21 @@ String[] arr = list.toArray(String[]::new);
 
 // 其他
 Optional.ofNullable(x).isEmpty();
-Path p = Path.of("conf", "app.yaml");        // Java 11 起可替代 Paths.get</code></pre>
+Path p = Path.of("conf", "app.yaml");        // Java 11 起可替代 Paths.get
+
+// 流式读 —— Java 11 新增的「按块」读法（readAllBytes/transferTo 是 9，这个是 11）
+try (InputStream in = Files.newInputStream(path)) {
+    byte[] head = in.readNBytes(8192);        // 最多读 8192 字节，到 EOF 提前返回
+    int skip = 0;                             // 两参版本：偏移量 + 最大长度
+    byte[] buf = in.readNBytes(skip, 4096);
+}</code></pre>
 
 <div class="note">
 <div class="note-title">toArray(IntFunction) 到底改了什么</div>
 <p>老写法 <code>toArray(new String[10])</code> 有个隐蔽陷阱：<strong>如果集合元素少于 10，JDK 会新建一个恰好大小的新数组返回，你拿到的不是你传进去的那个</strong>——「传数组能复用」的前提是数组够长且所有元素都能存入。而 <code>new String[size]</code> 更糟：size 是集合当时的长度，<strong>并发修改下可能 <code>ArrayStoreException</code></strong>。<code>toArray(String[]::new)</code> 把「创建数组」这件事交回集合自己按需执行，语义干净。</p>
 </div>
 
-<h2>L2 · 原理层：三个方法的语义细节</h2>
+<h2>L2 · 原理层：几个方法的语义细节</h2>
 
 <h3>strip / isBlank 的空白定义：跟随 Character.isWhitespace</h3>
 
@@ -78,9 +84,9 @@ Path p = Path.of("conf", "app.yaml");        // Java 11 起可替代 Paths.get</
 <p>在 OpenJDK 25 上实测：<code>"\u00A0x\u00A0".strip().length() == 3</code>（首尾 NBSP 原样保留），<code>"\u00A0".isBlank() == false</code>。原因在 <code>Character.isWhitespace</code> 的规范：<strong>类别为 <code>SPACE_SEPARATOR</code> 但非 break 的字符（如 NBSP）不算空白</strong>。网页抓来的文本常用 NBSP 做排版，用 <code>strip()</code> 清洗会残留——这类数据应先 <code>replace('\u00A0', ' ')</code>。</p>
 </div>
 
-<h3>lines() 的分帧行为</h3>
+<h3>lines() 的拆行规则</h3>
 
-<p>行终止符只认三种：<code>\n</code>、<code>\r</code>、<code>\r\n</code>。<strong>返回的行不含终止符</strong>。JEP/Javadoc 的 @apiNote 明确了两个边界：</p>
+<p>行终止符只认三种：<code>\n</code>、<code>\r</code>、<code>\r\n</code>。<strong>返回的行不含终止符</strong>。javadoc 的 @apiNote（这批方法没有独立 JEP）明确了两个边界：</p>
 
 <pre><code>"".lines().count()      // 0 —— 空串没有行
 "a\n\n".lines().count() // 2 —— 末尾换行之后不再产生空行（["a", ""]）
@@ -103,9 +109,14 @@ Path p = Path.of("conf", "app.yaml");        // Java 11 起可替代 Paths.get</
 
 function isBlank(s): return indexOfNonWhitespace(s) == s.length</code></pre>
 
+<div class="note">
+<div class="note-title">实现注：这份伪代码是「契约」，真实实现藏在 StringLatin1 / StringUTF16</div>
+<p>契约层就是 <code>Character.isWhitespace(int)</code>（javadoc 的 <code>@see Character.isWhitespace(int)</code> 已经写死）。真实扫描在 <code>StringLatin1.indexOfNonWhitespace(byte[] value)</code>：先短路 <code>ch != ' ' &amp;&amp; ch != '\t'</code>（ASCII 高频快速通过），不命中再走 <code>CharacterDataLatin1.instance.isWhitespace(ch)</code>。外层 <code>strip()</code> 用 <code>ret == null ? this : ret</code> 兜住「一个都没剥掉」的返回，伪代码里那句 <code>return s</code> 就对应它。</p>
+</div>
+
 <div class="java-comparison">
 <div class="header">为什么 Java 9 引入 compact strings 后，这些方法都走双实现？</div>
-<p>看 <code>String.strip()</code> 的方法体：`isLatin1() ? StringLatin1.strip(value) : StringUTF16.strip(value)`。因为 Java 9 起 <code>String</code> 内部是 <code>byte[] + coder</code>（Latin-1 或 UTF-16 两种紧凑表示），<strong>所有逐字符扫描的方法都必须按 coder 分派</strong>，否则按 <code>char</code> 步长遍历会踩错字节边界。这正是 <a href="./0003-compact-strings-source.html">Compact Strings 源码走读</a> 那一课的直接后果——新增 String 方法的实现成本因此翻倍。</p>
+<p>看 <code>String.strip()</code> 的方法体：<code>isLatin1() ? StringLatin1.strip(value) : StringUTF16.strip(value)</code>。因为 Java 9 起 <code>String</code> 内部是 <code>byte[] + coder</code>（Latin-1 或 UTF-16 两种紧凑表示），<strong>所有逐字符扫描的方法都必须按 coder 分派</strong>，否则按 <code>char</code> 步长遍历会踩错字节边界。这正是 <a href="./0003-compact-strings-source.html">Compact Strings 源码走读</a> 那一课的直接后果——新增 String 方法的实现成本因此翻倍。</p>
 </div>
 
 <h3>Files.readString / writeString 的实现</h3>
@@ -134,9 +145,9 @@ public static Path writeString(Path path, CharSequence csq, OpenOption... option
 <table>
 <tr><th>维度</th><th>本组 API 的情况</th></tr>
 <tr><td><strong>并发语义</strong></td><td>全部是无状态静态方法或不可变对象操作，线程安全。<strong>但 <code>toArray(IntFunction)</code> 与 <code>toArray(T[])</code> 一样，遍历时集合被并发修改仍会抛 <code>ConcurrentModificationException</code></strong>——生成器只解决「数组怎么造」，不解决「快照语义」。</td></tr>
-<tr><td><strong>异常容错</strong></td><td><code>readString</code>：文件不存在 → <code>NoSuchFileException</code>；<strong>字节序列不是合法字符集 → <code>IOException</code>（MalformedInputException 包装）</strong>；<code>repeat</code>：负数 → <code>IllegalArgumentException</code>，长度溢出 → <code>OutOfMemoryError</code>；<code>writeString</code> 参数为 null → <code>NullPointerException</code>（在打开文件之前就校验）。</td></tr>
+<tr><td><strong>异常容错</strong></td><td><code>readString</code>：文件不存在 → <code>NoSuchFileException</code>；<strong>字节序列不是合法字符集 → 直接抛 <code>MalformedInputException</code></strong>（它本身就是 <code>IOException</code> 的子类，不是被「包装」进 IOException 的）；<code>repeat</code>：负数 → <code>IllegalArgumentException</code>，长度溢出 → <code>OutOfMemoryError</code>；<code>writeString</code> 参数为 null → <code>NullPointerException</code>（在打开文件之前就校验）。</td></tr>
 <tr><td><strong>边界判断</strong></td><td>NBSP 不被 strip/isBlank 认作空白；<code>lines()</code> 末尾换行不产生空行；<code>repeat(0)</code> 或空串 → <code>""</code>；<code>repeat(1)</code> 返回 <code>this</code>（零拷贝）；<code>writeString</code> 不是原子写。</td></tr>
-<tr><td><strong>性能开销</strong></td><td><code>readString</code> = <code>readAllBytes</code> + 解码，<strong>整个文件进堆</strong>，大文件会 OOM；<code>repeat</code> 用<strong>2 的幂倍增拷贝</strong>（<code>repeatCopyRest</code>），复杂度 O(n) 而非 O(n²)；<code>strip</code> 无可剥时返回原对象，不分配。</td></tr>
+<tr><td><strong>性能开销</strong></td><td><code>readString</code> = <code>readAllBytes</code> + 解码，<strong>整个文件进堆</strong>，大文件会 OOM；<code>repeat</code> 用<strong>2 的幂倍增拷贝</strong>（25 抽成 <code>repeatCopyRest</code>，jdk11u 是同构的内联循环），复杂度 O(n) 而非 O(n²)；<code>strip</code> 无可剥时返回原对象，不分配。</td></tr>
 </table>
 
 <h2>L3 · 源码层：String.java 精读</h2>
@@ -151,6 +162,17 @@ public static Path writeString(Path path, CharSequence csq, OpenOption... option
 <tr><td><code>lines()</code></td><td>3988</td><td>惰性 <code>Stream&lt;String&gt;</code></td></tr>
 <tr><td><code>repeat(int)</code></td><td>4731</td><td>边界校验 + 2 的幂倍增拷贝</td></tr>
 </table>
+
+<div class="info">
+<div class="info-title">源码出处与版本差异（务必对齐版本读）</div>
+<p>下文片段取自<strong>本地 OpenJDK 25 的 <code>lib/src.zip</code></strong>，方法行号按 25 计；<strong>与 Java 11 的 jdk11u 差异已逐条回查</strong>：</p>
+<ul>
+<li><code>strip</code> / <code>isBlank</code> / <code>lines</code> 的方法体与 jdk11u <strong>逐字一致</strong>，行号表里只有行号会漂。</li>
+<li><code>repeat(int)</code>：25 把倍增循环抽成私有工具 <code>repeatCopyRest(multiple, 0, limit, len)</code>；<strong>jdk11u 没有这个方法</strong>，循环是内联的（<code>for (; copied &lt; limit - copied; copied &lt;&lt;= 1) System.arraycopy(multiple, 0, multiple, copied, copied);</code>），且<strong>溢出判断排在单字符快路径之后</strong>（25 把它提到了快路径之前）。语义与复杂度不变。</li>
+<li><code>Files.readString</code>：25 用 <code>JLA.uncheckedNewStringNoRepl(ba, cs)</code>，<strong>jdk11u 用的是同族的 <code>JLA.newStringNoRepl</code></strong>；两步骨架与「UTF-8 默认」在 11 就已定型。</li>
+<li><code>Files.writeString</code>：jdk11u 源码里那句 <code>// ensure the text is not null before opening file</code> 证实了「null 校验发生在打开文件之前」——L4 坑清单里的结论以此为据。</li>
+</ul>
+</div>
 
 <h3>源码片段：repeat 的三道防线</h3>
 
@@ -184,7 +206,7 @@ public String repeat(int count) {
 
 <div class="note">
 <div class="note-title">为什么溢出要用 <code>Integer.MAX_VALUE / count &lt; len</code> 而不是 <code>len * count &gt; MAX</code>？</div>
-<p>后者会<strong>先溢出成负数再比较</strong>，判定失效；前者用除法在乘法发生之前判断，是整数溢出预检的标准写法。这类细节是 code reviewer 角度的高频考点。实测 <code>"ab".repeat(Integer.MAX_VALUE)</code> 抛出的正是这条 <code>OutOfMemoryError: Required length exceeds implementation limit</code>。</p>
+<p>后者会<strong>先溢出成负数再比较</strong>，判定失效；前者用除法在乘法发生之前判断，是整数溢出预检的标准写法。这类细节是 code reviewer 角度的高频考点。溢出时抛的是 <code>OutOfMemoryError</code>——<strong>Java 11 的文案</strong>是 <code>Repeating N bytes String M times will produce a String exceeding maximum size.</code>（<code>"ab".repeat(Integer.MAX_VALUE)</code> → <code>N=2, M=2147483647</code>）；<code>Required length exceeds implementation limit</code> 是 <strong>JDK 17 之后</strong>才改写的同一条消息。</p>
 </div>
 
 <h3>源码片段：isBlank 与 strip 的最小实现</h3>
@@ -238,6 +260,7 @@ public String strip() {
 <tr><td>重复</td><td><code>s.repeat(n)</code></td><td><code>String.join("", Collections.nCopies(n, s))</code></td></tr>
 <tr><td>读文件成串</td><td><code>Files.readString(p)</code></td><td><code>new String(Files.readAllBytes(p), UTF_8)</code></td></tr>
 <tr><td>集合转数组</td><td><code>c.toArray(T[]::new)</code></td><td><code>c.toArray(new T[0])</code> 或危险的 <code>new T[c.size()]</code></td></tr>
+<tr><td>按块读流</td><td><code>in.readNBytes(8192)</code></td><td>手写 <code>byte[] buf = ...; while (in.read(buf) != -1)</code>（11 之前）</td></tr>
 </table>
 
 <h2>L5 · 面试层：追问链</h2>
@@ -275,7 +298,7 @@ return substring(lo, hi + 1)</code></pre>
 <div class="qa-block">
 <div class="question">Q4: 追问 — <code>Files.readString</code> 的实现是什么？有什么性能风险？</div>
 <div class="answer">
-<p>无 Charset 重载委托给 <code>readString(path, UTF_8)</code>；带 Charset 的版本体只有两行：<code>byte[] ba = readAllBytes(path)</code> 再 <code>new String(ba, cs)</code>。所以<strong>整个文件会一次性进堆</strong>，再解码成 String——存在两份内存峰值。风险是大文件 OOM；另外默认 UTF-8，非 UTF-8 文件直接抛 <code>IOException</code>，且解码失败是异常而不是替换字符。</p>
+<p>无 Charset 重载委托给 <code>readString(path, UTF_8)</code>；带 Charset 的版本核心只有两步——<code>byte[] ba = readAllBytes(path)</code>，再 <code>JLA.newStringNoRepl(ba, cs)</code> 解码（中间还有 <code>requireNonNull</code> 校验与跨模块的数组 <code>clone()</code>）。所以<strong>整个文件会一次性进堆</strong>，再解码成 String——存在两份内存峰值。风险是大文件 OOM；另外默认 UTF-8，非 UTF-8 文件直接抛 <code>IOException</code>，且解码失败是异常而不是替换字符。</p>
 <div class="key-point"><strong>关键点</strong>：它是「便捷」不是「流式」；<code>writeString</code> 也不是原子写。</div>
 </div>
 </div>
@@ -283,8 +306,48 @@ return substring(lo, hi + 1)</code></pre>
 <div class="qa-block">
 <div class="question">Q5: 追问 — <code>toArray(String[]::new)</code> 和 <code>toArray(new String[0])</code> 有什么区别？</div>
 <div class="answer">
-<p>语义上等价（都由集合创建正确大小的数组），但 <code>IntFunction</code> 版本把「创建数组」的意图表达得更明确，且 <strong>JEP/接口文档规定默认实现是「先用 0 调用生成器，再把结果交给 <code>toArray(T[])</code>」</strong>。真正的收益是杜绝两类手写错误：<code>new String[10]</code> 这种过大数组（返回的往往不是你传的那个），以及 <code>new String[c.size()]</code> 在并发修改下的 <code>ArrayStoreException</code>。</p>
+<p>语义上等价（都由集合创建正确大小的数组），但 <code>IntFunction</code> 版本把「创建数组」的意图表达得更明确，且 <strong>接口文档规定默认实现是「先用 0 调用生成器，再把结果交给 <code>toArray(T[])</code>」</strong>（@implSpec 原话 <code>return toArray(generator.apply(0))</code>，@since 11）。真正的收益是杜绝两类手写错误：<code>new String[10]</code> 这种过大数组（返回的往往不是你传的那个），以及 <code>new String[c.size()]</code> 在并发修改下的 <code>ArrayStoreException</code>。</p>
 <div class="key-point"><strong>关键点</strong>：生成器解决「数组怎么造」，不解决「快照语义」——并发修改仍会 CME。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 追问 — <code>readNBytes</code> 是 Java 几加的？和 <code>readAllBytes</code> / <code>transferTo</code> 怎么分年份？</div>
+<div class="answer">
+<ul>
+<li><code>InputStream.readNBytes(int)</code> 与 <code>readNBytes(int off, int len)</code> → <strong>Java 11</strong>，本课新增的「按块」读法；返回实际读到的字节数，可能小于请求量（短读是常态，不是错误）。</li>
+<li><code>InputStream.readAllBytes()</code>、<code>transferTo(OutputStream)</code> → <strong>Java 9</strong>，「一次全量 / 一次导完」的一步到位版本。</li>
+<li><code>Files.lines(Path)</code> → <strong>Java 8</strong>，按行流式，和 <code>readNBytes</code> 是两种切分维度（行 vs 字节块）。</li>
+<li><code>Stream.toList()</code> → <strong>Java 16</strong>，所以 L1 速览里写的是 <code>collect(Collectors.toList())</code>。</li>
+</ul>
+<p>问年份的本质是问「你要的是一次读完、还是分块读」：<code>readAllBytes</code> 会把整条流吞进堆，<code>readNBytes(8192)</code> 可以在已知头部长度时只取前缀。</p>
+<div class="key-point"><strong>关键点</strong>：9 给了「全量」，11 补了「按块」；流式（行）比字节块更早，是 8。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q7: 代码审查 — <code>Files.lines()</code> 和 <code>Files.readString()</code> 该怎么选？</div>
+<div class="answer">
+<ul>
+<li><strong>选 <code>readString</code></strong>：KB 级的配置、证书、短消息体。整文件进堆、UTF-8 默认，换取一次调用读完。</li>
+<li><strong>选 <code>lines()</code></strong>：日志、CSV、大 JSON 等<strong>可能很大</strong>的文件——它是惰性 <code>Stream&lt;String&gt;</code>，按行供给，不建中间数组。</li>
+<li><strong>用 <code>lines()</code> 必须关流</strong>：包成 try-with-resources，或显式 <code>stream.close()</code>——流没关就把文件句柄挂到终止管道上，长跑进程会攒满 fd。</li>
+<li>不要拿它当「快」的读法：逐行解码 + Stream 管道开销高于 <code>BufferedReader.readLine()</code> 的裸循环；要极致性能就退回老三样。</li>
+</ul>
+<div class="key-point"><strong>关键点</strong>：K 是 KB 还是 GB 决定方法；<code>lines()</code> 的 <code>close()</code> 是审查红线。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q8: 追问 — <code>Path.of("conf", "app.yaml")</code> 和 <code>Paths.get(...)</code> 有什么区别？</div>
+<div class="answer">
+<ul>
+<li><strong>实现上等价</strong>：两者都是 <code>FileSystems.getDefault().getPath(first, more)</code> 的静态门面，语义、返回对象、抛的异常完全一样。</li>
+<li><strong><code>Path.of</code> 是接口上的静态方法</strong>（Java 11 新增），<code>Paths.get</code> 是 <code>Paths</code> 工具类的方法——后者只是更早存在的旧写法，没有被废弃。</li>
+<li>习惯上的收益：按<strong>接口类型</strong>建静态工厂，少 import 一个 <code>Paths</code>，且和 <code>List.of</code> / <code>Map.of</code> / <code>Optional.isEmpty</code> 的「工厂方法下沉到类型」风格一致。</li>
+<li>没有兼容风险：新代码可以直接用 <code>Path.of</code>；老代码换写法是纯等价重构，不必专门改。</li>
+</ul>
+<div class="key-point"><strong>关键点</strong>：这是风格统一，不是行为变更——JLS 层面零差异。</div>
 </div>
 </div>
 
@@ -297,6 +360,8 @@ return substring(lo, hi + 1)</code></pre>
 <li class="done">能指出 readString 内存风险、writeString 非原子（code reviewer 角度）</li>
 <li>能排查「GBK 文件 readString 抛 IOException」「网页文本 strip 不干净」（incident responder 角度）</li>
 <li>能用大白话讲清 toArray(IntFunction) 解决了什么（instructor 角度）</li>
+<li class="done">能区分 readNBytes(11) / readAllBytes(9) / Files.lines(8) / Stream.toList(16) 的年份（interviewer 角度）</li>
+<li class="done">能指出 Files.lines() 必须 close、Path.of 与 Paths.get 语义等价（code reviewer 角度）</li>
 </ul>
 </div>
 

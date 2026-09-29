@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工具链与平台：JMH 微基准 · 单一 AArch64 端口 · Java 12</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12 · 工具链与平台</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Java 12 的工具链与平台 —— 把基准测试搬进仓库，把两个 ARM 端口合成一个</h1>
+<div class="article-meta"><span>📚 L1–L5 · 工程与平台层</span><span>🔬 JEP 230 / 340 · make/Main.gmk · test/micro 源码</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 12 / 工具链与平台</div>
+
+<h2>L1 · 概念层：JDK 自己也要有"体检"和"一张架构地图"</h2>
+
+<p>本课覆盖 Java 12 的两个"工程向" JEP——<strong>JEP 230 <em>Microbenchmark Suite</em></strong>（把基于 JMH 的微基准正式纳入 JDK 仓库）与 <strong>JEP 340 <em>One AArch64 Port, Not Two</em></strong>（清掉重复的 64 位 ARM 端口）——外加<strong>预览特性工作流</strong>与<strong>非 LTS 升级策略</strong>两件升级必修的事。</p>
+
+<table>
+<tr><th>JEP / 主题</th><th>一句话</th><th>状态</th></tr>
+<tr><td><strong>230 Microbenchmark Suite</strong></td><td>仓库里有了官方微基准：<code>test/micro/org/openjdk/bench/{java,javax,vm}</code>，初始约 100 个</td><td>正式（12）</td></tr>
+<tr><td><strong>340 One AArch64 Port</strong></td><td>删掉 <code>cpu/arm</code> 里的 arm64 变体与相关 <code>#ifdef</code>，<strong>64 位 ARM 默认只走 <code>cpu/aarch64</code></strong>，保留 32 位 ARM 端口</td><td>正式（12）</td></tr>
+<tr><td>325 switch 表达式（预览）</td><td>唯一带"开关"的特性，编译运行都要 <code>--enable-preview</code></td><td>预览（12/13），14 转正</td></tr>
+<tr><td>版本定位</td><td>JDK 12 是<strong>非 LTS</strong>（8、11 才是），公开更新窗口短</td><td>—</td></tr>
+</table>
+
+<h3>关键判断逻辑伪代码</h3>
+
+<pre><code># ===== 微基准怎么构建与运行（JEP 230）=====
+configure --with-jmh=&lt;JMH jar 目录&gt;            # JMH 是外部二进制依赖，不配置就用不了
+make build-microbenchmark                       # 独立目标：不参与常规 make images
+make test TEST="micro:regexp"                   # 运行某个基准（按名称过滤）
+# 需要支持 JDK(N) 与 JDK(N-1) 对比编译：同一份基准打两个 jar，切换 JVM 跑同一 jar 对比
+
+# ===== 64 位 ARM 上选哪个端口（JEP 340）=====
+if 目标 == 64-bit ARM (aarch64):
+    端口 = src/hotspot/cpu/aarch64      # 唯一默认；arm64(arm 目录里的 64 位变体) 已删除
+    build 选项里再无"用哪个 64 位 ARM 端口"的选择
+elif 目标 == 32-bit ARM:
+    端口 = src/hotspot/cpu/arm          # 仍保留，需继续通过一致性测试
+else:
+    端口 = cpu/{x86,ppc,s390,sparc,zero}
+
+# ===== 该不该在这个 JDK 上用预览特性（325 等）=====
+if 模块 == 业务主干/框架:            禁用（语义无承诺）
+elif 模块 == 实验分支 且 团队锁定同一 JDK:
+    javac --enable-preview --release 12 ...
+    java  --enable-preview ...        # 编译与运行版本必须完全一致
+else:                                 不用
+
+# ===== 11 → 12 升不升 =====
+if 追求稳定生产:  留在 11（LTS），或 直接规划 17/21 等 LTS
+elif 要验证新特性/吃性能修复:  升 12 做压测，但把"非 LTS 支持窗口短"算进成本</code></pre>
+
+<div class="note">
+<div class="note-title">JDK 12 在版本树里的位置</div>
+<p>8（LTS）→ 9 → 10 → <strong>11（LTS）</strong> → <strong>12（非 LTS，2019-03-19）</strong> → 13 → 14 → <strong>15</strong>（Shenandoah 转正）→ … → <strong>17/21（LTS）</strong>。JDK 12 的价值在于<strong>它是特性节奏里的一站</strong>：switch 表达式预览首发、Shenandoah 首发、JMH 基准入库；把它当"生产长期基线"则是错配。</p>
+</div>
+
+<h2>L2 · 原理层：为什么官方要自己养一套微基准</h2>
+
+<h3>JEP 230 解决了什么</h3>
+
+<p>手写微基准的三大坑：<strong>死代码消除</strong>（结果没人用，JIT 直接把整段计算删掉）、<strong>预热不足</strong>（测的是解释器/C1 阶段）、<strong>常量折叠</strong>（循环里全是编译期常量）。JMH 通过生成胶水代码、预热迭代、<code>Blackhole</code> 吞噬结果来逐一化解。JEP 230 做的事是<strong>把这套基准放进 JDK 仓库本身</strong>，让"JDK 自己的改动有没有让某段代码变慢"成为可复现、可 CI 化的工程动作，而不是散落在各人心血来潮的本地脚本里。</p>
+
+<h3>伪代码：一个 JMH 基准从写到出数</h3>
+
+<pre><code># 作者只写"被测逻辑"（test/micro/org/openjdk/bench/java/lang/StringBuilders.java）
+@Benchmark @OutputTimeUnit(NANOSECONDS)
+public String bench_StringBuilder() {
+    StringBuilder sb = new StringBuilder();  sb.append(QUESTION).append(LITERAL);
+    return sb.toString();                    // 返回值 = 被 Blackhole 吞掉，防 DCE
+}
+
+# JMH 代码生成器（注解处理器）展开成：
+#   1) 预热轮（warmup）: 跑 N 轮让 JIT 进入编译后稳态
+#   2) 测量轮（measurement）: 跑 M 轮，逐轮采样
+#   3) 每轮内: 调用被测方法 + Blackhole.consume 防止消除
+#   4) fork 出独立 JVM 进程执行，隔离状态
+# JDK 仓库侧（make/test/BuildMicrobenchmark.gmk）:
+#   把 test/micro/**.java + JMH 依赖打成 benchmarks.jar
+#   并为 JDK(N) 和 JDK(N-1) 各准备一份 → 切换 -java 参数即可做回归对比</code></pre>
+
+<div class="mermaid">
+flowchart LR
+    A["configure --with-jmh"] --&gt; B["make build-microbenchmark<br/>Main.gmk:551 → BuildMicrobenchmark.gmk"]
+    B --&gt; C["benchmarks.jar<br/>（含 JDK N / N-1 两套产物）"]
+    C --&gt; D["make test TEST='micro:xxx'"]
+    D --&gt; E["JMH fork + 预热 + 测量"]
+    E --&gt; F["两版 JVM 跑同一 jar<br/>→ 回归对比报告"]
+</div>
+
+<h3>四维度生产检查</h3>
+
+<table>
+<tr><th>维度</th><th>230 JMH 基准套件</th><th>340 单一 AArch64 端口</th><th>预览特性工作流（325）</th><th>非 LTS 升级策略</th></tr>
+<tr><td><strong>并发语义</strong></td><td>基准内部常带 <code>@Threads</code>/并发场景；JMH 负责正确的分组与协调，但<strong>基准不等于业务并发测试</strong></td><td>纯平台/代码清理，<strong>不改语义</strong>；AArch64 屏障、内存序代码随之只有一份</td><td>纯编译期语法，字节码与手写等价（见 0018 课）</td><td>版本切换会带上一整批 GC/并发改动，升级必须整体回归</td></tr>
+<tr><td><strong>异常容错</strong></td><td>缺 JMH 时构建直接报错：<code>Error: JMH is missing. Please use configure --with-jmh.</code>（BuildMicrobenchmark.gmk:34）</td><td>删除 arm64 变体后要求 32 位 ARM 端口<strong>不出现回归</strong>——JEP 明列为验证任务</td><td>预览 class 文件在非匹配 JVM 上<strong>直接拒绝加载</strong></td><td>非 LTS 停更后无补丁，风险随时间累积</td></tr>
+<tr><td><strong>边界判断</strong></td><td>仅约 100 个基准、不覆盖全部 JDK；<strong>不为新特性自动配基准</strong>（JEP Non-goal）</td><td>边界 = 架构目录：<code>cpu/</code> 下 <code>arm</code>（32 位）与 <code>aarch64</code>（64 位）各司其职，<strong>没有第三个 ARM 目录</strong></td><td><code>--release</code> 必须等于运行版本；编译运行两侧都要开关</td><td>12 的目标是"验证与尝鲜"，生产基线应回到 LTS</td></tr>
+<tr><td><strong>性能开销</strong></td><td>构建时间增加（独立 target，<strong>不影响常规构建</strong>）；仓库体积增加（引入 JMH 依赖）</td><td>维护成本下降：一份 64 位 ARM 代码路径，编译矩阵更小</td><td>零运行时开销（编译期特性）</td><td>升级可能拿到 GC/JIT 修复的性能收益，但要实测</td></tr>
+</table>
+
+<div class="warning">
+<div class="warning-title">三个高频误区</div>
+<p><strong>① 「<code>make build-microbenchmark</code> 是常规构建的一部分」</strong>——不是，它在 <code>make/Main.gmk</code> 里是<strong>独立目标</strong>（常规 <code>make images</code> 不依赖它），只有 <code>test-image</code> 目标会带上它。<br/>
+<strong>② 「仓库里有 <code>cpu/arm</code> 和 <code>cpu/aarch64</code> 说明还留着两套 64 位实现」</strong>——不是。<code>arm</code> 目录现在只服务 <strong>32 位 ARM</strong>；JEP 340 干的正是把该目录里"arm64 变体"及其 64/32 位 <code>#ifdef</code> 全删掉。<br/>
+<strong>③ 「微基准数字能直接当性能结论」</strong>——不能：JMH 解决的是<strong>测量方法学</strong>问题，不解决<strong>代表性</strong>问题；真实结论要用你的负载压测验证。</p>
+</div>
+
+<h2>L3 · 源码层：make 目标、构建脚本与 CPU 目录（openjdk/jdk12u）</h2>
+
+<div class="info">
+<div class="info-title">源码出处与获取方式</div>
+<p>以下行号与目录清单核对自 <strong>openjdk/jdk12u 仓库（master）</strong>（raw.githubusercontent 抓取 + GitHub contents API 目录列举）。克隆：<code>git clone https://github.com/openjdk/jdk12u</code>。</p>
+</div>
+
+<h3>关键文件清单（已核对）</h3>
+
+<table>
+<tr><th>文件/目录</th><th>行号</th><th>作用</th></tr>
+<tr><td><code>make/Main.gmk</code></td><td>:501 / :551 / :810 / :1058</td><td>注释"Build tests and microbenchmarks"；<strong><code>build-microbenchmark:</code></strong> 目标（转调 <code>test/BuildMicrobenchmark.gmk</code>）；依赖 <code>interim-langtools exploded-image</code>；<code>test-image: build-microbenchmark</code></td></tr>
+<tr><td><code>make/test/BuildMicrobenchmark.gmk</code></td><td>:34 / :42 / :52 / :98</td><td>JMH 缺失报错（<code>configure --with-jmh</code>）；产物 <code>$(IMAGES_OUTPUTDIR)/test/micro/benchmarks.jar</code>；编译/运行期 JMH jar 列表；注释"benchmarks for both the old and new JDK"</td></tr>
+<tr><td><code>test/micro/org/openjdk/bench/</code></td><td>目录</td><td>三个子树：<code>java</code> / <code>javax</code> / <code>vm</code>；如 <code>bench/java/lang/{StringBuilders,ArrayCopy,ClassForName,ThreadStartJoin}.java</code></td></tr>
+<tr><td><code>src/hotspot/cpu/</code></td><td>目录</td><td>七个端口：<code>aarch64, arm, ppc, s390, sparc, x86, zero</code> —— <strong>唯一 64 位 ARM 端口 = aarch64</strong>（JEP 340 的结果）</td></tr>
+</table>
+
+<h3>片段一：构建目标（make/Main.gmk，openjdk/jdk12u）</h3>
+
+<pre><code>// make/Main.gmk (openjdk/jdk12u)
+501: # Build tests and microbenchmarks
+...
+551: build-microbenchmark:
+552:     +($(CD) $(TOPDIR)/make &amp;&amp; $(MAKE) $(MAKE_ARGS) -f test/BuildMicrobenchmark.gmk)
+...
+810: build-microbenchmark: interim-langtools exploded-image      # 依赖：语言工具链 + 镜像
+...
+1058: test-image: build-microbenchmark                           # 只有测试镜像会带上它</code></pre>
+
+<h3>片段二：JMH 是外部依赖（make/test/BuildMicrobenchmark.gmk，openjdk/jdk12u）</h3>
+
+<pre><code>// make/test/BuildMicrobenchmark.gmk (openjdk/jdk12u)
+34: ifeq ($(JMH_CORE_JAR), )
+35:   $(info Error: JMH is missing. Please use configure --with-jmh.)
+...
+42: MICROBENCHMARK_JAR := $(IMAGES_OUTPUTDIR)/test/micro/benchmarks.jar
+...
+52: JMH_COMPILE_JARS := $(JMH_CORE_JAR) $(JMH_GENERATOR_JAR)
+53: JMH_RUNTIME_JARS := $(JMH_CORE_JAR) $(JMH_COMMONS_MATH_JAR) $(JMH_JOPT_SIMPLE_JAR)
+...
+98: # Create benchmarks JAR file with benchmarks for both the old and new JDK</code></pre>
+
+<p><strong>怎么读</strong>：三行注释/判断正好对应 JEP 230 承认的三个风险——<strong>引入 JMH 二进制依赖</strong>（所以必须 <code>--with-jmh</code> 显式提供）、<strong>构建时间</strong>（独立 target 隔离在常规构建之外）、<strong>仓库体积</strong>（基准源码入库）；最后一行注释说明它天生就是为 <strong>JDK N 与 N-1 对比</strong>设计的。</p>
+
+<h3>片段三：端口清单（src/hotspot/cpu 目录，openjdk/jdk12u）</h3>
+
+<pre><code>src/hotspot/cpu/
+├── aarch64/   ← 64 位 ARM 的唯一实现（JEP 340 保留并设为默认）
+├── arm/       ← 仅 32 位 ARM（arm64 变体与 64/32 #ifdef 已删除）
+├── ppc/  s390/  sparc/  x86/  zero/</code></pre>
+
+<h3>设计原理三问</h3>
+
+<table>
+<tr><th>问题</th><th>答案</th></tr>
+<tr><td><strong>为什么这样设计？</strong></td><td>230：性能回归必须<strong>可复现</strong>——把基准放进仓库，任何 JDK 改动都能被同一把尺子量；用 JMH 而不是自制框架，是因为方法学问题已被 JMH 解决。340：两套 64 位 ARM 代码意味着双倍维护、双倍测试、<code>#ifdef</code> 泛滥，<strong>留强去弱</strong>（aarch64 端口更活跃/更现代）能把资源集中到一条路径上。</td></tr>
+<tr><td><strong>代价是什么？</strong></td><td>230：构建依赖外部 JMH jar、仓库变大、构建变慢；基准数量有限（~100）且不自动覆盖新特性。340：失去一个"备选 64 位实现"，某些依赖 arm64 变体行为的平台需要迁移到 aarch64 端口并重新验证；32 位 ARM 端口必须额外做一致性验证。</td></tr>
+<tr><td><strong>如何改进？</strong></td><td>230 后续按需扩充基准（尤其新特性）并让 CI 定期跑对比；340 后续把平台支持进一步收敛/规范化（RISC-V 等新端口以同样方式治理）；对使用者，改进 = 把官方基准当"下限"，自家负载压测当"上限"，两层结合。</td></tr>
+</table>
+
+<h2>L4 · 边界层：能不能上生产</h2>
+
+<table>
+<tr><th>问题</th><th>结论</th><th>依据</th></tr>
+<tr><td>JDK 12 适合当生产基线吗？</td><td><strong>一般不建议</strong></td><td>非 LTS，公开更新窗口短；生产应选 LTS（11/17/21），12 用于验证与迁移预演</td></tr>
+<tr><td>官方微基准能当验收标准吗？</td><td>能做<strong>回归哨兵</strong>，不能替代压测</td><td>JEP 230 Non-goal：不覆盖全部 JDK、不为新特性自动提供基准</td></tr>
+<tr><td>没有 <code>--with-jmh</code> 能构建吗？</td><td>能构建 JDK，<strong>不能建基准</strong></td><td><code>BuildMicrobenchmark.gmk:34</code> 显式报错退出</td></tr>
+<tr><td>340 之后还要关心 ARM 构建选项吗？</td><td>64 位 ARM <strong>默认 aarch64，无选择</strong>；32 位 ARM 仍独立</td><td>JEP 340 任务清单：删除构建选项、aarch64 设为默认</td></tr>
+<tr><td>在 12 上用 switch 表达式安全吗？</td><td>仅限锁定 12 的实验分支</td><td>预览特性 + 13 改 <code>yield</code>（详见 0018 课）</td></tr>
+</table>
+
+<div class="production-note">
+<div class="header">11 → 12 升级/落地决策清单</div>
+<ul>
+<li><strong>先定性质</strong>：12 是"过路站"不是"目的地"——把它用于特性验证、性能对比、迁移预演，生产基线仍锚定 LTS。</li>
+<li><strong>构建层面</strong>：若要跑官方基准，configure 时加 <code>--with-jmh=&lt;path&gt;</code>；CI 里把 <code>make build-microbenchmark</code> 与 <code>make test TEST="micro:…"</code> 放进<strong>独立 job</strong>（避免拖慢主构建）。</li>
+<li><strong>平台层面</strong>：ARM 交付链检查是否还依赖"arm64 构建选项"——12 起必须走 aarch64 端口；32 位 ARM 产品线单独验证。</li>
+<li><strong>代码层面</strong>：预览特性开关集中到构建脚本一处（见 0018 的规矩）；把 <code>Collectors.teeing</code> 等正式 API 的使用点登记为"最低版本 = 12"。</li>
+<li><strong>度量层面</strong>：升级前后用<strong>同一套 JMH 基准</strong>（官方 + 自有）跑 JDK 11 vs 12 对比，看的不是单点均值，而是波动区间与趋势。</li>
+</ul>
+</div>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: JEP 230 做了什么？怎么用？</div>
+<div class="answer">
+<p>把基于 <strong>JMH</strong> 的微基准正式纳入 JDK 仓库：<code>test/micro/org/openjdk/bench/{java,javax,vm}</code>，初始约 100 个基准。构建与运行：</p>
+<pre><code>configure --with-jmh=&lt;JMH 目录&gt;              # JMH 是外部二进制依赖
+make build-microbenchmark                     # 独立目标，不参与常规构建
+make test TEST="micro:regexp"                 # 按名称过滤运行</code></pre>
+<p>构建脚本会为 <strong>JDK(N) 与 JDK(N-1)</strong> 各准备产物，用同一基准做版本对比。JEP 明确 Non-goal：不为新特性自动提供基准、不覆盖全部 JDK。</p>
+<div class="key-point"><strong>关键点</strong>：入库的不是"数字"而是"可复现的测量方法"；<code>--with-jmh</code> 与独立 make target 是两个必答细节。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — 手写一个计时循环和 JMH 差在哪？</div>
+<div class="answer">
+<p>手写循环会被三件事毁掉：① <strong>死代码消除</strong>——结果没人消费，JIT 把整段计算删了，你测到的是"什么都不做"的时间；② <strong>预热不足</strong>——量到的是解释器/C1 甚至 JIT 编译期的噪声；③ <strong>常量折叠/内联干扰</strong>——循环里的值编译期已知，跑的根本不是你要的逻辑。JMH 的解法是：注解处理器生成胶水代码、独立 fork 进程、显式预热/测量轮、返回值喂给 <code>Blackhole</code>。所以<strong>官方套件的价值是方法学，不是覆盖度</strong>。</p>
+<div class="key-point"><strong>关键点</strong>：DCE、预热、折叠三宗罪 + Blackhole/fork/warmup 三味药。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: JEP 340 到底删了什么？</div>
+<div class="answer">
+<p>背景：OpenJDK 里曾有<strong>两份 64 位 ARM 实现</strong>——一份是 Oracle 贡献、寄生在 <code>src/hotspot/cpu/arm</code> 目录里的 <strong>arm64 变体</strong>（带大量"64 位还是 32 位"的 <code>#ifdef</code>），另一份是独立的 <code>src/hotspot/cpu/aarch64</code>。JEP 340 的任务：删除 arm64 相关源码与 <code>#ifdef</code> → 全仓扫描残留 → <strong>删除该构建选项、把 aarch64 端口设为 64 位 ARM 默认</strong> → 验证 32 位 ARM 端口仍能构建并通过一致性测试。结果：现在的 <code>src/hotspot/cpu/</code> 只有 <code>aarch64</code>（64 位）和 <code>arm</code>（32 位）两条 ARM 路径。</p>
+<div class="key-point"><strong>关键点</strong>：不是删端口，是<strong>合并 64 位实现</strong>——保留 32 位 ARM，删掉重复的 64 位变体。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 故障排查 — <code>configure</code> 后 <code>make build-microbenchmark</code> 报 "JMH is missing"？</div>
+<div class="answer">
+<p>原因单一且明确：<code>make/test/BuildMicrobenchmark.gmk:34</code> 检查 <code>JMH_CORE_JAR</code> 为空即报 <code>Error: JMH is missing. Please use configure --with-jmh.</code>。修复：在 <strong>configure 阶段</strong>（不是 make 阶段）提供 <code>--with-jmh=&lt;含 jmh-core 等 jar 的目录&gt;</code>，重新生成构建目录后再 make。注意它<strong>不影响 JDK 本体构建</strong>——如果你只是要编译 JDK，可以忽略该错误；只有要跑基准/构建 test-image 才必须配。</p>
+<div class="key-point"><strong>关键点</strong>：JMH 是外部依赖 → 配置点在 configure；报错只影响基准构建，不阻塞 JDK。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: 架构师 — 非 LTS 版本在你们的升级策略里怎么摆？</div>
+<div class="answer">
+<p>三档策略：<strong>① 生产</strong>只上 LTS（11 → 17/21），非 LTS 不进生产；<strong>② 预发/特性验证</strong>每个非 LTS 都跟，用于提前暴露 API/行为变化（例如 12 的 <code>teeing</code>、switch 预览、CDS 默认归档对启动路径的影响）；<strong>③ 框架与依赖</strong>要求以 LTS 为最低基线编译，避免把非 LTS 专属 API 泄漏到公共签名。JDK 12 的具体意义：用它验证"11 → 17"路上会遇到的中间变化（预览语法、GC 开关、CDS 行为），而不是把它当目的地。</p>
+<div class="key-point"><strong>关键点</strong>：非 LTS = 雷达，LTS = 地基；把 12 当"跳到 17 的排练场"是它的正确用法。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 讲师角度 — 给团队写一条"JDK 12 预览特性使用规矩"。</div>
+<div class="answer">
+<p>可直接落库的四句话：</p>
+<ol>
+<li>仅限<strong>实验分支</strong>，主干与框架代码禁用 <code>--enable-preview</code>；</li>
+<li>开关<strong>只在构建脚本里出现一处</strong>，禁止开发者本地随意加；</li>
+<li>编译与运行 <strong>JDK 版本必须完全一致</strong>（<code>--release 12</code> 配 <code>--enable-preview</code>，运行 JVM 也必须是 12）；</li>
+<li>每次 JDK 升级跑一次<strong>预览语法迁移检查</strong>（12 的 <code>break 值</code> → 13 的 <code>yield</code> 是模板案例），并把"预览特性清单"列为 CR 必查项。</li>
+</ol>
+<div class="key-point"><strong>关键点</strong>：规矩的锚点是"可回退"——一处开关、版本锁定、迁移检查，三件事保证随时能退。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能说出 JEP 230 的目录结构、两个 make 目标与 <code>--with-jmh</code> 依赖（interviewer 角度）</li>
+<li class="done">能解释手写基准的三宗罪与 JMH 的三味药（instructor 角度）</li>
+<li class="done">能讲清 JEP 340 删的是"arm64 变体"而非 ARM 支持（interviewer 角度）</li>
+<li class="done">能定位 Main.gmk:551 与 BuildMicrobenchmark.gmk:34 的关键行（code reviewer 角度）</li>
+<li class="done">能排查 "JMH is missing" 构建错误（incident responder 角度）</li>
+<li class="done">能给出非 LTS 的三档升级策略并把 12 定位为"排练场"（architect 角度）</li>
+<li>能写出团队级预览特性使用规矩（architect 角度）</li>
+<li>能说明官方基准与压测的关系边界（code reviewer 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="./0021-java12-gc.html">← 上一课：Shenandoah · G1 可中断混合回收 · 默认 CDS</a></span>
+<span><a href="./0023-java12-index.html">下一课：Java 12 索引 →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

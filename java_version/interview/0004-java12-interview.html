@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 12 面试题库 · Deep Mastery</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12 · 面试题库</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Java 12 面试题库</h1>
+<div class="article-meta"><span>🧪 L5 · 面试层</span><span>24 题 · 5 角度</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 12 / 面试题库</div>
+
+<h2>Switch 表达式与预览特性（JEP 325）（5 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q1: JEP 325 在 Java 12 里交付了什么？用一句话说清它「不是」什么。</div>
+<div class="answer"><p>交付的是 <strong>switch 作为表达式</strong>的预览形态：新增 <code>case L -&gt;</code> 箭头标签（无 fall-through）、逗号多标签、用 <strong><code>break &lt;value&gt;;</code> 从块中产出值</strong>。它「不是」正式特性——需要 <code>javac --enable-preview --release 12</code> 编译、<code>java --enable-preview</code> 运行，语义在 13（JEP 354，<code>break</code> → <code>yield</code>）还改过一次，14（JEP 361）才转正。</p>
+<div class="key-point">12 = <code>break 值</code>，13 = <code>yield</code>，14 = 正式——这条时间线是最高频考点。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — switch 表达式的两条硬规则是什么？违反了分别报什么？</div>
+<div class="answer">
+<ol>
+<li><strong>穷尽性（exhaustive）</strong>：必须覆盖所有可能输入。enum 全覆盖时编译器可自动补 default，否则报 <code>the switch expression does not cover all possible input values</code>（javac <code>compiler.properties</code> <code>not.exhaustive</code>）。</li>
+<li><strong>完整性（每个分支给出值或抛异常）</strong>：箭头规则走完没给值报 <code>switch rule completes without providing a value</code>；<code>break</code> 缺值报 <code>missing break value</code>；整个 switch 正常落空报 <code>switch expression completes normally</code>；空体报 <code>switch expression does not have any case clauses</code>。</li>
+</ol>
+<p>编译期还强制：<strong>禁止 <code>return</code>/<code>continue</code>/带标签 <code>break</code> 穿越表达式</strong>（<code>illegal jump through a switch expression</code> 相关错误）。</p>
+<div class="key-point">「穷尽性」管输入覆盖，「完整性」管每个分支的产出——两条都要背。</div>
+</div>
+</div>
+
+<h3>代码审查者角度</h3>
+<div class="qa-block">
+<div class="question">Q3: 审查 — 这段「Java 12 预览」代码为什么编译不过？</div>
+<div class="answer"><pre><code>// javac --enable-preview --release 12
+String r = switch (day) {
+    case MONDAY, FRIDAY, SUNDAY -&gt; {
+        log(day);
+        break day.name();          // 期望产出名字
+    }
+    case TUESDAY -&gt; "T";
+    default -&gt; "other";
+};</code></pre>
+<p>问题：<code>break day.name()</code> 违反 <strong>「value break 必须是紧邻的、未被嵌套结构切断的直接产物」</strong>——javac 对此的报错是 <code>value break not supported in '{0}'</code> / <code>unexpected value break</code>（<code>Attr.java</code> 的 <code>BreakExprNotImmediate</code>、<code>BreakComplexValueNoSwitchExpression</code>）。12 的规矩是：值 <code>break</code> 只能出现在箭头块的<strong>直接语句序列</strong>里，且该块不能把控制流「绕道」出去；块内局部变量也不会泄漏到其他分支（传统 <code>:</code> 形式会泄漏）。写成 <code>break day.name().toUpperCase();</code> 这种表达式本身没问题，但把 <code>log(day)</code> 之后的值产出与跨块跳转混在一起就越界了。</p>
+<div class="key-point">审查清单：值 break 的位置、default 是否存在（enum 全覆盖除外）、有没有 return/continue 穿越。</div>
+</div>
+</div>
+
+<h3>故障排查者角度</h3>
+<div class="qa-block">
+<div class="question">Q4: 本地编译通过，部署后报 <code>UnsupportedClassVersionError</code> / preview 特性被拒，怎么排查？</div>
+<div class="answer"><p>九成是<strong>预览特性的版本锁定</strong>：预览 class 文件带有 preview 标记，运行 JVM 必须是<strong>编译时同一个启用了 preview 的版本</strong>。排查三步：</p>
+<ol>
+<li>编译命令是否带 <code>--enable-preview</code> 且 <code>--release</code> 与运行 JDK 完全一致（<code>--release 12</code> ↔ 运行 12）；</li>
+<li>启动命令是否漏了 <code>java --enable-preview</code>（或容器里跑的是 11/13 的 JRE）；</li>
+<li>CI 是否用多版本矩阵——12 编译的 preview 类混进 11 的运行时一定炸。</li>
+</ol>
+<p>修复：三处（编译、运行、镜像 JDK）锁成同一版本；治本是把开关收敛到构建脚本一处，业务代码干脆不进预览特性。</p>
+<div class="key-point">预览特性的故障几乎总是「版本三角」不一致：javac 版本 / --release / 运行 JVM。</div>
+</div>
+</div>
+
+<h3>架构师角度</h3>
+<div class="qa-block">
+<div class="question">Q5: 团队能不能在生产项目里用 switch 表达式？给决策框架。</div>
+<div class="answer"><p>分三档：<strong>① 主干/框架库</strong>——不用（语义无承诺，12 与 13 的产值语法不同，升级即改码）；<strong>② 锁定 JDK 12 的实验分支</strong>——可以，满足四个条件：开关只在构建脚本一处、编译运行同版本、CR 加「预览特性清单」项、升级时跑迁移检查（<code>break 值</code> → <code>yield</code>）；<strong>③ 以 14+/17 为目标</strong>——先写成传统形式，等切到 14 再一次性转正语法。判断锚点：<strong>「预览特性是租来的，不是买到的」</strong>——任何用法都要保证一个版本内能整体回退。</p>
+<div class="key-point">决策看的不是语法好不好，而是「回退成本」与「版本停留时长」。</div>
+</div>
+</div>
+
+<h2>类库 API：teeing · 紧凑数字 · String（5 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q6: Java 12 新增了哪些类库 API？挑三个讲原理。</div>
+<div class="answer">
+<ol>
+<li><strong><code>Collectors.teeing(other, merger)</code></strong>：把两条收集流水线的结果交给 merger 合并——内部用局部类 <code>PairBox</code> 同时持有两个下游的容器，每个元素喂两个 accumulator，并行时 combine 合并两对容器，最后 <code>merger(finisher1(left), finisher2(right))</code>。</li>
+<li><strong>紧凑数字</strong>：<code>NumberFormat.getCompactNumberInstance(locale, Style.SHORT|LONG)</code>，把 1234567 格式化为 <code>123万</code> / <code>123 万</code>（依 locale），实现类是 <code>java.text.CompactNumberFormat</code>。</li>
+<li><strong><code>String.indent(n)</code> / <code>String.transform(f)</code></strong>：按行缩进（<code>n&gt;0</code> 加前缀、<code>n&lt;0</code> 去前缀、<code>MIN_VALUE</code> 相当于 <code>stripLeading</code>）与整串函数变换（就是 <code>f.apply(this)</code>）。</li>
+</ol>
+<p>另有 Unicode 11.0 支持与日本新年号「令和」（<code>java.time</code> 新增 <code>JapaneseEra.HEISEI</code> 之外的令和识别）。</p>
+<div class="key-point">teeing 是「收集器的二元组合子」，与 <code>reduce</code> 的区别在保持两条独立下游的特性信息。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q7: 追问 — 用伪代码写出 <code>teeing0</code> 的核心逻辑。</div>
+<div class="answer"><pre><code>teeing0(c1, c2, merger):
+    requireNonNull(c1); requireNonNull(c2); requireNonNull(merger)
+    对 c1/c2 的 supplier/accumulator/combiner/finisher 逐个 requireNonNull（共 11 处）
+    if CH_ID ⊆ chars(c1) or CH_ID ⊆ chars(c2):
+        characteristics = {}                     # 任一侧无 identity finish → 整体去掉
+    else:
+        characteristics = chars(c1) ∩ chars(c2) - {IDENTITY_FINISH}
+
+    class PairBox:
+        left  = c1.supplier.get()
+        right = c2.supplier.get()
+        add(t):      c1.acc(left, t); c2.acc(right, t)     # 同一元素喂两个下游
+        combine(o):  left = c1.comb(left, o.left); right = c2.comb(right, o.right)
+        get():       return merger(c1.finish(left), c2.finish(right))
+    return Collector(PairBox::new, PairBox::add, PairBox::combine, PairBox::get, characteristics)</code></pre>
+<div class="key-point">去掉 <code>IDENTITY_FINISH</code> 是因为最终结果经过 merger，不再是下游容器本身。</div>
+</div>
+</div>
+
+<h3>故障排查者角度</h3>
+<div class="qa-block">
+<div class="question">Q8: 并行流下 <code>teeing</code> 的结果与串行不一致，为什么？</div>
+<div class="answer"><p>两点：① <code>merger</code> <strong>必须满足交换律与结合律</strong>——并行时 PairBox 分片合并的顺序不确定，merger 若依赖顺序（如字符串拼接、减法）结果就会漂移；② 下游 1/2 各自的 accumulator/combiner 也要线程安全语义正确（JMH 容器本身按标准收集器约定分片）。排查方法：同数据集串/并行各跑 N 次对比；检查 merger 里有没有「减法、除法、依赖首次出现顺序的取舍」。修复：换成交换律安全的合并（加法、max/min、拼接改为先收集再排序）。</p>
+<div class="key-point">收集器契约（无序时交换律 + 结合律）在 teeing 里被「放大」到 merger 上。</div>
+</div>
+</div>
+
+<h3>代码审查者角度</h3>
+<div class="qa-block">
+<div class="question">Q9: 审查 — <code>String.indent</code> 的这三个用法对不对？</div>
+<div class="answer"><pre><code>"a\nb".indent(2)             // → "  a\n  b\n"  尾部多一个 \n
+"text".indent(0)             // → "text\n"     不是原样返回！
+"  x".indent(Integer.MIN_VALUE)  // → 相当于 stripLeading()</code></pre>
+<p>三处坑：① <strong><code>indent</code> 强制保证输出以换行结尾</strong>（内部用 <code>joining("\n","","\n")</code>），空串除外——拿它做「原样缩进」会平白多个换行；② <code>indent(0)</code> 不是 no-op，也会补尾换行；③ <code>n == Integer.MIN_VALUE</code> 因为取负会溢出，被特判为去前导空白。审查建议：对换行敏感的场景（拼 JSON、协议帧）改用手工逐行处理，或 <code>indent</code> 后 <code>stripTrailing()</code>。</p>
+<div class="key-point">「缩进 0 也加换行」是最反直觉的一条，来自实现的统一收尾逻辑。</div>
+</div>
+</div>
+
+<h3>技术讲师角度</h3>
+<div class="qa-block">
+<div class="question">Q10: 大白话解释 <code>teeing</code> 和紧凑数字分别解决什么问题？</div>
+<div class="answer"><p><strong>teeing</strong>：以前想在一次遍历里既算总分又算平均分，要么遍历两遍、要么手写一个容器收集器。<code>teeing</code> 就是「<strong>一根水管分两头接，最后拿个三通把两股水合起来</strong>」——两个收集器各干各的，<code>merger</code> 负责合流，而且只遍历一次。<br/><strong>紧凑数字</strong>：报表里 <code>1,234,567</code> 要读半天，<code>123万</code> 一眼就懂——<code>getCompactNumberInstance</code> 按 locale 套用「万/亿」或「K/M/B」的单位规则，比自己除以 10000 再拼字符串省事，还能随 <code>NumberFormat</code> 体系换 locale。</p>
+<div class="key-point">teeing 省一次遍历，紧凑数字省一套手写单位换算。</div>
+</div>
+</div>
+
+<h2>JVM 常量 API 与常量池（JEP 334 / 309）（4 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q11: JEP 334 交付了什么包？和 JEP 309 什么关系？</div>
+<div class="answer"><p>JDK 12 新增 <strong><code>java.lang.constant</code></strong> 包（注意：JEP 文本写的是 <code>java.lang.invoke.constant</code>，但 JDK 12 实际交付与 Oracle 12 API 文档均为 <code>java.lang.constant</code>），提供 <code>ConstantDesc</code>、<code>Constable</code> 双接口与 <code>ClassDesc</code>/<code>MethodTypeDesc</code>/<code>MethodHandleDesc</code>/<code>DynamicConstantDesc</code> 等描述符类。与 JEP 309 的关系：<strong>JEP 309（CONSTANT_Dynamic）随 JDK 11 交付了字节码层面的 <code>CONSTANT_Dynamic</code> 常量池项</strong>；JEP 334 交付的是它的 <strong>Java 语言 API 层</strong>——<code>DynamicConstantDesc</code> 让库代码能以类型安全方式描述并解析 CONDY，两层合起来才是「常量池可被 Java 程序读写」。</p>
+<div class="key-point">309 = 字节码（JDK 11），334 = API（JDK 12）；包名是 <code>java.lang.constant</code>，不是 <code>…invoke.constant</code>。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q12: 追问 — 写出 <code>ConstantDesc</code> 的两段协议伪代码。</div>
+<div class="answer"><pre><code># 协议一：把运行时对象降维成"池里的描述"
+obj.describeConstable() -&gt; Optional&lt;ConstantDesc&gt;
+    Class   → ClassDesc.ofDescriptor("Ljava/lang/String;")
+    String/Integer/MethodHandle/MethodType/Enum → 各自的常量描述
+    动态句柄/调用点/常量 → DynamicConstantDesc（含 bootstrap 方法 + 参数）
+
+# 协议二：把描述还原成运行时值（逆向）
+ConstantDesc.resolveConstantDesc(Lookup lookup) -&gt; Object
+    普通常量 → 直接返回字面值
+    DynamicConstantDesc →
+        校验 bsm：参数数 ≥ 2 且第 1 参是 MethodHandles.Lookup，否则 BootstrapMethodError
+        args = [lookup, constantName, constantType] + [arg.resolveConstantDesc(lookup)...]
+        bsm.invokeWithArguments(args)          # 即常量池 BSM 的 Java 版
+        catch Throwable → 包成 BootstrapMethodError 抛出</code></pre>
+<div class="key-point"><code>describeConstable</code> 是「写」，<code>resolveConstantDesc</code> 是「读+执行 BSM」——两者对称。</div>
+</div>
+</div>
+
+<h3>代码审查者角度</h3>
+<div class="qa-block">
+<div class="question">Q13: 审查 — 有人写 <code>import java.lang.invoke.constant.ClassDesc;</code>，对吗？</div>
+<div class="answer"><p>错。JDK 12 实际交付的包是 <strong><code>java.lang.constant</code></strong>（源码 <code>src/java.base/share/classes/java/lang/constant/</code>、Oracle 12 API 文档均可证），JEP 334 正文里的 <code>java.lang.invoke.constant</code> 是提案阶段的措辞。审查时还要注意两点：① <strong>别把后续 JDK 的成员安到 12 头上</strong>——<code>ModuleDesc</code>/<code>PackageDesc</code> 在 jdk12u 该包不存在；② <code>@since 12</code> 的类型（<code>ConstantDesc</code>、<code>ClassDesc</code>、<code>DynamicConstantDesc</code>、<code>VarHandleDesc</code>、<code>Style</code>…）可以用，标注了更晚版本的成员不行——用本机 JDK 25 的 <code>src.zip</code> 对照行号时尤其要小心。</p>
+<div class="key-point">以「JDK 12 API 文档 + jdk12u 源码」为准，不以 JEP 草案措辞为准。</div>
+</div>
+</div>
+
+<h3>架构师角度</h3>
+<div class="qa-block">
+<div class="question">Q14: 常量 API 对框架作者有什么实际价值？</div>
+<div class="answer"><p>三类场景：① <strong>字节码生成类库</strong>（ASM 替代品、序列化框架、LambdaMetafactory 周边）——以前拼常量池要手写字节数组/依赖内部 API，现在用 <code>ClassDesc.ofDescriptor</code>、<code>MethodHandleDesc.ofStatic</code> 这类类型安全的工厂；② <strong>跨语言/跨类加载器的常量共享</strong>——CONDY 让「一次计算、按名字复用」的惰性常量可以被描述并传递；③ <strong>可移植的元数据</strong>——<code>Constable</code> 让 <code>Enum</code>、<code>String</code> 等类型能自描述为池常量，利于模块化/镜像化场景下的元信息交换。本质价值：<strong>把常量池从「.class 文件的私有格式」升格为「公开的 Java API 模型」</strong>。</p>
+<div class="key-point">对普通业务代码无感，对「生成/操纵字节码」的框架是刚需。</div>
+</div>
+</div>
+
+<h2>GC 与运行时：Shenandoah · G1 · CDS（6 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q15: JEP 189 Shenandoah 的核心机制是什么？怎么启用？</div>
+<div class="answer"><p>核心是<strong>并发疏散（concurrent evacuation）</strong>：移动对象不再占满 STW 暂停——给每个对象配一个<strong>间接指针（Brooks 指针</strong>，源码 <code>shenandoahBrooksPointer.hpp</code>，位移量为负的 <code>HeapWord</code>），应用线程在写屏障里完成对象疏散，标记与压缩全并发，STW 只扫描线程栈根。卖点：<strong>暂停时间与堆大小无关</strong>——200MB 与 200GB 的堆暂停量级一致，代价是吞吐与空间（间接指针 + 并发复制的临时双份）。启用：</p>
+<pre><code>java -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC ...   # 实验性，默认关</code></pre>
+<p>平台 aarch64 + amd64；<strong>JDK 15（JEP 379）才转正</strong>。</p>
+<div class="key-point">Brooks 指针（Shenandoah）vs 着色指针（ZGC）——同一问题（并发移动）的两种解。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q16: 追问 — JEP 344 与 JEP 346 分别改了 G1 的什么？</div>
+<div class="answer">
+<p><strong>JEP 344（可中断的混合回收）</strong>：把每次混合回收的 collection set 拆成 <strong>mandatory</strong>（不可增量，含 young 与部分 old，约 80%）与 <strong>optional</strong>（纯 old，约 20%）两段；optional 段<strong>按剩余时间余量增量推进，最细可到一次一个 region</strong>，启发式发现「预测总出错」才进入增量模式。只有额外 CPU 开销（称 &lt;1%）与少量指针跟踪内存，<strong>无用户可见开关</strong>。</p>
+<p><strong>JEP 346（及时归还空闲内存）</strong>：空闲期周期性 GC 后按 Min/MaxHeapFreeRatio 与 Xms/Xmx uncommit 内存。触发需同时满足：距上次暂停超过 <code>G1PeriodicGCInterval</code> 毫秒（<strong>默认 0 = 关闭，JDK 12 默认不生效</strong>）且 1 分钟平均负载 &lt; <code>G1PeriodicGCSystemLoadThreshold</code>（默认 0.0 = 不检查）；<code>G1PeriodicGCInvokesConcurrent</code> 默认 true（走并发 cycle 而非 Full GC），日志 cause 为 <code>G1 Periodic Collection</code>。</p>
+<div class="key-point">344 管「单次暂停太长」，346 管「内存占着不还」——方向相反，配合理解。</div>
+</div>
+</div>
+
+<h3>故障排查者角度</h3>
+<div class="qa-block">
+<div class="question">Q17: 需求是「空闲时把内存还给系统」，加上 <code>-XX:G1PeriodicGCInterval=5000</code> 后没效果，排查路径？</div>
+<div class="answer"><p>按触发链逐项核对：</p>
+<ol>
+<li><strong>负载条件</strong>：<code>G1PeriodicGCSystemLoadThreshold</code> 默认 0.0 即不检查，但若有人配了阈值而机器 1 分钟均值更高，周期 GC 永不触发（日志里看不到 <code>[gc,periodic] Checking for periodic GC.</code>）；</li>
+<li><strong>并发周期占用</strong>：距上次 GC 暂停不足 5000ms 或有进行中的 concurrent cycle 时被跳过；</li>
+<li><strong>GC 类型</strong>：默认走并发 cycle（<code>G1PeriodicGCInvokesConcurrent=true</code>），结束才按空闲比例 uncommit——检查 <code>MinHeapFreeRatio/MaxHeapFreeRatio</code> 与 <code>-Xms</code> 是否等于 <code>-Xmx</code>（<strong>Xms=Xmx 时堆固定，无内存可还</strong>）；</li>
+<li><strong>延迟因素</strong>：uncommit 后是否立刻又被分配吃掉——看 <code>-XX:G1UncommitDelay</code>（存在该 flag，默认值建议用 <code>PrintFlagsFinal</code> 现查，勿凭记忆）。</li>
+</ol>
+<p>验证：开 <code>-Xlog:gc,periodic</code> 观察触发日志与 uncommit 记录。</p>
+<div class="key-point">「没效果」先分清是没触发 GC，还是 GC 了但没 uncommit（Xms=Xmx 是经典答案）。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q18: 混合回收后老年代还是涨，怀疑 344 没生效——344 有开关可开吗？</div>
+<div class="answer"><p>没有。<strong>JEP 344 未提供任何用户可见 flag</strong>，它是 G1 内部行为：只有当启发式反复预测不准时才进入 optional 段的增量模式，预测准确时 optional 段会缩小甚至为零。因此「看不到效果」是正常设计（它不是永远可中断，Non-goal 也明确不承诺所有 G1 暂停可中断）。排查老年代增长要看别的：分配速率、<code>InitiatingHeapOccupancyPercent</code>、大对象、是否有内存泄漏。源码侧确认点：<code>g1CollectionSet.hpp</code> 的 <code>_optional_regions</code>、<code>g1CollectedHeap.cpp</code> 的 <code>G1EvacuateOptionalRegionTask</code>（:3772）与 <code>evacuate_optional_collection_set</code>（:3870）。</p>
+<div class="key-point">344 是「按需触发的自保机制」，不是「长效可中断开关」。</div>
+</div>
+</div>
+
+<h3>架构师角度</h3>
+<div class="qa-block">
+<div class="question">Q19: JEP 341 默认 CDS 归档改变了什么？怎么开/关？</div>
+<div class="answer"><p>以前要手动 <code>-Xshare:dump</code> 生成 <code>classes.jsa</code>；<strong>JEP 341 起 JDK 构建期（link image 后）自动生成默认归档</strong>放进 <code>lib/server/</code>，随发行版分发。开关三态（<code>arguments.cpp</code>）：<code>-Xshare:auto</code>（server VM 默认：尝试用、失败继续）、<code>-Xshare:off</code>（禁用）、<code>-Xshare:on</code>（强制，归档不可用即失败）；dump 用 <code>-Xshare:dump</code>。限制：仅 64 位、仅 native 构建（非交叉编译）。收益：JDK 11 EA 的 HelloWorld 实测启动提速 <strong>32%</strong>。自定义 class list / GC 配置仍可自建归档，默认归档只是「零配置的下限」。</p>
+<div class="key-point">默认归档 = 构建期产物，不是运行期首次生成；<code>-Xshare:off</code> 是诊断兜底。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q20: 讲师角度 — 给业务团队一句话讲清「12 的 GC 选项」。</div>
+<div class="answer"><p>「<strong>G1 照常用；Shenandoah 想试低暂停就加两行实验性开关（15 才转正）；两件新东西 344/346 是 G1 自动优化——344 让混合回收的尾巴更碎、更好掐断，346 能在你空闲时把内存还给机器，但后者默认关着（要配 <code>G1PeriodicGCInterval</code>）；CDS 不用管，JDK 自带默认归档，启动自动快 30% 左右。</strong>」一句话里四个 JEP 全部对应到默认行为与动作项。</p>
+<div class="key-point">教学时永远绑定「默认值 + 需要你做什么」两件事。</div>
+</div>
+</div>
+
+<div class="mermaid">
+flowchart LR
+    subgraph G1["G1 · JDK 12 三件套"]
+    A["JEP 344<br/>mandatory + optional<br/>混合回收更可掐断"] --&gt; D["STW 暂停更平稳"]
+    B["JEP 346<br/>G1PeriodicGCInterval<br/>默认 0 = 关闭"] --&gt; E["空闲期归还内存"]
+    C["JEP 341<br/>构建期 classes.jsa"] --&gt; F["启动提速约 32%"]
+    end
+    G["JEP 189 Shenandoah<br/>Brooks 指针并发疏散<br/>实验性"] --&gt; H["暂停与堆大小无关"]
+</div>
+
+<h2>工具链与升级策略（JEP 230 / 340 / 非 LTS）（4 题）</h2>
+
+<h3>面试官角度</h3>
+<div class="qa-block">
+<div class="question">Q21: JEP 230 是什么？怎么构建、怎么运行？</div>
+<div class="answer"><p>把基于 <strong>JMH</strong> 的微基准正式纳入 JDK 仓库：<code>test/micro/org/openjdk/bench/{java,javax,vm}</code>，初始约 100 个。流程：</p>
+<pre><code>configure --with-jmh=&lt;JMH 目录&gt;        # JMH 是外部二进制依赖，缺失会报错
+make build-microbenchmark               # Main.gmk:551 独立目标，不进常规构建
+make test TEST="micro:regexp"           # 按名称运行</code></pre>
+<p>产物为 <code>test/micro/benchmarks.jar</code>，且脚本注释明确「for both the old and new JDK」——支持 JDK(N) 与 JDK(N-1) 对比。Non-goal：不为新特性自动配基准、不覆盖全部 JDK。</p>
+<div class="key-point">三个关键词：<code>--with-jmh</code> 依赖、独立 make target、双版本对比。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q22: 追问 — JEP 340 到底删了什么？</div>
+<div class="answer"><p>OpenJDK 曾有两套 64 位 ARM 实现：寄生在 <code>src/hotspot/cpu/arm</code> 里的 <strong>arm64 变体</strong>（大量 64/32 位 <code>#ifdef</code>）和独立的 <code>src/hotspot/cpu/aarch64</code>。JEP 340：删除 arm64 相关源码与 <code>#ifdef</code> → 全仓扫描残留 → <strong>删除对应构建选项，aarch64 端口成为 64 位 ARM 默认</strong> → 验证 32 位 ARM 端口无回归。结果：<code>src/hotspot/cpu/</code> 只剩 <code>arm</code>（32 位）+ <code>aarch64</code>（64 位）两条 ARM 路径，外加 x86/ppc/s390/sparc/zero。</p>
+<div class="key-point">合并的是「64 位实现」，不是砍掉 ARM 支持——32 位端口仍在。</div>
+</div>
+</div>
+
+<h3>架构师角度</h3>
+<div class="qa-block">
+<div class="question">Q23: JDK 12 是非 LTS，你们的版本策略怎么定？</div>
+<div class="answer"><p>三档：<strong>① 生产只上 LTS</strong>（11 → 17/21），非 LTS 不进生产，规避支持窗口短与特性摇摆；<strong>② 预发每个版本都跟</strong>——12 的价值是提前暴露 11→17 中间的变化（switch 预览语法、CDS 默认归档、G1 行为、AArch64 构建选项消失）；<strong>③ 库与公共 API 以 LTS 为最低基线编译</strong>，禁止把非 LTS 专属 API 暴露进公共签名。12 的定位一句话：<strong>LTS 之间的排练场</strong>，用它验证、不用它托底。</p>
+<div class="key-point">非 LTS = 雷达，LTS = 地基；排练成本远低于在生产里第一次踩坑。</div>
+</div>
+</div>
+
+<h3>技术讲师角度</h3>
+<div class="qa-block">
+<div class="question">Q24: 用大白话给新人讲「预览特性」和「正式特性」的区别，以及 Java 12 的位置。</div>
+<div class="answer"><p>把它想成<strong>餐厅的新菜试吃</strong>：正式特性是「已上菜单的菜」——配方锁死、随便点；预览特性是「主厨今天请你试吃的新菜」——味道可以下次改（Java 12 的 switch 用 <code>break</code> 端出结果，13 就改成 <code>yield</code> 了），而且<strong>只在指定档口供应</strong>：必须用 <code>--enable-preview</code> 明说，编译和吃的时候（运行）都要同一家店（同一个 JDK 版本）。Java 12 的位置：非 LTS、只卖一季——switch 预览首发、Shenandoah 首发、JMH 体检入库、G1 修修补补、CDS 白送启动提速。学它是为了<strong>看懂 11→17 之间发生了什么</strong>，不是把它当成长期饭票。</p>
+<div class="key-point">试吃（预览）≠ 上菜单（正式）；一季店（非 LTS）≠ 长期基线（LTS）。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本题库 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能答 switch 预览的两条硬规则、break/yield 时间线与启用方式（interviewer 角度）</li>
+<li class="done">能写出 teeing0 的 PairBox 伪代码与两段 ConstantDesc 协议（追问链要求）</li>
+<li class="done">能做 GC 选型与非 LTS 版本策略的论证（architect 角度）</li>
+<li class="done">能审查值 break 越界、indent 尾换行、错误包名 import（code reviewer 角度）</li>
+<li>能排查 preview 版本三角、G1PeriodicGC 不触发、Xshare 归档问题（incident responder 角度）</li>
+<li>能用「试吃/一季店」类比向新人讲清预览与非 LTS（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="../lessons/0022-java12-toolchain.html">← 上一课：JMH 微基准 · 单一 AArch64 端口</a></span>
+<span><a href="../index.html">返回首页</a></span>
+</div>
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

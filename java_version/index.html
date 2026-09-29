@@ -26,9 +26,9 @@
   </div>
 
   <div class="stats">
-    <div class="stat-card"><div class="number">15</div><div class="label">Lessons (L1–L5 + S1)</div></div>
-    <div class="stat-card"><div class="number">57</div><div class="label">Interview Questions</div></div>
-    <div class="stat-card"><div class="number">32</div><div class="label">Source Files Walked</div></div>
+    <div class="stat-card"><div class="number">20</div><div class="label">Lessons (L1–L5 + S1)</div></div>
+    <div class="stat-card"><div class="number">81</div><div class="label">Interview Questions</div></div>
+    <div class="stat-card"><div class="number">64</div><div class="label">Source Files Walked</div></div>
     <div class="stat-card"><div class="number">5</div><div class="label">Supporting Docs</div></div>
   </div>
 
@@ -65,6 +65,18 @@
       <div class="step"><div class="step-num">2</div><div class="step-title">L2: 原理</div><div class="step-desc">模式判定 / 背压与默认值 / 着色指针</div></div>
       <div class="step"><div class="step-num">3</div><div class="step-title">L3: 源码</div><div class="step-desc">SourceLauncher / zGlobals.hpp / String.java</div></div>
       <div class="step"><div class="step-num">4</div><div class="step-title">L4: 边界</div><div class="step-desc">限制 / 坑 / 升级迁移清单</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度追问链 + 伪代码题</div></div>
+    </div>
+  </div>
+
+  <!-- Java 12 Roadmap -->
+  <div class="roadmap">
+    <h2>📖 Java 12 学习路径（2019.03 · 非 LTS）</h2>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-title">L1: 概念</div><div class="step-desc">8 个 JEP 全景 + 非 LTS 定位</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-title">L2: 原理</div><div class="step-desc">switch 穷尽性 / PairBox / 并发疏散</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-title">L3: 源码</div><div class="step-desc">Flow·Lower / Collectors / g1CollectedHeap</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-title">L4: 边界</div><div class="step-desc">预览开关 / GC 默认值 / 升级清单</div></div>
       <div class="step"><div class="step-num">5</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度追问链 + 伪代码题</div></div>
     </div>
   </div>
@@ -240,6 +252,66 @@
     </div>
   </div>
 
+  <!-- Java 12 Core Lessons -->
+  <div class="section">
+    <div class="section-header"><h2>🎓 Java 12 Core Lessons</h2><span class="badge core">REQUIRED</span></div>
+    <div class="item-list">
+      <a class="item" href="./lessons/0018-java12-switch-expressions.html">
+        <div class="icon l1">L1</div>
+        <div class="info">
+          <div class="title">Switch 表达式（JEP 325 · 预览）</div>
+          <div class="desc">case L -&gt; 箭头标签 · Java 12 用 break 产值（13 才改 yield）· 穷尽性校验 · Attr→Flow→Lower 源码走读</div>
+          <div class="tags"><span class="tag">JEP 325</span><span class="tag">Preview</span><span class="tag">Flow.java</span><span class="tag">Lower.java</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0019-java12-api-enhancements.html">
+        <div class="icon l2">L2</div>
+        <div class="info">
+          <div class="title">类库 API 增强 — teeing · 紧凑数字 · String</div>
+          <div class="desc">Collectors.teeing 的 PairBox 双下游模型 · Compact Number Formatting · String.indent/transform · Unicode 11 与令和</div>
+          <div class="tags"><span class="tag">Collectors.java</span><span class="tag">NumberFormat</span><span class="tag">String.java</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0020-java12-constants-api.html">
+        <div class="icon l3">L3</div>
+        <div class="info">
+          <div class="title">JVM 常量 API（JEP 334）</div>
+          <div class="desc">ConstantDesc / Constable 双协议 · describeConstable → resolveConstantDesc · 与 JEP 309（JDK 11 CONDY）的关系</div>
+          <div class="tags"><span class="tag">JEP 334</span><span class="tag">java.lang.constant</span><span class="tag">CONSTANT_Dynamic</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0021-java12-gc.html">
+        <div class="icon l4">L4</div>
+        <div class="info">
+          <div class="title">Shenandoah · G1 可中断混合回收 · 默认 CDS</div>
+          <div class="desc">JEP 189 Brooks 指针并发疏散 · JEP 344 mandatory/optional 回收集 · JEP 346 周期 GC 归还内存（默认关闭）· JEP 341 构建期默认 classes.jsa</div>
+          <div class="tags"><span class="tag">JEP 189</span><span class="tag">JEP 344</span><span class="tag">JEP 346</span><span class="tag">JEP 341</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0022-java12-toolchain.html">
+        <div class="icon l5">L5</div>
+        <div class="info">
+          <div class="title">工具链与平台 — JMH 套件 · 单一 AArch64 端口</div>
+          <div class="desc">JEP 230 test/micro 与 build-microbenchmark · JEP 340 删 arm64 变体 · 预览特性工作流 · 非 LTS 升级三档策略</div>
+          <div class="tags"><span class="tag">JEP 230</span><span class="tag">JEP 340</span><span class="tag">JMH</span><span class="tag">aarch64</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0023-java12-index.html">
+        <div class="icon doc">🗺️</div>
+        <div class="info">
+          <div class="title">Java 12 索引页</div>
+          <div class="desc">本版本 5 篇课件 + 题库的总导航（前置依赖：Java 11 LTS / Java 10 G1·CDS）</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
   <!-- Interview Question Banks -->
   <div class="section">
     <div class="section-header"><h2>🧪 Interview Question Banks</h2><span class="badge core">REQUIRED</span></div>
@@ -271,6 +343,15 @@
         </div>
         <div class="arrow">→</div>
       </a>
+      <a class="item" href="./interview/0004-java12-interview.html">
+        <div class="icon l5">L8</div>
+        <div class="info">
+          <div class="title">Java 12 面试题库（五角度 · 24 题）</div>
+          <div class="desc">Switch 预览 / teeing / 常量 API / Shenandoah·G1·CDS / JMH·AArch64 · 五角度追问链 + 伪代码</div>
+          <div class="tags"><span class="tag">JEP 325</span><span class="tag">JEP 334</span><span class="tag">JEP 189</span><span class="tag">G1 344/346</span><span class="tag">非 LTS</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
     </div>
   </div>
 
@@ -280,7 +361,7 @@
     <div class="item-list">
       <a class="item" href="./TOPIC-MAP.md">
         <div class="icon doc">📖</div>
-        <div class="info"><div class="title">TOPIC-MAP.md</div><div class="desc">知识地图：Java 9-10 概念图谱与优先级</div></div>
+        <div class="info"><div class="title">TOPIC-MAP.md</div><div class="desc">知识地图：Java 9-12 概念图谱与优先级</div></div>
         <div class="arrow">→</div>
       </a>
       <a class="item" href="./RESOURCES.md">
@@ -307,7 +388,7 @@
   </div>
 
   <div class="footer">
-    <p>Generated by Deep Mastery Skill · <code>OpenJDK 9-11</code> · 中文</p>
+    <p>Generated by Deep Mastery Skill · <code>OpenJDK 9-12</code> · 中文</p>
     <p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
   </div>
 

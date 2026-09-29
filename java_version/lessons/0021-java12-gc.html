@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GC 与启动：Shenandoah · G1 双改进 · 默认 CDS · Java 12</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12 · GC 与启动</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Java 12 的 GC 与启动 —— Shenandoah 登场，G1 连改两刀，CDS 默认开启</h1>
+<div class="article-meta"><span>📚 L1–L5 · 运行时层</span><span>🔬 JEP 189 / 344 / 346 / 341 · HotSpot 源码（openjdk/jdk12u）</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 12 / GC 与启动</div>
+
+<h2>L1 · 概念层：四个 JEP，两条主线（新收集器 + 打磨存量 + 起步提速）</h2>
+
+<p>Java 12 在运行时上一次交了 <strong>4 个 JEP</strong>：<strong>JEP 189 Shenandoah</strong>（新的低暂停收集器，<strong>实验性</strong>）、<strong>JEP 344</strong>（G1 混合回收可中断）、<strong>JEP 346</strong>（G1 空闲期归还内存）、<strong>JEP 341</strong>（构建期默认生成 CDS 归档）。前三个管"回收得怎么样"，最后一个管"启动得快不快"。</p>
+
+<table>
+<tr><th>JEP</th><th>一句话</th><th>状态（12 时）</th><th>默认行为</th></tr>
+<tr><td><strong>189 Shenandoah</strong></td><td>把<strong>疏散（搬对象）</strong>也做成并发——暂停时间与堆大小无关</td><td>实验性</td><td>关闭，需 <code>-XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC</code></td></tr>
+<tr><td><strong>344 G1 可中断混合回收</strong></td><td>把混合回收拆成"必须做的"和"来得及才做的"，时间不够就半路停</td><td>正式</td><td>始终生效，<strong>无开关</strong></td></tr>
+<tr><td><strong>346 G1 归还空闲内存</strong></td><td>应用空闲时周期性 GC，结束后把堆内存还给 OS</td><td>正式</td><td><strong>默认关闭</strong>（interval = 0）</td></tr>
+<tr><td><strong>341 默认 CDS</strong></td><td>构建 JDK 时自动生成类数据共享归档，开箱即加速</td><td>正式</td><td>64 位 server VM：<code>-Xshare:auto</code> 自动使用</td></tr>
+</table>
+
+<h3>关键判断逻辑伪代码（选择与触发）</h3>
+
+<pre><code># ===== 我该用哪个收集器？（Java 12 语境）=====
+if 需要 LTS 稳定 + 生产默认:            GC = G1        # JDK 9+ 默认
+elif 追求极低暂停且接受实验性:            需要 -XX:+UnlockExperimentalVMOptions
+                                        GC = Shenandoah # JDK 12 实验 / JDK 15 起正式
+elif JDK 11 且要更低暂停（当时）:         GC = ZGC        # JEP 333，也是实验性
+elif 完全不想做回收（测试/工具）:         GC = Epsilon     # JEP 318，JDK 11
+
+# ===== 启动时 CDS 归档用不用？ =====
+-Xshare:auto（server VM 默认）:
+    if 存在 lib/server/classes.jsa 且校验通过 → mmap 归档，跳过平台类的类加载/验证
+    else                                      → 静默回退到普通加载（不报错）
+-Xshare:off → 一律不用（诊断"是不是 CDS 引起的问题"的第一步）
+
+# ===== G1 什么时候归还内存给 OS？（JEP 346，JDK 12 默认不还）=====
+if G1PeriodicGCInterval &gt; 0                                        # 默认 0 = 关闭
+   and 距上次 GC 暂停 &gt; G1PeriodicGCInterval 毫秒
+   and 当前没有进行中的 concurrent cycle
+   and 1 分钟平均负载 &lt; G1PeriodicGCSystemLoadThreshold             # 默认 0.0 = 不检查负载
+then:
+    if G1PeriodicGCInvokesConcurrent: 跑一轮并发 cycle（默认 true）
+    else:                              跑一次 STW Full GC
+    结束后按 MinHeapFreeRatio/MaxHeapFreeRatio/Xms–Xmx 缩堆并 uncommit
+    日志 cause: "G1 Periodic Collection"</code></pre>
+
+<h3>Shenandoah 凭什么"暂停与堆大小无关"</h3>
+
+<p>传统收集器暂停时要把对象从"from 空间"搬到"to 空间"，堆越大、对象越多、暂停越长。Shenandoah 的答案是<strong>并发疏散</strong>：给每个对象<strong>前置一个间接指针（Brooks pointer）</strong>，应用线程随时读到的都是"当前正确地址"，于是<strong>搬对象这件事可以和应用并发做</strong>；STW 暂停只负责扫线程栈等少量根，不负责搬数据。因此 200MB 和 200GB 的堆，暂停时长大致一个量级——代价是每个对象多一个字的开销、读写屏障的 CPU 开销。</p>
+
+<div class="mermaid">
+flowchart LR
+    subgraph STW["两次短暂 STW（只扫根，不搬数据）"]
+        A[init mark] --&gt; B[final mark]
+    end
+    subgraph CONC["与应用线程并发"]
+        C[并发标记] --&gt; D["并发疏散/压缩<br/>（Brooks 间接指针保证读者不迷路）"]
+    end
+    C --&gt; B
+    D --&gt; E[下一轮]
+    B --&gt; D
+</div>
+
+<div class="warning">
+<div class="warning-title">四个必须避开的误区</div>
+<p><strong>① 「Shenandoah 暂停 = 0」</strong>——不是。STW 仍然存在（标记的 init/final 阶段），只是短到微秒量级且<strong>与堆大小无关</strong>；JEP 明确 Non-goal：不解决安全点之外的停顿（如 TTSP、monitor inflation）。<br/>
+<strong>② 「JDK 12 的 G1 空闲会自动还内存」</strong>——不会。<code>G1PeriodicGCInterval</code> 默认 <strong>0 = 功能关闭</strong>（JEP 346 风险节原话：default values disable this feature）。<br/>
+<strong>③ 「JEP 344 让 G1 所有暂停都能中断」</strong>——只有<strong>混合回收里的 optional 部分</strong>可分步退出，JEP 的 Non-goal 就是"不承诺全部可中断"。<br/>
+<strong>④ 「默认 CDS = 应用类也共享了」</strong>——不是，JEP 341 只生成<strong>平台类</strong>的默认归档；应用类共享仍要自己 <code>-Xshare:dump</code> 或 AppCDS（12 里叫 CDS for Application Classes）。</p>
+</div>
+
+<h2>L2 · 原理层：三段核心逻辑的伪代码 + 四维度检查</h2>
+
+<h3>伪代码一：G1 混合回收从"一口气"变成"分步可退"（JEP 344）</h3>
+
+<pre><code># ===== 改造前：一次把整个 collection set 收完 =====
+pause:
+    for region in collection_set:            # young + 选定的 old，一次做完
+        evacuate(region)                     # 时间不可预测 → 停顿尖刺
+
+# ===== 改造后：拆 mandatory + optional（openjdk/jdk12u g1CollectionSet.*）=====
+pause:
+    # 1) mandatory：不可增量，通常含 young 区（也可能含部分 old），约占预测 CSet 的 80%
+    for region in mandatory_regions:          # 必须做完，否则语义不完整
+        evacuate(region)
+
+    # 2) optional：纯 old，约 20%，"来得及才做"
+    #    进入条件：启发式判定"时间预测反复失败"时才开启增量模式
+    for step in steps:                       # 最细可以一步只做 1 个 region
+        if 剩余时间预算不够:   break          # ← 本轮到此为止，下次 GC 再说
+        evacuate(optional_regions[step])
+
+# 预测重新准确后 → optional 逐渐缩小，最终整个 CSet 都是 mandatory
+# 代价：optional 部分 CPU 开销 &lt;1%；额外跟踪"指向 optional 区的指针" → native 内存略增
+# 注意：JEP 未提供任何用户可见开关——这是启发式行为，不是配置项</code></pre>
+
+<h3>伪代码二：Shenandoah 的一次并发周期</h3>
+
+<pre><code>cycle:
+    STW: 扫线程栈/根，标记根可达          # init mark，与堆大小无关
+    并发: 从根出发做标记                  # 应用照常跑，读写屏障维持三色
+    STW: 处理残留根、完成标记             # final mark
+    并发: 疏散（搬对象 + 压缩）            # ← JEP 189 的核心：搬移不进 STW
+         每个对象前面有 Brooks 间接指针（1 个 HeapWord），
+         对象搬到新址后只改指针 → 并发读者永远拿得到正确地址
+    STW: 收尾（极短）
+    # 若应用线程在写屏障里搬家时遇到 OOM：
+    # shenandoahEvacOOMHandler.hpp:31 明确"Java 线程在写屏障中疏散对象"，
+    # 失败时进入计数器保护的等待/退化路径，避免 to-space 不变量被破坏</code></pre>
+
+<h3>四维度生产检查</h3>
+
+<table>
+<tr><th>维度</th><th>189 Shenandoah</th><th>344 G1 可中断混合回收</th><th>346 G1 归还内存</th><th>341 默认 CDS</th></tr>
+<tr><td><strong>并发语义</strong></td><td>标记与疏散全并发；靠 Brooks 指针 + 读屏障保证并发读者正确性</td><td>仍是一次 STW 内的分步执行，<strong>不引入新的并发</strong>；只是"步与步之间允许退出"</td><td>默认走<strong>并发 cycle</strong>（<code>G1PeriodicGCInvokesConcurrent=true</code>），只在显式配置时才用 STW Full GC</td><td>只读 mmap 共享归档页；类元数据只读共享，<strong>不改变类的语义</strong></td></tr>
+<tr><td><strong>异常容错</strong></td><td>写屏障中疏散 OOM 有专门处理（<code>ShenandoahEvacOOMHandler</code>），否则会破坏 to-space 不变量</td><td>optional 部分退出是<strong>正常路径</strong>不是错误；下次 GC 继续未完成部分</td><td>归档不可用时静默回退（<code>-Xshare:auto</code> 不致命）；周期 GC 结束才缩堆，不会抖动式归还</td><td>归档校验失败 → 打印警告并回退普通加载；<code>-Xshare:on</code> 才会硬失败</td></tr>
+<tr><td><strong>边界判断</strong></td><td>实验性开关 + 平台限制（12 时 aarch64/amd64）；堆极大时仍受限于<strong>元数据/根扫描</strong>之外的其他停顿</td><td>没有开关、调不了参数——预测准不准由启发式决定，出问题只能换 GC 或升级 JDK</td><td>两个默认值卡死功能：<code>Interval=0</code>（关）、<code>SystemLoadThreshold=0.0</code>（不看负载）</td><td>仅 64 位、仅 native 构建（非交叉编译）；只覆盖<strong>平台类</strong></td></tr>
+<tr><td><strong>性能开销</strong></td><td>每对象 1 个 HeapWord 的间接指针 + 读写屏障 CPU（用 CPU/空间换暂停）</td><td>optional 部分额外 CPU &lt;1%；跟踪指向 optional 区的指针使 native 内存略增</td><td>空闲期多跑 GC 本身有成本，但换来<strong>原型论文实测减少 85% 的已提交内存</strong></td><td>启动提速明显：JEP 引用 JDK 11 EA 实测 HelloWorld 启动<strong>快 32%</strong></td></tr>
+</table>
+
+<div class="note">
+<div class="note-title">为什么 346 的默认值是"关"？</div>
+<p>JEP 346 把"归还内存"做成<strong>可选优化</strong>而非默认行为，风险节明确写了 <code>default values disable this feature</code>：周期 GC 可能在不该跑的时候跑（浪费 CPU）、与应用争抢、在负载阈值判断失误时打扰业务。设计者的思路是<strong>先把机制和安全默认值交出去，让有容器/云需求的人显式打开</strong>——这也解释了为什么"JDK 12 G1 会自动还内存"是个常见误解。</p>
+</div>
+
+<h2>L3 · 源码层：HotSpot 里的四处落点（openjdk/jdk12u）</h2>
+
+<div class="info">
+<div class="info-title">源码出处与获取方式</div>
+<p>行号核对自 <strong>openjdk/jdk12u 仓库（master）</strong>，通过 raw.githubusercontent 抓取原文比对（<code>g1CollectedHeap.cpp</code> 已做整文件 diff 校验）。克隆：<code>git clone https://github.com/openjdk/jdk12u</code>，按下表路径打开即可。</p>
+</div>
+
+<h3>关键文件清单（已核对）</h3>
+
+<table>
+<tr><th>文件（<code>src/hotspot/share/</code>）</th><th>行号</th><th>作用</th></tr>
+<tr><td><code>gc/shared/gc_globals.hpp</code></td><td>:201</td><td><strong><code>experimental(bool, UseShenandoahGC, false, "Use the Shenandoah garbage collector")</code></strong> —— 实验性、默认关</td></tr>
+<tr><td><code>gc/shenandoah/shenandoahBrooksPointer.hpp</code></td><td>:30 / :48 / :53</td><td>Brooks 间接指针类；<code>word_offset()</code> 返回 <code>-1</code>、<code>byte_offset()</code> 返回 <code>-HeapWordSize</code>——<strong>指针就藏在对象头前一个字里</strong></td></tr>
+<tr><td><code>gc/shenandoah/shenandoahEvacOOMHandler.hpp</code></td><td>:31–:34</td><td>注释直接写明"Java 线程在写屏障中疏散对象"——<strong>并发疏散的源码证据</strong></td></tr>
+<tr><td><code>gc/shenandoah/shenandoah_globals.hpp</code></td><td>:42–:95</td><td>全 <code>experimental</code> 级别：region 大小、<code>ShenandoahGCHeuristics</code>（默认 <code>adaptive</code>）等</td></tr>
+<tr><td><code>gc/shenandoah/shenandoahArguments.cpp</code></td><td>:60 / :144–:152</td><td>参数联动：<code>AlwaysPreTouch</code> 开启时禁用 <code>ShenandoahUncommit</code>；堆等于最大堆时同理</td></tr>
+<tr><td><code>gc/g1/g1CollectionSet.hpp</code></td><td>:61 / :63–:64 / :118 / :146 / :235</td><td>JEP 344：<code>// ... We call these optional regions</code>、<code>_optional_regions</code>、<code>add_as_optional()</code>、<code>optional_region_length()</code>、<code>class G1OptionalCSet</code></td></tr>
+<tr><td><code>gc/g1/g1CollectionSet.cpp</code></td><td>:447 / :544</td><td><code>G1CollectionSet::add_as_optional</code> 实现与调用点</td></tr>
+<tr><td><code>gc/g1/g1CollectedHeap.cpp</code></td><td>:3054 / :3059 / :3772 / :3862 / :3870</td><td>可中断执行体：<code>G1EvacuateOptionalRegionTask</code>、<code>evacuate_optional_regions</code>、<code>evacuate_optional_collection_set</code> 与调用点</td></tr>
+<tr><td><code>gc/g1/g1_globals.hpp</code></td><td>:304 / :309 / :314</td><td>JEP 346 三个开关：<code>G1PeriodicGCInterval=0</code>、<code>G1PeriodicGCInvokesConcurrent=true</code>、<code>G1PeriodicGCSystemLoadThreshold=0.0</code></td></tr>
+<tr><td><code>runtime/arguments.cpp</code></td><td>:2715 / :2721 / :2729 / :2737 / :3443</td><td>JEP 341：<code>-Xshare:dump/on/auto/off</code> 四个分支 + 默认归档路径 <code>…classes.jsa</code></td></tr>
+<tr><td><code>memory/filemap.cpp</code></td><td>整文件</td><td><code>FileMapInfo</code>：归档的读写、mmap 与校验实现</td></tr>
+</table>
+
+<h3>片段一：可中断混合回收的调用点（g1CollectedHeap.cpp:3050，openjdk/jdk12u）</h3>
+
+<pre><code>// src/hotspot/share/gc/g1/g1CollectedHeap.cpp (openjdk/jdk12u)
+...
+// (标准暂停流程里) mandatory 部分照常执行
+if (collection_set()-&gt;optional_region_length() &gt; 0) {        // :3054
+    ...
+    evacuate_optional_collection_set(&amp;per_thread_states);   // :3059  ← 可中断部分
+}
+...
+
+class G1EvacuateOptionalRegionTask : public AbstractGangTask {   // :3772
+    // 按 worker 分片推进 optional_regions，每完成一步即可判断是否继续
+};
+
+void G1CollectedHeap::evacuate_optional_regions(G1ParScanThreadStateSet* per_thread_states,
+                                                G1OptionalCSet* ocset) {   // :3862
+    G1EvacuateOptionalRegionTask task(this, per_thread_states, ocset,
+                                      _task_queues, workers()-&gt;active_workers());
+    ...
+}
+
+void G1CollectedHeap::evacuate_optional_collection_set(G1ParScanThreadStateSet* per_thread_states) {  // :3870
+    G1OptionalCSet optional_cset(this, per_thread_states);
+    ... evacuate_optional_regions(per_thread_states, &amp;optional_cset);   // :3900
+}</code></pre>
+
+<p><strong>怎么读</strong>：JEP 344 的全部机关就在 <code>g1CollectionSet.hpp:61</code> 那句注释——"这些 region <em>if there is enough time</em> 才收，我们叫它们 optional"。执行侧 <code>G1EvacuateOptionalRegionTask</code> 把 optional 部分切成可推进的小步，时间预算耗尽就整体收工，<strong>未完成的 region 留到下一轮</strong>。</p>
+
+<h3>片段二：G1PeriodicGC 三件套（g1_globals.hpp:304，openjdk/jdk12u）</h3>
+
+<pre><code>// src/hotspot/share/gc/g1/g1_globals.hpp (openjdk/jdk12u)
+manageable(uintx, G1PeriodicGCInterval, 0,                                // :304
+           "Specifies the time (in ms) after which if no GC has happened a "
+           "periodic GC will be run. 0 means disable periodic GC.")       // ← 默认 0 = 关闭
+
+product(bool, G1PeriodicGCInvokesConcurrent, true,                        // :309
+        "If true, invoke concurrent cycle, if false, a STW Full GC.")      // ← 默认走并发
+
+manageable(double, G1PeriodicGCSystemLoadThreshold, 0.0,                   // :314
+           "Maximum 1 minute load average before starting a periodic GC. "
+           "0.0 means no check.")                                          // ← 默认不看负载</code></pre>
+
+<h3>片段三：-Xshare 四个分支与默认归档（arguments.cpp:2715，openjdk/jdk12u）</h3>
+
+<pre><code>// src/hotspot/share/runtime/arguments.cpp (openjdk/jdk12u)
+} else if (match_option(option, "-Xshare:dump")) {          // :2715  手工生成归档
+    FLAG_SET_CMDLINE(bool, DumpSharedSpaces, true);         //  → 归档写到 lib/server/classes.jsa
+} else if (match_option(option, "-Xshare:on")) {            // :2721  必须用归档，失败即退出
+    FLAG_SET_CMDLINE(bool, UseSharedSpaces, true);
+    FLAG_SET_CMDLINE(bool, RequireSharedSpaces, true);
+} else if (match_option(option, "-Xshare:auto")) {          // :2729  server VM 默认（JDK 11 起）
+    FLAG_SET_CMDLINE(bool, UseSharedSpaces, true);
+    FLAG_SET_CMDLINE(bool, RequireSharedSpaces, false);     //  → 找不到就静默回退
+} else if (match_option(option, "-Xshare:off")) {           // :2737  彻底关闭
+    FLAG_SET_CMDLINE(bool, UseSharedSpaces, false);
+    FLAG_SET_CMDLINE(bool, RequireSharedSpaces, false);
+}
+...
+jio_snprintf(default_archive_path, len, "%s%sclasses.jsa", ...);   // :3443  默认归档文件名</code></pre>
+
+<div class="info">
+<div class="info-title">JEP 341 补充：归档是怎么"默认就有"的</div>
+<p>以前要手动敲 <code>-Xshare:dump</code> 才有归档；JDK 12 起 <strong>构建 JDK 的最后阶段（link image 之后）会自动跑一次 <code>java -Xshare:dump</code></strong>，把归档放进 <code>lib/server/classes.jsa</code>，所以用户"开箱即用"。限制：仅 64 位、仅本机构建（交叉编译产物不生成）；<code>-Xshare:off</code> 仍可完全关闭；自定义 class list / GC 配置的归档继续自己 dump。</p>
+</div>
+
+<h3>设计原理三问</h3>
+
+<table>
+<tr><th>问题</th><th>答案</th></tr>
+<tr><td><strong>为什么这样设计？</strong></td><td>三条动机：① <strong>延迟可预测性 &gt; 吞吐</strong>成为常态需求（云/容器/交易），所以 Shenandoah 用 Brooks 指针把"搬对象"移出 STW；② <strong>G1 的老问题是预测失准</strong>——344 承认"预测会错"，给错的时候留了分步退出的活口；③ <strong>内存归还是云场景刚需</strong>，但不能默认打扰业务（346 默认关）；④ 启动时间是开发者第一体验，CDS 是最"免费"的加速（341 默认生成）。</td></tr>
+<tr><td><strong>代价是什么？</strong></td><td>Shenandoah：每对象 1 个 HeapWord + 读写屏障 CPU，且 12 时仍是<strong>实验性</strong>；344：预测不准时混合回收变"分很多轮慢慢收"，老年代回收速度可能下降，额外 tracking 吃 native 内存；346：参数判断失误会在高负载边缘跑多余 GC；341：归档增大安装体积、与特定平台绑定。</td></tr>
+<tr><td><strong>如何改进？</strong></td><td>Shenandoah 在 JDK 15（JEP 379）转正、后续持续优化屏障开销；G1 预测与可中断逻辑在后续版本继续演进（degeneration、更多启发式）；346 类的归还策略被 ZGC/Shenandoah 后来也吸收（并发 + uncommit 常态化）；CDS 之后扩展到 Application CDS、Archiving Containers 镜像等。</td></tr>
+</table>
+
+<h2>L4 · 边界层：能不能上生产</h2>
+
+<table>
+<tr><th>问题</th><th>结论</th><th>依据</th></tr>
+<tr><td>JDK 12 能开 Shenandoah 吗？</td><td><strong>能，但属实验性</strong></td><td><code>gc_globals.hpp:201</code> 实验级 flag；JEP 189 状态 Proposed→Targeted（12），JDK 15 JEP 379 才转正</td></tr>
+<tr><td>开了 Shenandoah 的启动参数？</td><td><code>-XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC</code></td><td>实验性 flag 必须先解锁</td></tr>
+<tr><td>344 需要配置吗？</td><td>不需要，也<strong>配不了</strong></td><td>JEP 未提供用户可见开关；行为由启发式决定</td></tr>
+<tr><td>怎么确认 346 没在跑？</td><td>看 <code>G1PeriodicGCInterval</code> 是否为 0；日志搜 <code>gc,periodic</code> / cause <code>G1 Periodic Collection</code></td><td><code>g1_globals.hpp:304</code> 默认 0</td></tr>
+<tr><td>CDS 归档找不到会崩吗？</td><td><code>-Xshare:auto</code> 不会（静默回退）；<code>-Xshare:on</code> 会</td><td><code>arguments.cpp:2721–2737</code> 的 <code>RequireSharedSpaces</code> 差异</td></tr>
+<tr><td>自定义应用类能进默认归档吗？</td><td>不能，要自己 dump / 用 AppCDS</td><td>JEP 341 只交付平台类默认归档</td></tr>
+</table>
+
+<div class="production-note">
+<div class="header">调优/落地决策清单（Java 12 语境）</div>
+<ul>
+<li><strong>容器里想让 G1 归还内存</strong>：显式打开 <code>-XX:+UseG1GC -XX:G1PeriodicGCInterval=&lt;毫秒&gt; -XX:G1PeriodicGCSystemLoadThreshold=&lt;负载&gt;</code>，并确认 <code>MinHeapFreeRatio/MaxHeapFreeRatio</code> 与 <code>-Xms/-Xmx</code> 允许缩堆；另有 <code>-XX:G1UncommitDelay</code> 控制"空闲多久才真正归还"（本课未核实其默认值，先查你所用 JDK 的 <code>-XX:+PrintFlagsFinal</code>）。</li>
+<li><strong>诊断"为什么没还内存"</strong>：开 <code>-Xlog:gc,periodic,heap*=debug</code>，观察 <code>[gc,periodic] Checking for periodic GC.</code>——若根本不打印，就是 Interval=0（默认）。</li>
+<li><strong>Shenandoah 上生产</strong>：12 只建议压测验证；真正可依赖是 JDK 15+。压测重点是屏障带来的 CPU 上升与暂停稳定性。</li>
+<li><strong>怀疑 CDS 出问题</strong>：先 <code>-Xshare:off</code> 对比复现，再看启动日志里归档加载/回退提示；不要上来就删归档文件。</li>
+</ul>
+</div>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: Java 12 运行时相关有哪几个 JEP？各自状态？</div>
+<div class="answer">
+<p>四个：<strong>189 Shenandoah</strong>（实验性低暂停收集器）、<strong>344 G1 可中断混合回收</strong>（正式，无开关）、<strong>346 G1 空闲归还内存</strong>（正式，<strong>默认关闭</strong>）、<strong>341 默认 CDS 归档</strong>（正式，64 位 server VM 默认启用 <code>-Xshare:auto</code>）。可选补充：JDK 12 的 8 个 JEP 里其余四个是 230（JMH 微基准）、325（switch 表达式预览）、334（常量 API）、340（单一 AArch64 端口）。</p>
+<div class="key-point"><strong>关键点</strong>：状态与默认值是这道题的得分点——189 实验、346 默认关、341 默认开。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — 为什么 Shenandoah 的暂停时间能与堆大小无关？</div>
+<div class="answer">
+<p>因为<strong>暂停里不再有"搬数据"这个 O(堆大小) 的动作</strong>。传统收集器 STW 时要疏散所有存活对象；Shenandoah 给每个对象前加一个 <strong>Brooks 间接指针</strong>（源码 <code>shenandoahBrooksPointer.hpp:48</code>：<code>word_offset()</code> = -1，指针就存在对象头前一个字），对象搬家时只更新这层间接，<strong>并发的应用线程读到的永远是最新地址</strong>——于是标记与压缩（疏散）都能与应用并发执行，STW 只剩扫线程栈等少量根，其耗时由"根的数量"决定，而不是"堆里有多少对象"。</p>
+<div class="key-point"><strong>关键点</strong>：间接指针 = 把"移动"从 STW 里摘出去的钥匙；对照 ZGC 的着色指针是同一问题的另一种解。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — Shenandoah 和 ZGC 怎么比？</div>
+<div class="answer">
+<table>
+<tr><th></th><th>Shenandoah（189，12 实验 / 15 转正）</th><th>ZGC（333，11 实验）</th></tr>
+<tr><td>实现移动的机制</td><td><strong>Brooks 指针</strong>（对象前 1 个 HeapWord 的间接指针）</td><td><strong>着色指针</strong>（把元数据藏在指针位里 + load barrier）</td></tr>
+<tr><td>空间开销</td><td>每对象多 1 个字</td><td>不占对象空间，但要求堆地址空间布局（64 位）</td></tr>
+<tr><td>屏障热点</td><td>读写屏障</td><td>读屏障为主</td></tr>
+<tr><td>共同目标</td><td colspan="2">暂停与堆大小无关；用 CPU/内存换可预测延迟</td></tr>
+</table>
+<p>12 的语境里两者都是"实验性低延迟选项"，G1 仍是默认生产选项。</p>
+<div class="key-point"><strong>关键点</strong>：同一个问题（并发移动对象）的两种指针方案——面试答"Brooks vs colored pointers"即可拉开差距。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 追问 — JEP 344 的 mandatory / optional 是怎么切的？</div>
+<div class="answer">
+<p>把一次混合回收的 collection set 切成两段：<strong>mandatory</strong>（通常含 young 区，可能带部分 old，约占预测 CSet 的 80%）——必须做完，否则回收语义不完整；<strong>optional</strong>（纯 old，约 20%）——<em>如果还有时间预算</em>才做，且推进粒度可以细到<strong>一次一个 region</strong>。进入增量模式的条件是"启发式的<strong>时间预测反复失败</strong>"；预测恢复准确后 optional 段会缩小直至全为 mandatory。代价：optional 部分 CPU 开销 &lt;1%，加上跟踪指向 optional 区指针的少量 native 内存。JEP 明确 <strong>Non-goal：不保证 G1 所有暂停可中断</strong>，且<strong>没有用户可见开关</strong>。</p>
+<div class="key-point"><strong>关键点</strong>：80/20、一步一 region、"预测连续失败才增量"、无开关——四个关键词答全即满分。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: 故障排查 — 线上 G1 堆一直占着不还给 OS，怎么处理？</div>
+<div class="answer">
+<p>先判断是不是<strong>本来就默认不还</strong>：JDK 12 的 <code>G1PeriodicGCInterval</code> 默认 <code>0</code>（<code>g1_globals.hpp:304</code>），<strong>周期 GC 根本没开</strong>。处理步骤：</p>
+<ol>
+<li>确认需求：容器限额场景才需要归还，物理机独占通常不必；</li>
+<li>开启：<code>-XX:+UseG1GC -XX:G1PeriodicGCInterval=60000 -XX:G1PeriodicGCSystemLoadThreshold=&lt;按负载调&gt;</code>；</li>
+<li>检查堆缩放前提：<code>-Xms</code> 不能等于 <code>-Xmx</code>（等于就没得缩）、<code>MinHeapFreeRatio/MaxHeapFreeRatio</code> 要允许收缩；</li>
+<li>验证：日志 <code>-Xlog:gc,periodic</code> 应出现 <code>Checking for periodic GC.</code> 与 cause <code>G1 Periodic Collection</code>；</li>
+<li>另有 <code>-XX:G1UncommitDelay</code> 控制空闲多久才 uncommit（<strong>本课未核实其默认值，勿凭记忆写数字</strong>，用 <code>-XX:+PrintFlagsFinal</code> 现场确认）。</li>
+</ol>
+<div class="key-point"><strong>关键点</strong>：这类"没生效"问题，第一步永远是查默认值，而不是怀疑 bug。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 架构师 — 默认 CDS 归档的边界在哪？升级 JDK 12 要注意什么？</div>
+<div class="answer">
+<p>边界四条：① <strong>只有平台类</strong>进默认归档，应用类仍需自己 <code>-Xshare:dump</code>/AppCDS；② 仅 64 位、仅 native 构建产物（交叉编译的发行包可能没有归档）；③ 归档与具体 JVM 二进制绑定，JVM 变了（不同构建/不同 flags 影响的类元数据）会校验失败并回退；④ <code>-Xshare:off</code> 是官方的"排除变量"。升级收益：JEP 341 实测 HelloWorld 启动<strong>快 32%</strong>（JDK 11 EA 数据），且不用改任何代码。风险点：极少数依赖"平台类每次都是新加载"的怪异代码（如字节码插桩按 ClassLoader 身份去重）可能行为变化——迁移测试里要覆盖<strong>启动与类加载路径</strong>。</p>
+<div class="key-point"><strong>关键点</strong>：CDS 改变的是"类从哪来"，不是"类是什么"——风险集中在类加载/初始化时序与身份假设上。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q7: 讲师角度 — 用大白话讲"可中断的混合回收"。</div>
+<div class="answer">
+<p>想象你答应给整个小区做保洁（一次 GC），最脏的楼道（young/mandatory）必须一次扫完，否则没法交差；但旧货仓库（old/optional）如果时间不够，<strong>可以先扫两排，下回接着扫</strong>。以前的 G1 是"要么全扫要么不开始"，一旦预测不准就变成超长暂停；现在它承认"预测会错"，给仓库部分装了个<strong>进度条 + 可随时按下的暂停键</strong>。代价只是进度条本身的一点开销（&lt;1% CPU）。</p>
+<div class="key-point"><strong>关键点</strong>：mandatory = 不能半途而废的语义；optional = 时间预算内的机会主义回收。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能列出 Java 12 四个运行时 JEP 及各自状态/默认值（instructor 角度）</li>
+<li class="done">能解释 Brooks 指针如何让疏散并发化、暂停与堆无关（architect 角度）</li>
+<li class="done">能画 Shenandoah vs ZGC 的机制对照（Brooks vs 着色指针）（interviewer 角度）</li>
+<li class="done">能默写 G1PeriodicGC 三件套的默认值与触发条件（code reviewer 角度）</li>
+<li class="done">能定位 g1CollectionSet.hpp 的 optional region 注释与 g1CollectedHeap.cpp 的执行体行号（code reviewer 角度）</li>
+<li class="done">能排查"G1 不归还内存"并给出开启参数与验证日志（incident responder 角度）</li>
+<li>能讲清 -Xshare:auto/on/off 的语义差异与默认归档来源（instructor 角度）</li>
+<li>能论证 JEP 346 为什么默认关闭（architect 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="./0020-java12-constants-api.html">← 上一课：JVM 常量 API（JEP 334）</a></span>
+<span><a href="./0022-java12-toolchain.html">下一课：JMH 微基准 · AArch64 端口 · 升级清单 →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

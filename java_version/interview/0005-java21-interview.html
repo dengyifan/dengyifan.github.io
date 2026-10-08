@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 21 并发专题面试题库 · Deep Mastery</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 21 · 并发专题面试题库</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Java 21 并发专题面试题库</h1>
+<div class="article-meta"><span>🧪 L5 · 面试层</span><span>18 题 · 5 角度</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / <a href="../lessons/0027-java21-index.html">Java 21</a> / 面试题库</div>
+
+<div class="info">
+<div class="info-title">本题库怎么读</div>
+<p>围绕 JDK 21 的三条并发主线：<strong>虚拟线程（JEP 444）、结构化并发（JEP 453 预览）、ThreadLocal 与其继任者 ScopedValue（JEP 446 预览）</strong>。沿用五角度：面试官 / 架构师 / 代码审查者 / 故障排查者 / 技术讲师。答案中标注「JDK 21 口径」的内容忠于 Oracle Java 21 文档；本机代码实测环境为 openjdk-25.0.1（版本差异处单独说明）。</p>
+</div>
+
+<h2>虚拟线程（7 题）</h2>
+
+<h3>面试官角度</h3>
+
+<div class="qa-block">
+<div class="question">Q1: 虚拟线程是什么？它和平台线程的本质区别？</div>
+<div class="answer"><p>虚拟线程是 JDK 21（JEP 444）引入的轻量级 <code>java.lang.Thread</code>，由 Java 运行时而非 OS 实现。平台线程 1:1 封装 OS 线程、整个生命周期独占、数量受限；虚拟线程是 M:N，不绑定特定 OS 线程，阻塞 I/O 时挂起并释放载体线程，同一 JVM 可承载百万级。</p>
+<div class="key-point">本质区别：谁实现线程（OS vs 运行时）与阻塞时是否释放 OS 线程。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — 虚拟线程能让接口变快（降低延迟）吗？什么条件下才提升吞吐？</div>
+<div class="answer"><p>不能。虚拟线程不是更快的线程，不降低延迟，只提供规模。提升吞吐需同时满足：① 并发任务数很高（几千以上）；② 工作负载不是 CPU 密集型——线程数远超核数对计算任务无收益。典型服务端大量任务阻塞等 I/O，正符合。</p>
+<div class="key-point">提供 scale（吞吐）而非 speed（延迟）；CPU 密集任务用 Stream 并行。</div>
+</div>
+</div>
+
+<h3>架构师角度</h3>
+
+<div class="qa-block">
+<div class="question">Q3: 什么场景该用、什么场景不该用虚拟线程？现有异步/响应式服务要不要迁？</div>
+<div class="answer"><p>该用：高吞吐、任务大部分时间阻塞等 I/O（HTTP / JDBC / 消息）。不该用：长时间 CPU 密集计算。迁移：异步管道若已稳定且团队能承受其调试成本，不急于迁；虚拟线程最大价值是保留 thread-per-request 风格——把业务代码写回简单同步阻塞式，由框架为每请求启动虚拟线程；旧的 <code>CompletableFuture</code> 回调链不会从虚拟线程获益多少。</p>
+<div class="key-point">迁移核心是「回到同步代码」，不是给旧回调链套虚拟线程。</div>
+</div>
+</div>
+
+<h3>代码审查者角度</h3>
+
+<div class="qa-block">
+<div class="question">Q4: 审查这段「用固定大小线程池给虚拟线程限流」的代码，有什么问题？</div>
+<div class="answer"><pre><code>var pool = Executors.newFixedThreadPool(200);
+pool.submit(() -&gt; query());</code></pre>
+<ol>
+<li><code>newFixedThreadPool</code> 建的是<strong>平台线程</strong>，不是虚拟线程——既无规模、又把 200 条重线程变成瓶颈；</li>
+<li>虚拟线程<strong>永远不该池化</strong>：每任务 <code>Thread.ofVirtual()</code> 新建或走 <code>newVirtualThreadPerTaskExecutor()</code>；</li>
+<li>限流应表达为对下游资源的许可：用 <code>Semaphore</code>（如 DB 连接数），acquire 后调用。</li>
+</ol>
+<div class="key-point">池化是应对平台线程昂贵的旧习惯；限流用 Semaphore，不用线程池。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: JDK 21 口径 — 下面这段在虚拟线程里为什么损害吞吐？怎么改？</div>
+<div class="answer"><pre><code>synchronized (guard) {
+    socket.read(buf);          // 阻塞 I/O
+}</code></pre>
+<p>JDK 21 上虚拟线程在 <code>synchronized</code> 块内阻塞会被<strong>钉住</strong> carrier、无法卸载，carrier 被阻塞操作占住不能服务其他虚拟线程，吞吐退回平台线程水平。改写为 <code>ReentrantLock</code>（其阻塞在虚拟线程上不钉住）：</p>
+<pre><code>guardLock.lock();
+try { socket.read(buf); } finally { guardLock.unlock(); }</code></pre>
+<div class="key-point">注意版本：JDK 24 的 JEP 491 已让 synchronized 不再钉住——21 上需改写，25 上已免；native/FFI 至今仍钉住。</div>
+</div>
+</div>
+
+<h3>故障排查者角度</h3>
+
+<div class="qa-block">
+<div class="question">Q6: 上线虚拟线程后吞吐没提升、CPU 也不高，按什么顺序排查？</div>
+<div class="answer">
+<ol>
+<li><code>jcmd &lt;pid&gt; Thread.dump_to_file -format=text</code>：确认请求真跑在虚拟线程（标签 <code>virtual</code>），看是否大量卡在同一阻塞点；</li>
+<li>JFR 看 <code>jdk.VirtualThreadPinned</code>（默认阈值 20ms）：21 上常因 synchronized 守护 I/O（老连接池/老 JDBC），改 ReentrantLock、升级驱动或 JDK；</li>
+<li>查下游：DB 连接池打满会让虚拟线程全部 park 等连接，此时加 Semaphore 限并发而非加线程；</li>
+<li>确认不是 CPU 密集负载。</li>
+</ol>
+<div class="key-point">顺序：thread dump 定性 → JFR pinning → 下游资源 → CPU 密集度。</div>
+</div>
+</div>
+
+<h3>技术讲师角度</h3>
+
+<div class="qa-block">
+<div class="question">Q7: 用通俗的话讲清虚拟线程原理，它和 Java 早期的绿色线程有何不同？</div>
+<div class="answer"><p>类比虚拟内存：OS 把大虚拟地址空间映射到有限 RAM 来模拟「很多内存」；Java 运行时把大量虚拟线程映射到少量 OS 线程来模拟「很多线程」。运行时把虚拟线程 mount 到 carrier（平台线程）上执行，遇到阻塞 I/O 就 unmount 让出 carrier。调度模型是 <strong>M:N</strong>。Java 早期绿色线程是 <strong>M:1</strong>（全共享一条 OS 线程），无法利用多核、后被 1:1 平台线程淘汰；虚拟线程是 M:N，既能海量并发又能利用多核，且阻塞由运行时透明挂起。</p>
+<div class="key-point">M:1（绿色线程，不能并行）→ 1:1（平台线程，昂贵）→ M:N（虚拟线程，海量且并行）。</div>
+</div>
+</div>
+
+<h2>结构化并发（6 题）</h2>
+
+<h3>面试官角度</h3>
+
+<div class="qa-block">
+<div class="question">Q8: 什么是结构化并发？它解决 ExecutorService + Future 的什么痛点？</div>
+<div class="answer"><p>结构化并发（JDK 21 JEP 453 预览，核心 <code>StructuredTaskScope</code>）把在不同线程运行的一组相关任务当作单一工作单元。解决：① 线程泄漏——一个子任务失败后其余仍在跑、结果已无人需要；② 取消传播困难——超时/中断要逐个处理；③ 无可观测结构——thread dump 看不出子任务属于谁。try-with-resources 保证 scope 关闭时子任务必然已结束。</p>
+<div class="key-point">不变式：父任务结束前所有子任务必已结束——由语法结构保证。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q9: 追问 — fork / join / shutdown / close 各自的语义？</div>
+<div class="answer">
+<table>
+<tr><th>操作</th><th>语义</th></tr>
+<tr><td><code>fork(callable)</code></td><td>在独立线程启动子任务，返回 <code>Subtask</code> 句柄</td></tr>
+<tr><td><code>join()</code></td><td>把所有子任务作为整体等待完成（或等策略短路）</td></tr>
+<tr><td><code>shutdown()</code></td><td>停止接新任务，中断取消未完成子任务（子类用来短路）</td></tr>
+<tr><td><code>close()</code></td><td>关闭 scope 并等待未完成子任务结束——保证无孤儿线程</td></tr>
+</table>
+<div class="key-point">join 是「等」，shutdown 是「取消」，close 是「收尾并保证寿命嵌套」。</div>
+</div>
+</div>
+
+<h3>架构师角度</h3>
+
+<div class="qa-block">
+<div class="question">Q10: ShutdownOnFailure 和 ShutdownOnSuccess 怎么选？各给一个场景。</div>
+<div class="answer"><p><code>ShutdownOnFailure</code>：捕获第一个异常并取消其余——用于「聚合多个必需下游」，任一失败请求即失败，<code>join().throwIfFailed()</code>。<code>ShutdownOnSuccess</code>：捕获第一个成功结果——用于「多个等价来源取最快」，<code>scope.result()</code>。两者都是短路模式。</p>
+<div class="key-point">一个对首个失败短路，一个对首个成功短路。</div>
+</div>
+</div>
+
+<h3>代码审查者角度</h3>
+
+<div class="qa-block">
+<div class="question">Q11: 审查这段非结构化代码，指出风险并用结构化并发改写。</div>
+<div class="answer"><pre><code>Response handle() throws Exception {
+  Future&lt;String&gt; user  = exec.submit(this::findUser);
+  Future&lt;Integer&gt; order = exec.submit(this::fetchOrder);
+  return new Response(user.get(), order.get());   // user 失败后 order 仍在跑 → 泄漏
+}</code></pre>
+<p>风险：<code>findUser</code> 失败后 <code>fetchOrder</code> 仍占用线程、结果无人需要，需手动取消，忘了就是孤儿线程；取消/超时传播也分散。改写：</p>
+<pre><code>Response handle() throws ExecutionException, InterruptedException {
+  try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    Subtask&lt;String&gt; user  = scope.fork(this::findUser);
+    Subtask&lt;Integer&gt; order = scope.fork(this::fetchOrder);
+    scope.join().throwIfFailed();                  // 任一失败 → 取消其余并抛出
+    return new Response(user.get(), order.get());
+  }
+}</code></pre>
+<div class="key-point">改写后「失败即取消其余」与「close 必等待结束」都由 scope 保证。</div>
+</div>
+</div>
+
+<h3>故障排查者角度</h3>
+
+<div class="qa-block">
+<div class="question">Q12: 怎么从 jcmd JSON 转储重建一个卡住请求的父子任务结构？</div>
+<div class="answer"><p>① 在 <code>threadContainers</code> 找到 container 名为 <code>StructuredTaskScope$...</code> 的容器；② 看 <code>owner</code>（父任务 tid）和 <code>parent</code> 确定归属；③ 容器内 <code>threads</code> 数组即该 scope fork 的全部子任务，逐个看 <code>stack</code> 找卡点（如全 park 在等下游）；④ 父线程栈通常停在 <code>ThreadFlock.awaitAll</code> / <code>StructuredTaskScope.join</code>。</p>
+<div class="key-point">container + owner + parent 是重建结构的三个钥匙字段。</div>
+</div>
+</div>
+
+<h3>技术讲师角度</h3>
+
+<div class="qa-block">
+<div class="question">Q13: 讲清「结构化」的含义，并说明预览特性与 21→25 的 API 差异。</div>
+<div class="answer"><p>「结构化」类比 <code>{ }</code> 代码块：控制流嵌套、寿命有界；结构化并发让线程寿命也嵌套在语法结构里——子任务在 scope 内 fork，scope 关闭时必结束。JDK 21 是第一次预览，需 <code>javac --enable-preview --release 21</code>、<code>java --enable-preview</code>，API 未来可能变、不宜暴露到长期 API。演进：21（JEP 453）→ 22（462）→ 23（480）→ 24（499）→ 25（505）。JDK 25 已重设计：<code>StructuredTaskScope&lt;T,R&gt;</code> 变接口，用 <code>open(Joiner)</code> 创建，两个 ShutdownOnXxx 子类被移除，<code>join()</code> 直接返回结果。</p>
+<div class="key-point">21 记 ShutdownOnXxx，25 记 open(Joiner)；两版均为预览，勿混用。</div>
+</div>
+</div>
+
+<h2>ThreadLocal 与 ScopedValue（5 题）</h2>
+
+<h3>面试官角度</h3>
+
+<div class="qa-block">
+<div class="question">Q14: ThreadLocal 的每线程副本是怎么实现的？为什么通常声明为 static？</div>
+<div class="answer"><p>值不存在 ThreadLocal 对象上，而在每个 <code>Thread</code> 内部的映射（Thread.threadLocals）里，ThreadLocal 只是<strong>键</strong>；<code>set/get</code> 操作当前线程的映射，<code>get</code> 未命中走 <code>initialValue()</code>。声明 static 是因为 ThreadLocal 无状态只作键，static 保证全应用用同一个键，避免每实例一个键导致映射膨胀。</p>
+<div class="key-point">每线程一张 Map，ThreadLocal 当 key；成本 N 线程 × M 个 ThreadLocal。</div>
+</div>
+</div>
+
+<h3>架构师角度</h3>
+
+<div class="qa-block">
+<div class="question">Q15: ThreadLocal 在线程池里最危险的事故是什么？定什么纪律？</div>
+<div class="answer"><p><strong>任务间值泄漏</strong>：线程被复用，上一个任务 set 的上下文（用户身份/租户/事务）被下一个任务意外读到且无报错。纪律：任务体 try/finally，<strong>finally 必须 <code>remove()</code></strong>，不能依赖线程结束清理（池化线程不结束）；虚拟线程海量时，还应优先评估 ScopedValue。</p>
+<div class="key-point">ThreadLocal + 线程池：每任务 finally remove，是不可省略的契约。</div>
+</div>
+</div>
+
+<h3>代码审查者角度</h3>
+
+<div class="qa-block">
+<div class="question">Q16: 审查下面代码，为什么子线程拿 TLADMIN 正常、拿期望的新值却失败？</div>
+<div class="answer"><pre><code>Thread child = new Thread(() -&gt; System.out.println(TLADMIN.get()));
+TLADMIN.set(new User("Admin"));   // 在构造之后才 set
+child.start();</code></pre>
+<p>因为 <code>InheritableThreadLocal</code> 的继承快照发生在 <strong><code>new Thread(...)</code> 构造时</strong>，不是 <code>start()</code> 时——构造之后才 set 的值不在快照里。必须「先 set、再构造子线程」。另外它是浅拷贝、传同一引用，父子修改互相可见。</p>
+<div class="key-point">构造时拷贝 + 引用共享：顺序与别名两个陷阱都源于实现。</div>
+</div>
+</div>
+
+<h3>故障排查者角度</h3>
+
+<div class="qa-block">
+<div class="question">Q17: 怀疑 ThreadLocal 导致内存泄漏，怎么定位与处置？</div>
+<div class="answer">
+<ol>
+<li>堆直方图/堆转储里观察大量 <code>Thread</code> 实例与 <code>ThreadLocalMap</code> 条目 retained，或被线程局部引用住的大对象（如 ClassLoader 无法卸载）；</li>
+<li>确认是否线程池 + 任务未 <code>remove()</code>：值随池化线程长期保留；</li>
+<li>处置：在任务 finally 补 remove；多次 set 处明确最终清理点；必要时缩小线程池寿命；</li>
+<li>新代码的上下文传递改用 ScopedValue，作用域结束自动失效。</li>
+</ol>
+<div class="key-point">泄漏根因是「无界寿命 + 忘记 remove」；ScopedValue 从机制上消除它。</div>
+</div>
+</div>
+
+<h3>技术讲师角度</h3>
+
+<div class="qa-block">
+<div class="question">Q18: ThreadLocal 的三大设计缺陷是什么？ScopedValue 如何一一对应解决？JDK 21 能用吗？</div>
+<div class="answer"><p>三大缺陷：① <strong>无约束可变性</strong>——任何代码可 set、难追踪；② <strong>无界生命周期</strong>——保留到线程结束或手动 remove，线程池中任务间泄漏；③ <strong>昂贵继承</strong>——每生一个子线程都复制父映射，百万虚拟线程放大成本。ScopedValue 对应：① 不可变（绑定时写一次、之后只读）；② 有界作用域（<code>where</code> 结束即失效）；③ 无继承复制（配合 StructuredTaskScope，fork 子任务共享绑定）。JDK 21 上为<strong>预览 JEP 446</strong>（需开关），<strong>JDK 25 由 JEP 506 转正</strong>免开关。</p>
+<div class="key-point">ThreadLocal 可变/无界/靠继承复制；ScopedValue 不可变/有界/结构化共享。</div>
+</div>
+</div>
+
+<div class="page-nav">
+<span><a href="../lessons/0027-java21-index.html">← Java 21 索引</a></span>
+<span><a href="../lessons/0026-java21-thread-local-variables.html">线程局部变量课件 →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>线程局部变量 Thread-Local Variables · Java 21</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 21 · 线程局部变量</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>线程局部变量 — ThreadLocal、InheritableThreadLocal 与三大设计缺陷</h1>
+<div class="article-meta"><span>📚 L1–L5 · 并发核心</span><span>🔬 Oracle Java 21 文档 · JDK 25 实测</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / <a href="./0027-java21-index.html">Java 21</a> / 线程局部变量</div>
+
+<div class="info">
+<div class="info-title">本课怎么读 · 版本口径</div>
+<p>本课基于 <strong>Oracle Java 21 Core 文档「Thread-Local Variables」</strong>。<code>ThreadLocal</code> 自 Java 1.0 就存在、非新特性，但它在 JDK 21 因<strong>百万虚拟线程</strong>而重新成为焦点（JEP 444 保证虚拟线程总是支持它）。文档同时指出继任者：<strong><code>ScopedValue</code></strong>——21 预览（JEP 446），本机 JDK 25 已转正（<a href="https://openjdk.org/jeps/506">JEP 506</a>），实测免开关。</p>
+</div>
+
+<h2>L1 · 概念层：什么是线程局部变量</h2>
+
+<p>线程局部变量是类型为 <code>ThreadLocal</code> 的变量：<strong>每个访问它的线程都拥有自己独立初始化的副本</strong>。读写分别调用 <code>set</code> / <code>get</code>。它通常声明为 <code>final static</code> 字段，以便许多组件都能方便地访问。</p>
+
+<h3>一个完整例子：把「当前用户」藏进线程</h3>
+
+<p>下例中 <code>TLDBConn</code> 表示数据库连接，<code>TLServer</code> 表示数据库（<code>fetchOrder</code> 无参数，直接读线程局部变量），<code>TLApplication</code> 在各自线程里创建多个连接：</p>
+
+<pre><code>public class User {
+    public String name;
+    public User(String n) { name = n; }
+}
+
+public class TLDBConn {
+    final static ThreadLocal&lt;User&gt; TLUSER = new ThreadLocal&lt;&gt;();
+
+    public static String open(String info) {
+        System.out.println(info + ": " + TLUSER.get().name);
+        return info + ": " + TLUSER.get().name;
+    }
+}
+
+public class TLServer {
+    public static String fetchOrder() {
+        return "Fetching order for " + TLDBConn.TLUSER.get().name;
+    }
+}</code></pre>
+
+<pre><code>public class TLApplication {
+    public void testConnection(User u) {
+        Runnable r = () -&gt; {
+            TLDBConn.TLUSER.set(u);
+            TLDBConn.open("Thread " + Thread.currentThread().getName() + ", testConnection");
+            System.out.println(TLServer.fetchOrder());
+
+            try { Thread.sleep(new Random().nextInt(1000)); }
+            catch (InterruptedException e) { e.printStackTrace(); }
+
+            TLDBConn.TLUSER.set(new User(u.name + " renamed"));
+            TLDBConn.open("Thread " + Thread.currentThread().getName() + ", testConnection");
+        };
+        Thread t = new Thread(r, u.name);
+        t.start();
+    }
+
+    public static void main(String[] args) throws Exception {
+        TLApplication app = new TLApplication();
+        for (int i = 0; i &lt; 5; i++) {
+            app.testConnection(new User("user" + i));
+            Thread.sleep(new Random().nextInt(1000));
+        }
+    }
+}</code></pre>
+
+<p>输出（各线程交错，但每个线程读到的都是自己的用户）：</p>
+
+<pre><code>Thread user0, testConnection: user0
+Fetching order for user0
+Thread user1, testConnection: user1
+Fetching order for user1
+...
+Thread user0, testConnection: user0 renamed
+Thread user1, testConnection: user1 renamed</code></pre>
+
+<div class="note">
+<div class="note-title">两个要点</div>
+<ul>
+<li>尽管 <code>TLUSER</code> 声明为 <code>final static</code>（全 JVM 只有一个 ThreadLocal 对象），它的值对每个线程都是唯一的——<strong>共享的是「变量的定位器」，独立的是「每线程的值」</strong>。</li>
+<li><code>TLServer.fetchOrder()</code> 无参数，调用方不必把 <code>User</code> 层层透传，它直接读「运行它的那个线程」对应的副本。因此<strong>线程局部变量可以隐藏方法参数</strong>。</li>
+</ul>
+</div>
+
+<h2>L2 · 原理层：每线程副本是怎么存的</h2>
+
+<table>
+<tr><th>机制</th><th>说明</th></tr>
+<tr><td>值存在线程身上，而非 ThreadLocal 对象身上</td><td>每个 <code>Thread</code> 内部持有一个线程局部映射（<code>Thread.threadLocals</code>）；<code>ThreadLocal</code> 对象只是<strong>键</strong></td></tr>
+<tr><td><code>set(v)</code></td><td>取当前线程的映射，以「这个 ThreadLocal」为键写入 v</td></tr>
+<tr><td><code>get()</code></td><td>以该 ThreadLocal 为键查当前线程映射；没有则调用 <code>initialValue()</code> 初始化（默认 <code>null</code>）</td></tr>
+<tr><td><code>remove()</code></td><td>从当前线程映射删除该键——线程结束前主动清理的唯一入口</td></tr>
+<tr><td>为什么用 <code>static</code></td><td>ThreadLocal 对象本身无状态、只作键；static 保证全应用用同一个键，避免每实例一个键造成映射膨胀</td></tr>
+</table>
+
+<p>心智模型一句话：<strong>不是「一个变量，每线程一份值」，而是「每个线程有一张 Map，ThreadLocal 当 key」</strong>。所以 N 个线程 × M 个 ThreadLocal = N 张各含 M 个条目的映射，内存成本是 N×M。</p>
+
+<h3>InheritableThreadLocal：子线程继承父线程的值</h3>
+
+<p>父线程启动子线程时，普通 ThreadLocal 的值<strong>不会</strong>被继承。若希望子线程继承，改用 <code>InheritableThreadLocal</code>：</p>
+
+<pre><code>public class TLDBConn {
+    final static ThreadLocal&lt;User&gt; TLUSER = new ThreadLocal&lt;&gt;();
+    final static InheritableThreadLocal&lt;User&gt; TLADMIN = new InheritableThreadLocal&lt;&gt;();
+}</code></pre>
+
+<pre><code>Thread childThread = new Thread(() -&gt; {
+    System.out.println("TLADMIN: " + TLDBConn.TLADMIN.get().name);   // 继承到
+    try {
+        System.out.println("TLUSER: " + TLDBConn.TLUSER.get().name); // 未继承 → NPE
+    } catch (NullPointerException e) {
+        System.out.println("NullPointerException: TLUSER not set");
+    }
+});
+childThread.start();
+// 输出：
+// TLADMIN: Admin
+// NullPointerException: TLUSER not set</code></pre>
+
+<div class="warning">
+<div class="warning-title">继承的两个实现细节（实测确认）</div>
+<ul>
+<li><strong>拷贝发生在 <code>new Thread(...)</code> 构造时，不是 <code>start()</code> 时</strong>：Thread 构造函数会快照父线程的可继承映射。因此「先构造子线程、再 set 父值、后 start」子线程拿不到新值；必须先 set 再构造。</li>
+<li><strong>浅拷贝、传引用</strong>：子线程拿到的是父值的同一个对象引用（实测 <code>child.get() == parent.get()</code> 为 true），不是克隆——父子对该对象的修改互相可见。</li>
+</ul>
+</div>
+
+<h2>L3 · 边界层：ThreadLocal 的三大设计缺陷</h2>
+
+<p>Oracle 文档明确指出线程局部变量有若干设计缺陷，而 <code>ScopedValue</code> 正是为解决这些问题而生。</p>
+
+<h3>缺陷 1：无约束的可变性（Unconstrained Mutability）</h3>
+
+<p>每个线程局部变量都是<strong>可变的</strong>。这让你很难分辨应用中<strong>哪些组件更新了共享状态、以什么顺序更新</strong>——任何能拿到 <code>TLUSER</code> 的代码都能 <code>set</code>，如例子里同一任务后半段把它改成了「renamed」：</p>
+
+<pre><code>TLDBConn.TLUSER.set(u);
+// ... 中途任意深度的代码都可能再 set ...
+TLDBConn.TLUSER.set(new User(u.name + " renamed"));</code></pre>
+
+<p>后果：行为依赖「调用时序」而非显式数据流，重构和排查都困难。</p>
+
+<h3>缺陷 2：无界的生命周期（Unbounded Lifetime）</h3>
+
+<p>Java 运行时会保留线程的某个线程局部副本，直到<strong>线程结束</strong>或线程内代码显式调用 <code>remove()</code>。</p>
+
+<table>
+<tr><th>场景</th><th>风险</th></tr>
+<tr><td>忘记 <code>remove()</code></td><td>线程数据被保留超过必要时间，造成长期内存泄漏；多次 set 之后往往没有明确的安全 remove 点</td></tr>
+<tr><td><strong>线程池</strong></td><td>线程被复用：上一个任务 set 的值会<strong>泄漏到下一个任务</strong>——上一个用户的身份 / 事务上下文被下一个请求意外读到，这是最危险的一类生产事故</td></tr>
+</table>
+
+<pre><code>// 线程池里的正确纪律：每个任务结束必须 remove
+pool.submit(() -&gt; {
+    TLUSER.set(user);
+    try {
+        handle();
+    } finally {
+        TLUSER.remove();        // 不写就泄漏给同线程的下一个任务
+    }
+});</code></pre>
+
+<h3>缺陷 3：昂贵的继承（Expensive Inheritance）</h3>
+
+<p>使用大量线程时开销会恶化：父线程的可继承线程局部变量会被子线程继承——<strong>每生一个子线程，都要复制父映射里的相关条目</strong>。在线程数达百万级的虚拟线程场景，该成本与 ThreadLocal 占用的内存被急剧放大。</p>
+
+<h2>L4 · 继任者：ScopedValue</h2>
+
+<p><code>ScopedValue</code> 用「<strong>不可变值 + 有界作用域</strong>」重写这套机制，专为海量虚拟线程设计：写一次，只在 <code>where(...).run(...)</code> / <code>.call(...)</code> 的动态作用域内可读，出作用域自动失效、不可再改。</p>
+
+<pre><code>public class SVDemo {
+    static final ScopedValue&lt;String&gt; WHO = ScopedValue.newInstance();
+
+    public static void main(String[] a) throws Exception {
+        // call：执行并返回结果
+        String v = ScopedValue.where(WHO, "bob").call(() -&gt; "inside=" + WHO.get());
+        System.out.println(v);
+
+        // run：执行不求值
+        ScopedValue.where(WHO, "alice").run(() -&gt; System.out.println(WHO.get()));
+
+        // 出作用域：不再绑定
+        System.out.println("bound=" + WHO.isBound());
+    }
+}
+// 实测输出（JDK 25，免预览）：
+// inside=bob
+// alice
+// bound=false</code></pre>
+
+<table>
+<tr><th>维度</th><th>ThreadLocal</th><th>ScopedValue</th></tr>
+<tr><td>可变性</td><td>可变，任何代码可 <code>set</code></td><td><strong>不可变</strong>，绑定时写一次，之后只读</td></tr>
+<tr><td>生命周期</td><td>无界：直到线程结束或手动 remove</td><td><strong>有界</strong>：<code>where</code> 的动态作用域结束即失效</td></tr>
+<tr><td>跨线程传递</td><td><code>InheritableThreadLocal</code>：构造子线程时复制映射（昂贵）</td><td>无继承机制；配合 <a href="./0025-java21-structured-concurrency.html">StructuredTaskScope</a> 时，<strong>fork 的子任务自动共享绑定</strong>，无需复制</td></tr>
+<tr><td>线程池风险</td><td>任务间值泄漏</td><td>作用域随任务结束而关闭，无泄漏</td></tr>
+<tr><td>状态</td><td>Java 1.0 起正式</td><td>21 预览 JEP 446 → <strong>JDK 25 转正 JEP 506</strong></td></tr>
+</table>
+
+<p>实测 ScopedValue 与结构化并发配合：父任务绑定后，fork 的子任务能直接读到，作用域关闭即失效：</p>
+
+<pre><code>ScopedValue.where(USER, "alice").run(() -&gt; {
+    try (var scope = StructuredTaskScope.open(Joiner.&lt;String&gt;allSuccessfulOrThrow())) {
+        scope.fork(() -&gt; "subtask sees: " + USER.get());
+        scope.fork(() -&gt; "subtask sees: " + USER.get());
+        scope.join().forEach(s -&gt; System.out.println(s.get()));
+    }
+});
+System.out.println("after, bound=" + USER.isBound());
+// 实测输出：
+// subtask sees: alice
+// subtask sees: alice
+// after, bound=false</code></pre>
+
+<div class="tip">
+<div class="tip-title">选型建议</div>
+<ul>
+<li>需要「贯穿整个线程寿命、且确实要被中途修改」的状态（如某些遗留库契约）→ 仍只能用 ThreadLocal，但务必在 finally 里 remove。</li>
+<li>只是「把一个上下文（用户 / 租户 / 事务 / 追踪 ID）传给一段计算及其子任务」→ 新代码优先 ScopedValue：不可变、有界、与虚拟线程和结构化并发天然契合。</li>
+</ul>
+</div>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: ThreadLocal 是什么？为什么声明为 final static 还能让每个线程有不同的值？</div>
+<div class="answer"><p>ThreadLocal 让每个访问线程拥有独立副本。值并不存在 ThreadLocal 对象上，而存在每个 Thread 内部的映射里，ThreadLocal 只是键；<code>set/get</code> 操作的是「当前线程的映射」。static 共享的是同一个键（定位器），每线程映射里的值各自独立，所以一个 final static 字段就能承载全应用的线程隔离值。</p>
+<div class="key-point">心智模型：每线程一张 Map，ThreadLocal 当 key——成本是 N 线程 × M 个 ThreadLocal。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: ThreadLocal 在线程池里最危险的问题是什么？怎么防？</div>
+<div class="answer"><p><strong>任务间值泄漏</strong>：线程被复用，上一个任务 set 的上下文（用户身份、事务）会被下一个任务意外读到，且无报错。防护：任务体用 try/finally，finally 里必须 <code>remove()</code>；不要依赖线程结束清理（池化线程不结束）。</p>
+<div class="key-point">ThreadLocal + 线程池：每个任务 finally remove，是不可省略的纪律。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — InheritableThreadLocal 的继承发生在什么时候？是深拷贝吗？</div>
+<div class="answer"><p>发生在 <strong><code>new Thread(...)</code> 构造时</strong>（构造函数快照父线程的可继承映射），不是 start() 时；先构造后 set 的值子线程拿不到。且是<strong>浅拷贝、传同一引用</strong>，父子对该对象的修改互相可见，不是克隆。</p>
+<div class="key-point">构造时拷贝 + 引用共享——两个顺序/别名陷阱都源于此。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: Oracle 文档说 ThreadLocal 有哪三个设计缺陷？</div>
+<div class="answer"><p>① <strong>无约束可变性</strong>：任何代码可 set，难追踪谁在何时改了状态；② <strong>无界生命周期</strong>：保留到线程结束或手动 remove，线程池中任务间泄漏；③ <strong>昂贵继承</strong>：每生一个子线程都复制父映射，百万虚拟线程下成本被急剧放大。</p>
+<div class="key-point">三个缺陷正好对应 ScopedValue 的三个设计：不可变、有界作用域、无继承复制。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: ScopedValue 是什么？它和 ThreadLocal 的关键区别？JDK 21 能用吗？</div>
+<div class="answer"><p>ScopedValue 用「不可变 + 有界作用域」替代 ThreadLocal：<code>where(KEY,value).run/call</code> 绑定，只在动态作用域内可读，出作用域即失效；配合 StructuredTaskScope 时 fork 的子任务自动共享绑定、无需复制映射。JDK 21 上是<strong>预览特性 JEP 446</strong>（需 <code>--enable-preview --release 21</code>），<strong>JDK 25 由 JEP 506 转正</strong>免开关。</p>
+<div class="key-point">ThreadLocal 可变/无界/靠继承复制；ScopedValue 不可变/有界/结构化共享。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 架构师 — 百万虚拟线程下为什么要重新审视 ThreadLocal？怎么定迁移策略？</div>
+<div class="answer"><p>平台线程时代线程只有几百，N×M 的映射内存与继承复制尚可接受；虚拟线程可达百万，每个线程的 ThreadLocalMap 与 InheritableThreadLocal 的复制成本被放大百万倍，还可能因线程寿命极短而频繁初始化。策略：① 审计现有 ThreadLocal 用途，区分「真·线程寿命可变状态」与「请求上下文传递」；② 后者在 21 预览/25 转正后逐步迁 ScopedValue；③ 结构化并发内的父子上下文一律走 ScopedValue 共享绑定；④ 迁移期保留的 ThreadLocal 仍要 finally remove，并避免在虚拟线程里用 InheritableThreadLocal 做扇出。</p>
+<div class="key-point">迁移分界线：是否「需要可变且贯穿线程寿命」——不需要就用 ScopedValue。</div>
+</div>
+</div>
+
+<div class="page-nav">
+<span><a href="./0025-java21-structured-concurrency.html">← 上一课：结构化并发</a></span>
+<span><a href="./0027-java21-index.html">Java 21 索引 →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

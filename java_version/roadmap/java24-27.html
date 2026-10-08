@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 24–27 特性全景与示例 · Java 12–27</title>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12–27 特性全景 · Java 24–27</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Java 24–27 特性全景与可运行示例</h1>
+<div class="article-meta"><span>📚 4 个版本 · 逐条示例</span><span>🔬 JDK 25 实测（openjdk-25.0.1）</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / <a href="./index.html">Java 12–27 特性全景</a> / Java 24–27</div>
+
+<div class="info">
+<div class="info-title">本章怎么读 · 实测口径</div>
+<p>本章按版本逐条覆盖 <strong>语法新特性 + API 增强</strong>，每条都给示例。每版本先看「特性清单」表，再看逐条示例。状态图例：<strong>✅ 已实测</strong>（JDK 25 编译+运行，代码尾部注释即真实输出）；<strong>⚠️ 需 <code>--enable-preview --release 25</code></strong>（已实测）；<strong>❌ 未实测</strong>（本机仅有 JDK 25——Java 26 / 27 无法实测，相应条目只给版本忠实写法，不进实测脚本）。<br/>
+两个约定：① <strong>虚拟线程、结构化并发不在本章范围</strong>（19–27 均涉及）——已交付为独立深度专题：<a href="../lessons/0024-java21-virtual-threads.html">虚拟线程</a> / <a href="../lessons/0025-java21-structured-concurrency.html">结构化并发</a> / <a href="../lessons/0026-java21-thread-local-variables.html">线程局部变量</a>；② Java 24 的特性以 25 上的「现行形态」实测——24 时点是预览、25 已转正的条目会免预览开关直接运行，预览轮次差异在各条目里单列说明；史实冲突一律以 <code>openjdk.org/jeps</code> 为准并加勘误注。③ 实测脚本把 <code>data-flags</code> 同时传给 <code>javac</code> 与 <code>java</code>；<code>java</code> launcher 不接受 <code>--release</code>，所以 4 个预览块在脚本里是「编译 0 失败、运行阶段报 <code>Unrecognized option: --release</code>」——属脚本限制，改用 <code>java --enable-preview 类名</code> 即正常，本页预览块的输出注释都是真实运行结果。</p>
+</div>
+
+<h2>Java 24（2025-03-18 · 非 LTS）</h2>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（24 时点）</th><th>示例</th></tr>
+<tr><td>语法</td><td>Primitive Types in Patterns, instanceof, and switch（JEP 488）</td><td>预览（第二次；素材写第三次，见勘误）</td><td>24.1</td></tr>
+<tr><td>语法</td><td>Flexible Constructor Bodies：构造器 <code>super(...)</code> 前可写语句（JEP 492）</td><td>预览（第三次）</td><td>24.2</td></tr>
+<tr><td>语法</td><td>Simple Source Files and Instance Main Methods：免类声明 + <code>void main()</code>（JEP 495）</td><td>预览（第四次）</td><td>24.3</td></tr>
+<tr><td>语法</td><td>Module Import Declarations：<code>import module</code>（JEP 494）</td><td>预览（第二次）</td><td>24.4</td></tr>
+<tr><td>API</td><td>Stream Gatherers：<code>Stream.gather(Gatherer)</code>（JEP 485）</td><td>正式</td><td>24.5</td></tr>
+<tr><td>API</td><td>Class-File API：<code>java.lang.classfile</code>（JEP 484）</td><td>正式</td><td>24.6</td></tr>
+<tr><td>API</td><td>Scoped Values（JEP 487）</td><td>预览（第四次；素材写第二次，见勘误）</td><td>24.7</td></tr>
+<tr><td>API</td><td>后量子密码：ML-KEM 密钥封装（JEP 496）+ ML-DSA 数字签名（JEP 497）</td><td>正式</td><td>24.8</td></tr>
+</table>
+
+<div class="note">
+<div class="note-title">勘误（以 openjdk.org 的 JDK 24 JEP 清单为准）</div>
+<p>① 素材写「Primitive Types in Patterns <strong>第三次预览</strong>」——JDK 24 实际是 <strong>第二次预览（JEP 488）</strong>，第三次预览在 JDK 25（JEP 507）；② 素材写「Scoped Values <strong>第二次预览</strong>」——JDK 24 实际是 <strong>第四次预览（JEP 487）</strong>（21 首次 JEP 446，25 转正 JEP 506）；③ 素材把「ML-DSA 正式」记在 Java 26——实际 <strong>JEP 496 / JEP 497 在 JDK 24 就已交付</strong>，本机 JDK 25 免预览实测可用（见 24.8），26 条目按素材保留并注明（见 26.7）。另：素材称 24 的结构化并发为「第五次预览」，JEP 499 实为第四次预览——该特性本章不写，见后续专题。</p>
+</div>
+
+<h3>24.1 Primitive Types in Patterns, instanceof, and switch（JEP 488 · 预览）</h3>
+<p>⚠️ 需 <code>--enable-preview --release 25</code>。24 时点为第二次预览（JEP 488），25 上为第三次预览（JEP 507），26/27 分别是第四（JEP 530）、第五次（JEP 532）。本机没有 JDK 24，下面按 25 现行预览形态实测：</p>
+<pre><code data-run="1" data-name="Prim24" data-flags="--enable-preview --release 25">public class Prim24 {
+  public static void main(String[] a) {
+    Object o = 42;
+    if (o instanceof int i) System.out.println("prim " + i);
+    Object s = "hi";
+    if (s instanceof int j) System.out.println("never " + j); else System.out.println("not prim");
+  }
+}
+// 运行输出：
+// prim 42
+// not prim</code></pre>
+<p>✅ 实测（JDK 25 + 预览开关；javac 会提示「使用 Java SE 25 的预览功能」，属正常）。要点：<code>Object</code> 里的装箱值可用 <code>instanceof int</code> 拆箱绑定成基元模式变量，不匹配则不进分支。⚠️ 25 上 <code>switch</code> 的<strong>布尔选择器</strong>写法 <code>case true / case false</code> 同属基元模式、也要 preview，本页不采用。</p>
+
+<h3>24.2 Flexible Constructor Bodies（JEP 492 · 第三次预览 → JDK 25 转正）</h3>
+<p>✅ 实测（JDK 25）：JEP 513 已在 25 转正，<strong>免预览开关</strong>；24 时点是第三次预览，需 <code>--enable-preview --release 24</code>（本机无法运行）。</p>
+<pre><code data-run="1" data-name="Flex24">class FlexBase {
+  FlexBase(int x) { System.out.println("base " + x); }
+}
+public class Flex24 extends FlexBase {
+  Flex24() {
+    System.out.println("stmts");
+    super(9);
+  }
+  public static void main(String[] a) {
+    new Flex24();
+  }
+}
+// 运行输出：
+// stmts
+// base 9</code></pre>
+<p>✅ 实测（JDK 25）。要点：JEP 492 之前 <code>super(...)</code> 之前只允许「简单表达式」（读 final 字段、调用静态方法），现在可以先执行任意语句再调 <code>super</code>——先校验、先算，最后才把结果交给父类构造器。</p>
+
+<h3>24.3 Simple Source Files and Instance Main Methods（JEP 495 · 第四次预览）</h3>
+<p>版本忠实写法（24 第四次预览，<code>--enable-preview --release 24</code>）：</p>
+<pre><code>// ❌ 未实测：本机仅有 JDK 25，无法运行 24 的预览开关
+// 24 的形态：特性名叫「简单源文件（simple source file）」，IO 位于 java.io.IO，
+// 且 IO 的静态方法在简单源文件中被隐式导入，可以直接写 println(...)
+import java.io.IO;
+void main() {
+    println("hello");        // 24 预览：隐式导入的 IO 静态方法（25 转正时已取消）
+}</code></pre>
+<p>JDK 25 等价写法（同一特性现行形态：JEP 512 已转正、改名 Compact Source Files，免预览）：</p>
+<pre><code data-run="1" data-name="Simple24">void main() {
+    IO.println("hello from compact source file");
+}
+// 运行输出：hello from compact source file</code></pre>
+<p>✅ 实测（JDK 25）。<code>javac Simple24.java</code> 直接生成 <code>Simple24.class</code>，<code>java Simple24</code> 即可运行（launcher 为隐式声明的类建实例再调实例 <code>main</code>）。⚠️ 史实勘误：JEP 512 转正时把 <code>IO</code> 从 <code>java.io</code> 挪到 <strong><code>java.lang</code></strong>（本机 <code>javap java.io.IO</code> 确认已不存在，<code>java.lang.IO</code> 有 <code>print/println/readln</code> 等五个方法），并取消静态方法隐式导入——必须写全 <code>IO.println(...)</code>。<code>readln()</code> 会读标准输入，本页示例不使用（避免阻塞）。</p>
+
+<h3>24.4 Module Import Declarations（JEP 494 · 第二次预览 → JDK 25 转正）</h3>
+<p>✅ 实测（JDK 25）：JEP 511 已转正，免预览；24 时点是第二次预览。</p>
+<pre><code data-run="1" data-name="ModImp24">import module java.base;
+public class ModImp24 {
+  public static void main(String[] a) {
+    System.out.println(List.of("a", "b", "c").size() + " " + "x".repeat(2));
+  }
+}
+// 运行输出：3 xx</code></pre>
+<p>✅ 实测（JDK 25）。要点：<code>import module java.base;</code> 把 <code>java.base</code> 导出包里的公开类型按需导入——不写 <code>import java.util.List;</code> 也能用 <code>List</code>；与显式单类型 import 冲突时<strong>显式 import 优先</strong>。</p>
+
+<h3>24.5 Stream Gatherers（JEP 485 · 正式）</h3>
+<pre><code data-run="1" data-name="Gather24">import java.util.stream.Gatherers;
+import java.util.stream.IntStream;
+public class Gather24 {
+  public static void main(String[] a) {
+    var windows = java.util.stream.Stream.of(1, 2, 3, 4, 5)
+        .gather(Gatherers.windowFixed(2)).toList();
+    System.out.println(windows);
+    var sums = IntStream.range(0, 5).boxed()
+        .gather(Gatherers.scan(() -&gt; 0, Integer::sum)).toList();
+    System.out.println(sums);
+  }
+}
+// 运行输出：
+// [[1, 2], [3, 4], [5]]
+// [0, 1, 3, 6, 10]</code></pre>
+<p>✅ 实测（JDK 25）。要点：<code>gather</code> 是继 <code>map/flatMap/collect</code> 之后的中间操作扩展点，<code>Gatherer</code> 接口可自定义「元素 → 0..n 个输出」的有状态流水；内置 <code>windowFixed/windowSliding/fold/scan/mapConcurrent</code>（<code>javap java.util.stream.Gatherers</code> 核对）。<code>windowFixed(2)</code> 尾部不足一批也照发（<code>[5]</code>）。22/23 两轮预览（JEP 461/473）后于 24 转正。</p>
+
+<h3>24.6 Class-File API（JEP 484 · 正式）</h3>
+<pre><code data-run="1" data-name="ClassFile24">import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassModel;
+public class ClassFile24 {
+  public static void main(String[] a) throws Exception {
+    byte[] bytes;
+    try (var in = ClassFile24.class.getResourceAsStream("ClassFile24.class")) {
+      bytes = in.readAllBytes();
+    }
+    ClassModel model = ClassFile.of().parse(bytes);
+    System.out.println("thisClass=" + model.thisClass().asSymbol());
+    System.out.println("major=" + model.majorVersion() + " methods=" + model.methods().size());
+    System.out.println("names=" + model.methods().stream().map(m -&gt; m.methodName().stringValue()).toList());
+  }
+}
+// 运行输出：
+// thisClass=ClassOrInterfaceDesc[ClassFile24]
+// major=69 methods=3
+// names=[&lt;init&gt;, main, lambda$main$0]</code></pre>
+<p>✅ 实测（JDK 25）。要点：<code>ClassFile.of().parse(byte[])</code> 得到 <code>ClassModel</code>（常量池、访问标志、字段、方法），<code>build(ClassDesc, Consumer)</code> 生成字节码，<code>transformClass</code> 读改写——JDK 内部 ASM 的公开替代品（22/23 两轮预览 JEP 457/466 后于 24 转正）。<code>major=69</code> 即 class 文件版本 69（Java 25）；方法数 3 = <code>&lt;init&gt;</code> + <code>main</code> + 编译器生成的 lambda 桥。</p>
+
+<h3>24.7 Scoped Values（JEP 487 · 第四次预览 → JDK 25 转正）</h3>
+<p>✅ 实测（JDK 25）：JEP 506 已转正，免预览；24 时点是<strong>第四次</strong>预览（素材写「第二次」，见本节勘误注）。</p>
+<pre><code data-run="1" data-name="Scoped24">import java.lang.ScopedValue;
+public class Scoped24 {
+  static final ScopedValue&lt;String&gt; WHO = ScopedValue.newInstance();
+  public static void main(String[] a) {
+    ScopedValue.where(WHO, "alice").run(() -&gt;
+        ScopedValue.where(WHO, "bob").run(() -&gt;
+            System.out.println("nested " + WHO.get())));
+    ScopedValue.where(WHO, "carol").run(() -&gt; System.out.println("in " + WHO.get()));
+    System.out.println("bound inside=" + ScopedValue.where(WHO, "dave").call(() -&gt; WHO.isBound()));
+    System.out.println("outside bound=" + WHO.isBound());
+  }
+}
+// 运行输出：
+// nested bob
+// in carol
+// bound inside=true
+// outside bound=false</code></pre>
+<p>✅ 实测（JDK 25）。要点：<code>where(K,V).run/call(...)</code> 的绑定只在该动态作用域内可见（内层覆盖外层），作用域外 <code>isBound()=false</code>、<code>get()</code> 抛 <code>NoSuchElementException</code>（见 25.2）；不可变、随线程创建/继承传递，专为「请求上下文、事务 ID」这类只读传递数据设计（对比 <code>ThreadLocal</code>：可变、有泄漏与装箱成本）。</p>
+
+<h3>24.8 后量子密码：ML-KEM + ML-DSA（JEP 496 / JEP 497 · 正式）</h3>
+<pre><code data-run="1" data-name="PQC24">import java.security.KeyPairGenerator;
+import java.security.Signature;
+import java.util.Arrays;
+import javax.crypto.KEM;
+public class PQC24 {
+  public static void main(String[] a) throws Exception {
+    var kp = KeyPairGenerator.getInstance("ML-DSA").generateKeyPair();
+    var signer = Signature.getInstance("ML-DSA");
+    signer.initSign(kp.getPrivate());
+    signer.update("post-quantum".getBytes());
+    byte[] sig = signer.sign();
+    signer.initVerify(kp.getPublic());
+    signer.update("post-quantum".getBytes());
+    System.out.println("ML-DSA verify=" + signer.verify(sig) + " sigLen=" + sig.length);
+
+    var kem = KEM.getInstance("ML-KEM");
+    var recv = KeyPairGenerator.getInstance("ML-KEM").generateKeyPair();
+    var enc = kem.newEncapsulator(recv.getPublic()).encapsulate();
+    var dec = kem.newDecapsulator(recv.getPrivate()).decapsulate(enc.encapsulation());
+    System.out.println("ML-KEM encap=" + enc.encapsulation().length
+        + " sharedMatch=" + Arrays.equals(enc.key().getEncoded(), dec.getEncoded()));
+  }
+}
+// 运行输出：
+// ML-DSA verify=true sigLen=3309
+// ML-KEM encap=1088 sharedMatch=true</code></pre>
+<p>✅ 实测（JDK 25，免预览）。要点：JDK 24 同时交付 <strong>JEP 496（ML-KEM 密钥封装）</strong>与 <strong>JEP 497（ML-DSA 签名）</strong>——<code>KEM</code> 抽象（<code>newEncapsulator/newDecapsulator/encapsulate/decapsulate</code>），<code>KeyPairGenerator</code>/<code>Signature</code> 直接按算法名取用；ML-DSA-65 默认签名 3309 字节（远大于 ECDSA 的 ~64B）。⚠️ 本机探测：<code>SLH-DSA</code>、<code>HQC</code> 的 <code>KeyPairGenerator.getInstance</code> 抛「not available」，25 上不可用。素材把「ML-DSA 正式」记在 26，实际 24 就已交付（见 26.7）。</p>
+
+<h2>Java 25（2025-09-16 · LTS · 本机实测基线）</h2>
+
+<p>25 是本章的<strong>实测基线</strong>（多数厂商提供 LTS 支持）。本页所有 ✅/⚠️ 代码都在 openjdk-25.0.1 上跑过；24 的预览特性在 25 转正后按「现行形态」复测（25.7）。</p>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（25 时点）</th><th>示例</th></tr>
+<tr><td>语法</td><td>Primitive Types in Patterns, instanceof, and switch（JEP 507）</td><td>预览（第三次）</td><td>25.1</td></tr>
+<tr><td>API</td><td>Scoped Values：作用域内不可变绑定（JEP 506）</td><td>正式（24 第四次预览转正）</td><td>25.2</td></tr>
+<tr><td>API</td><td>Stable Values：延迟初始化的常量（JEP 502）</td><td>预览（首次）</td><td>25.3</td></tr>
+<tr><td>API</td><td>Key Derivation Function API：<code>javax.crypto.KDF</code>（JEP 510）</td><td>正式</td><td>25.4</td></tr>
+<tr><td>API</td><td>PEM Encodings of Cryptographic Objects（JEP 470）</td><td>预览（首次）</td><td>25.5</td></tr>
+<tr><td>API</td><td>Vector API：<code>jdk.incubator.vector</code>（JEP 508）</td><td>孵化（第十次）</td><td>25.6</td></tr>
+<tr><td>语法</td><td>Flexible Constructor Bodies（JEP 513）</td><td>正式（24 预览转正）</td><td>25.7 / 24.2</td></tr>
+<tr><td>语法</td><td>Compact Source Files and Instance Main Methods（JEP 512）</td><td>正式（24 预览转正·改名）</td><td>25.7 / 24.3</td></tr>
+<tr><td>语法</td><td>Module Import Declarations（JEP 511）</td><td>正式（24 预览转正）</td><td>25.7 / 24.4</td></tr>
+<tr><td>并发</td><td>Structured Concurrency（JEP 505）</td><td>预览（第五次）</td><td><a href="../lessons/0025-java21-structured-concurrency.html">SC 专题</a></td></tr>
+</table>
+
+<div class="note">
+<div class="note-title">25 还交付了什么（运行时/JVM，本页不展开）</div>
+<p>移除 32 位 x86 端口（JEP 503）、JFR CPU 时间剖析与协作式采样（JEP 509/518/520）、AOT 编译人体工学与方法剖析（JEP 514/515）、紧凑对象头（JEP 519）、分代 Shenandoah（JEP 521）——属 JVM/GC/JFR 范畴，不改变语言与 JDK API，后续专题再讲。</p>
+</div>
+
+<h3>25.1 Primitive Types in Patterns, instanceof, and switch（JEP 507 · 第三次预览）</h3>
+<p>⚠️ 需 <code>--enable-preview --release 25</code>。轮次：JEP 455（23 首次）→ 488（24 第二次）→ 507（25 第三次，<strong>与 24 无改动</strong>）→ 530（26 第四次，收紧 dominance/无条件精确性判定）→ 532（27 第五次）。</p>
+<pre><code data-run="1" data-name="PrimSw" data-flags="--enable-preview --release 25">public class PrimSw {
+  public static void main(String[] a) {
+    Object o = 3;
+    String r = switch (o) {
+      case int i when i % 2 == 0 -&gt; "even " + i;
+      case int i -&gt; "odd " + i;
+      default -&gt; "?";
+    };
+    System.out.println(r);
+    Object n = 7;
+    if (n instanceof int v &amp;&amp; v &gt; 5) System.out.println("big " + v);
+  }
+}
+// 运行输出：
+// odd 3
+// big 7</code></pre>
+<p>✅ 实测（JDK 25 + 预览开关；编译器提示「使用 Java SE 25 的预览功能」属正常）。要点：① <code>switch</code> 可用基元类型模式 <code>case int i</code> 并带 <code>when</code> 守卫，对 <code>Object</code> 选择器装箱值拆箱匹配；② <code>instanceof int v</code> 之后 <code>v</code> 可在 <code>&amp;&amp;</code> 后续条件里直接用。布尔选择器 <code>switch (b) { case true ... case false ... }</code> 同属本特性（25 起合法写法，同样要 preview），本页未采用。</p>
+
+<h3>25.2 Scoped Values（JEP 506 · 正式）</h3>
+<p>✅ 实测（JDK 25，免预览）。转正历程：21 首次预览（JEP 446）→ 24 第四次预览（JEP 487）→ <strong>25 转正（JEP 506）</strong>。</p>
+<pre><code data-run="1" data-name="Scoped25">import java.lang.ScopedValue;
+public class Scoped25 {
+  static final ScopedValue&lt;String&gt; REQ = ScopedValue.newInstance();
+  public static void main(String[] a) throws Exception {
+    String out = ScopedValue.where(REQ, "req-42").call(() -&gt; "handle " + REQ.get());
+    System.out.println(out);
+    try { System.out.println(REQ.get()); }
+    catch (java.util.NoSuchElementException e) { System.out.println("outside: " + e.getMessage()); }
+  }
+}
+// 运行输出：
+// handle req-42
+// outside: ScopedValue not bound</code></pre>
+<p>✅ 实测（JDK 25）。要点：<code>where(K,V).call(...)</code> 返回绑定作用域内的计算结果；作用域外 <code>get()</code> 抛 <code>NoSuchElementException</code>，消息 <code>ScopedValue not bound</code>。与 <code>ThreadLocal</code> 的差异见 24.7。</p>
+
+<h3>25.3 Stable Values（JEP 502 · 第一次预览）</h3>
+<p>⚠️ 需 <code>--enable-preview --release 25</code>。25 时点类型名是 <code>java.lang.StableValue</code>（本机 <code>javap java.lang.StableValue</code> 核对；<code>java.lang.LazyConstant</code> 在 25 <strong>不存在</strong>）。</p>
+<pre><code data-run="1" data-name="SV25b" data-flags="--enable-preview --release 25">import java.lang.StableValue;
+public class SV25b {
+  static final StableValue&lt;Integer&gt; ANSWER = StableValue.of();
+  public static void main(String[] a) {
+    System.out.println(ANSWER.orElseSet(() -&gt; 42));
+    System.out.println(ANSWER.orElse(-1) + " set=" + ANSWER.isSet());
+  }
+}
+// 运行输出：
+// 42
+// 42 set=true</code></pre>
+<p>✅ 实测（JDK 25 + 预览开关）。要点：<code>of()</code> 创建未初始化常量；首次 <code>orElseSet(计算)</code> 求值一次并记住，之后 <code>orElse(-1)</code> 直接返回已记住的 42（<code>isSet()=true</code>），「延迟初始化 + 至多一次 + 可常量折叠」。<strong>后续轮次（按 JEP 531 历史注）</strong>：26（JEP 526）更名 <code>LazyConstant</code>、把 <code>List.ofLazy/Map.ofLazy</code> 放进 <code>java.util.List/Map</code> 接口、删除 <code>orElseSet/setOrThrow/trySet</code>；27（JEP 531）再删 <code>isInitialized/orElse</code>、新增 <code>Set.ofLazy</code>。</p>
+
+<h3>25.4 Key Derivation Function API（JEP 510 · 正式）</h3>
+<pre><code data-run="1" data-name="KDF25">import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import javax.crypto.KDF;
+import javax.crypto.spec.HKDFParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+public class KDF25 {
+  public static void main(String[] a) throws Exception {
+    var kdf = KDF.getInstance("HKDF-SHA256");
+    byte[] key = "master-secret".getBytes(StandardCharsets.UTF_8);
+    byte[] prk = kdf.deriveData(HKDFParameterSpec.ofExtract().addIKM(key).extractOnly());
+    byte[] info = "session-1".getBytes(StandardCharsets.UTF_8);
+    var expand = HKDFParameterSpec.expandOnly(new SecretKeySpec(prk, "HKDF"), info, 32);
+    byte[] okm = kdf.deriveData(expand);
+    System.out.println("prk.len=" + prk.length + " okm.len=" + okm.length);
+    System.out.println("repeatable=" + Arrays.equals(okm, kdf.deriveData(expand)));
+  }
+}
+// 运行输出：
+// prk.len=32 okm.len=32
+// repeatable=true</code></pre>
+<p>✅ 实测（JDK 25）。要点：<code>KDF.getInstance("HKDF-SHA256")</code> 拿到标准 KDF；HKDF 两段式——extract（<code>HKDFParameterSpec.ofExtract().addIKM(...).extractOnly()</code> 得 PRK）与 expand（静态工厂 <code>HKDFParameterSpec.expandOnly(SecretKeySpec, info, L)</code> 喂给 <code>deriveData</code>）；同一参数派生结果确定（<code>repeatable=true</code>），密钥长度即请求的 L 字节。</p>
+
+<h3>25.5 PEM Encodings of Cryptographic Objects（JEP 470 · 第一次预览）</h3>
+<p>⚠️ 需 <code>--enable-preview --release 25</code>。</p>
+<pre><code data-run="1" data-name="PEM25b" data-flags="--enable-preview --release 25">import java.security.KeyPairGenerator;
+import java.security.PEMDecoder;
+import java.security.PEMEncoder;
+import java.security.PrivateKey;
+public class PEM25b {
+  public static void main(String[] a) throws Exception {
+    var kp = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+    String pem = PEMEncoder.of().encodeToString(kp.getPrivate());
+    System.out.println(pem.lines().findFirst().orElseThrow());
+    PrivateKey back = PEMDecoder.of().decode(pem, PrivateKey.class);
+    System.out.println("roundtrip=" + back.getAlgorithm());
+  }
+}
+// 运行输出：
+// -----BEGIN PRIVATE KEY-----
+// roundtrip=EdDSA</code></pre>
+<p>✅ 实测（JDK 25 + 预览开关）。要点：<code>java.security.PEMEncoder/PEMDecoder</code>（<code>of()</code> 得线程安全可复用实例）把密钥 ⇄ PEM 文本一步转换，<code>decode(text, Class)</code> 免手工解析；本机 <code>javap</code> 核对 25 的 <code>encode(DEREncodable)</code> 参数类型（<code>AsymmetricKey extends DEREncodable</code>）。后续轮次：26（JEP 524 第二次预览：<code>PEMRecord</code> 改名 <code>PEM</code>、<code>encryptKey</code> 改 <code>encrypt</code>、支持 <code>KeyPair/PKCS8EncodedKeySpec</code> 加解密），27（JEP 538 第三次预览）——写法见 26.3 / 27.4。</p>
+
+<h3>25.6 Vector API（JEP 508 · 第十次孵化）</h3>
+<p>⚠️ 需 <code>--add-modules jdk.incubator.vector</code>（孵化模块，非 preview）。</p>
+<pre><code data-run="1" data-name="Vec25" data-flags="--add-modules jdk.incubator.vector">import jdk.incubator.vector.IntVector;
+import jdk.incubator.vector.VectorSpecies;
+public class Vec25 {
+  public static void main(String[] a) {
+    VectorSpecies&lt;Integer&gt; SP = IntVector.SPECIES_256;
+    int[] x = {1, 2, 3, 4, 5, 6, 7, 8};
+    int[] y = {10, 20, 30, 40, 50, 60, 70, 80};
+    int[] out = new int[8];
+    var vx = IntVector.fromArray(SP, x, 0);
+    var vy = IntVector.fromArray(SP, y, 0);
+    vx.add(vy).intoArray(out, 0);
+    System.out.println(java.util.Arrays.toString(out));
+  }
+}
+// 运行输出：
+// [11, 22, 33, 44, 55, 66, 77, 88]</code></pre>
+<p>✅ 实测（JDK 25；运行时 stderr 会打印「incubating 模块」警告，属正常）。要点：按物种 <code>SPECIES_256</code> 一次处理 8 个 <code>int</code>，<code>fromArray → add → intoArray</code> 即一次 SIMD 加法；类文件是普通正式字节码（不带 preview 标记），只是模块在孵化期。轮次：25 第十次（JEP 508）→ 26 第十一次（JEP 529）→ 27 第十二次（JEP 537）。</p>
+
+<h3>25.7 24 的预览特性在 25 的转正形态（复测）</h3>
+<p>三个 24 预览特性在 25 免预览直接可用，下面用 25 写法各复测一次：</p>
+<pre><code data-run="1" data-name="Flex25">class Pkg {
+  Pkg(int w, int h) { System.out.println("pkg " + w + "x" + h); }
+}
+public class Flex25 extends Pkg {
+  Flex25(int w) {
+    int h = w * 2;
+    System.out.println("calc " + h);
+    super(w, h);
+  }
+  public static void main(String[] a) { new Flex25(5); }
+}
+// 运行输出：
+// calc 10
+// pkg 5x10</code></pre>
+<p>✅ 实测（JDK 25）：先算 <code>h</code>、打日志，再 <code>super(w, h)</code>——JEP 513 转正后的常规写法（对照 24.2）。</p>
+<pre><code data-run="1" data-name="Compact25b">int hits = 0;
+
+String greet() { return "hello from compact file"; }
+
+void main() {
+    hits++;
+    IO.println(greet() + " hits=" + hits + " this=" + (this != null));
+}
+// 运行输出：hello from compact file hits=1 this=true</code></pre>
+<p>✅ 实测（JDK 25）：紧凑源文件可声明实例字段与方法、<code>void main()</code>，launcher 隐式建类实例再调实例 <code>main</code>（<code>this</code> 非 null、<code>hits</code> 可变状态可用）；<code>IO</code> 来自 <code>java.lang</code>（见 24.3 勘误）。</p>
+<pre><code data-run="1" data-name="ModImp25">import module java.base;
+public class ModImp25 {
+  public static void main(String[] a) {
+    var d = java.time.LocalDate.of(2025, 9, 16);
+    System.out.println(d + " dow=" + d.getDayOfWeek());
+    System.out.println(Optional.of("java.base 按需导入").orElseThrow());
+  }
+}
+// 运行输出：
+// 2025-09-16 dow=TUESDAY
+// java.base 按需导入</code></pre>
+<p>✅ 实测（JDK 25）：一条 <code>import module java.base;</code> 同时按需导入 <code>java.time.LocalDate</code> 与 <code>java.util.Optional</code>（均未显式 import）。25 的转正版本与 24 预览版语义一致。</p>
+
+<div class="note">
+<div class="note-title">勘误（以 openjdk.org 的 JDK 25 JEP 清单为准）</div>
+<p>素材把 25 的「Scoped Values 转正」记为第二次预览后的状态——实际 JEP 506 是<strong>转正</strong>（正式特性，无预览标记）；「Structured Concurrency 第五次预览（JEP 505）」与官方清单相符。其余条目轮次均已按 JEP 历史核对。</p>
+</div>
+
+<h2>Java 26（2026-03-17 · 非 LTS）</h2>
+
+<div class="info">
+<div class="info-title">本节全部 ❌ 未实测</div>
+<p>本机仅装有 JDK 25，<strong>无法编译运行 26/27 的代码</strong>。以下示例按各 JEP 的<strong>版本忠实写法</strong>给出（<code>--enable-preview --release 26</code> 等开关随特性标注），不进实测脚本；凡提到「25 对照」的，都是在本机 25 上实际跑过并注明的观察结果。</p>
+</div>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（26 时点）</th><th>示例</th></tr>
+<tr><td>网络</td><td>HTTP/3 for the HTTP Client API（JEP 517）</td><td>正式</td><td>26.1</td></tr>
+<tr><td>API</td><td>Remove the Applet API（JEP 504）</td><td>正式（移除）</td><td>26.2</td></tr>
+<tr><td>API</td><td>PEM Encodings of Cryptographic Objects（JEP 524）</td><td>预览（第二次）</td><td>26.3</td></tr>
+<tr><td>API</td><td>Lazy Constants（JEP 526）</td><td>预览（第二次·StableValue 更名）</td><td>26.4</td></tr>
+<tr><td>语言</td><td>Prepare to Make Final Mean Final：反射改 final 字段告警（JEP 500）</td><td>正式（运行时警告）</td><td>26.5</td></tr>
+<tr><td>语法</td><td>Primitive Types in Patterns, instanceof, and switch（JEP 530）</td><td>预览（第四次）</td><td>26.6</td></tr>
+<tr><td>API</td><td>后量子密码 ML-DSA / ML-KEM（素材记「26 正式」）</td><td>实为 24 交付</td><td>26.7</td></tr>
+<tr><td>API</td><td>Vector API（JEP 529）</td><td>孵化（第十一次）</td><td>26.8</td></tr>
+<tr><td>并发</td><td>Structured Concurrency（JEP 525）</td><td>预览（第六次）</td><td><a href="../lessons/0025-java21-structured-concurrency.html">SC 专题</a></td></tr>
+<tr><td>运行时</td><td>AOT 对象缓存（JEP 516）、G1 吞吐优化（JEP 522）</td><td>正式</td><td>本页不展开</td></tr>
+</table>
+
+<h3>26.1 HTTP/3 for the HTTP Client API（JEP 517 · 正式）</h3>
+<pre><code>// ❌ 未实测：需 JDK 26（本机仅 JDK 25）
+// 25 对照：javap java.net.http.HttpClient$Version 只有 HTTP_1_1 / HTTP_2，无 HTTP_3
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+public class Http3 {
+  public static void main(String[] a) throws Exception {
+    var client = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_3)     // 客户端级：首选 HTTP/3
+        .build();
+    var req = HttpRequest.newBuilder(URI.create("https://example.com/"))
+        .version(HttpClient.Version.HTTP_3)     // 请求级：也可单独指定
+        .GET().build();
+    var res = client.send(req, HttpResponse.BodyHandlers.ofString());
+    System.out.println(res.version() + " " + res.statusCode());
+  }
+}</code></pre>
+<p>❌ 未实测。要点：HTTP/3 基于 QUIC/UDP + TLS 1.3，<strong>不改默认协议</strong>（默认仍 HTTP/2，需显式 opt-in）；服务器不支持时默认透明降级。协商有四种策略：请求级首选=先试 HTTP/3 超时回退、客户端首选=HTTP/3 与 HTTP/2 并行首连、<code>H3_DISCOVERY=ALT_SVC</code>=先 HTTP/2 再按 Alt-Svc 切换、<code>HTTP_3_URI_ONLY</code>=只用 HTTP/3 不回退。25 对照实测：<code>Version</code> 枚举确无 <code>HTTP_3</code>，此码在 25 上无法编译。</p>
+
+<h3>26.2 Remove the Applet API（JEP 504 · 正式）</h3>
+<pre><code>// ❌ 未实测：JDK 26 起 java.applet（含 Applet/applet 标签机制）被整体移除，此码在 26 编译不过
+// ✅ 25 对照实测（本机，未进实测脚本）：可编译运行，javac 给 2 条 [removal] 警告，输出 created=true
+public class Applet26 {
+  public static void main(String[] a) {
+    java.applet.Applet app = new java.applet.Applet();
+    System.out.println("created=" + (app != null));
+  }
+}
+// 25 实际输出（对照）：
+// 警告: [removal] java.applet 中的 Applet 已过时, 且标记为待删除
+// created=true</code></pre>
+<p>❌ 26 未实测。要点：Applet 自 JDK 9 起 <code>@Deprecated(since="9", forRemoval=true)</code>，26（JEP 504）把整个 <code>java.applet</code> 包删除——<code>liveconnect</code>、<code>AppletContext</code> 等一并消失，浏览器内小程序时代彻底结束；迁移方向是 WebView/浏览器应用或服务端渲染。</p>
+
+<h3>26.3 PEM Encodings（JEP 524 · 第二次预览）</h3>
+<pre><code>// ❌ 未实测：需 JDK 26，javac --release 26 --enable-preview / java --enable-preview
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.PEM;
+import java.security.PEMDecoder;
+import java.security.PEMEncoder;
+public class Pem26 {
+  public static void main(String[] a) throws Exception {
+    var kp = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+    // 524 新增：PEMEncoder/PEMDecoder 直接支持整个 KeyPair 与 PKCS8EncodedKeySpec
+    String pem = PEMEncoder.of().encodeToString(new KeyPair(kp.getPublic(), kp.getPrivate()));
+    KeyPair back = PEMDecoder.of().decode(pem, KeyPair.class);
+    System.out.println(back.getPublic().getAlgorithm());
+    // 524 改名：25 的 java.security.PEMRecord → 26 的 java.security.PEM（record，带 decode()）
+    PEM raw = PEMDecoder.of().decode(pem, PEM.class);
+    System.out.println(raw.type() + " bytes=" + raw.decode().length);
+  }
+}</code></pre>
+<p>❌ 未实测。要点（按 JEP 524「较首次预览的变化」）：① <code>PEMRecord</code> 改名 <strong><code>PEM</code></strong>，新增 <code>decode()</code> 返回解码后的 Base64 内容；② <code>EncryptedPrivateKeyInfo.encryptKey(...)</code> 改名 <code>encrypt(...)</code>，参数由 <code>PrivateKey</code> 放宽为 <code>DEREncodable</code>（<code>KeyPair</code>/<code>PKCS8EncodedKeySpec</code> 也能加密）；③ 新增 <code>getKeyPair(...)</code> 解出公私钥对。25 对照实测：25 上该类叫 <code>java.security.PEMRecord</code>（<code>javap</code> 核对），<code>java.security.PEM</code> 找不到——25（JEP 470）为 <code>PEMRecord</code>，26（JEP 524）才改名 <code>PEM</code>，见 25.5。</p>
+
+<h3>26.4 Lazy Constants（JEP 526 · 第二次预览）</h3>
+<pre><code>// ❌ 未实测：需 JDK 26，javac --release 26 --enable-preview / java --enable-preview
+import java.lang.LazyConstant;
+public class Lazy26 {
+  static final LazyConstant&lt;String&gt; CFG = LazyConstant.of(() -&gt; "config-loaded");
+  public static void main(String[] a) {
+    System.out.println(CFG.get());                       // 首次 get 触发求值，之后固定
+    java.util.List&lt;String&gt; pool = java.util.List.ofLazy(2, i -&gt; "worker-" + i);
+    System.out.println(pool.get(1) + " stable=" + (pool.get(1) == pool.get(1)));
+  }
+}</code></pre>
+<p>❌ 未实测。要点（按 JEP 531 记录的 526 变化）：26 把 25 的 <code>StableValue</code> 更名为 <strong><code>LazyConstant</code></strong>，重定位为「高层用法」——删除底层方法 <code>orElseSet/setOrThrow/trySet</code>，只留「接受计算函数的工厂」<code>LazyConstant.of(() -&gt; ...)</code> + <code>get()</code>；懒列表/懒 Map 的工厂移入 <code>java.util.List.ofLazy(...)</code> / <code>java.util.Map.ofLazy(keys, ...)</code> 接口；禁止计算出 <code>null</code>。25 对照实测：<code>java.lang.LazyConstant</code> 在 25 不存在（<code>javap</code> 确认），25 只能用 <code>StableValue</code>（见 25.3）。27 再演进（<code>Set.ofLazy</code>，删 <code>isInitialized/orElse</code>）见 27.2。</p>
+
+<h3>26.5 Prepare to Make Final Mean Final（JEP 500 · 正式）</h3>
+<pre><code>// ❌ 未实测：需 JDK 26；26 起深反射改 final 字段默认发出运行时告警（--illegal-final-field-mutation=warn 为默认档）
+import java.lang.reflect.Field;
+public class Final26 {
+  static final class C { final int x; C() { x = 100; } }
+  public static void main(String[] a) throws Exception {
+    Field f = C.class.getDeclaredField("x");
+    f.setAccessible(true);
+    C obj = new C();
+    f.set(obj, 200);                 // 26：改动仍成功，但 stderr 打印 WARNING
+    System.out.println("x=" + obj.x);
+  }
+}
+// 26 预期（未实测，按 JEP 500 的警告文案）：
+// WARNING: Final field x in Final26$C has been mutated by class Final26 ... 
+// WARNING: Mutating final fields will be blocked in a future release unless final field mutation is enabled
+// x=200
+// 25 对照实测（本机）：无任何警告，直接输出 x now=200</code></pre>
+<p>❌ 26 未实测。要点：① 这是<strong>运行时</strong>警告（不是编译警告），26 默认 <code>--illegal-final-field-mutation=warn</code>，未来某版默认改为 <code>deny</code>（<code>Field::set</code> 抛 <code>IllegalAccessException</code>）；② 逃生口是启动期 <code>--enable-final-field-mutation=ALL-UNNAMED</code>（或模块列表），也可放进 <code>@argfile</code> / 可执行 JAR 的 <code>Enable-Final-Field-Mutation</code> 清单项；③ 序列化库应改走 <code>sun.reflect.ReflectionFactory</code>；④ 排查工具 <code>--illegal-final-field-mutation=debug</code> 与 JFR 的 <code>jdk.FinalFieldMutation</code> 事件。25 对照实测（本机 probe）：同样代码静默成功，输出 <code>x now=200</code>——这正是 500 要「准备」改变的行为。</p>
+
+<h3>26.6 Primitive Types in Patterns, instanceof, and switch（JEP 530 · 第四次预览）</h3>
+<pre><code>// ❌ 未实测：需 JDK 26，javac --release 26 --enable-preview / java --enable-preview
+public class Pfp26 {
+  public static void main(String[] a) {
+    boolean ok = true;
+    String r = switch (ok) {
+      case true  -&gt; "go";
+      case false -&gt; "stop";
+    };
+    System.out.println(r);
+    int i = 1000;
+    if (i instanceof byte b) System.out.println("byte " + b);
+    else System.out.println("not a byte: " + i);
+  }
+}
+// 预期输出（未实测）：
+// go
+// not a byte: 1000</code></pre>
+<pre><code>// ❌ 未实测：530 的两处语义收紧——(1) 无条件精确性判定增强、(2) switch 的 dominance 检查更严
+// 预期结果（未实测，按 JEP 530 示例）：
+//   int j = ...; switch (j) { case float f -&gt; {} case 16_777_216 -&gt; {} }
+//     → 编译错误：case 16_777_216 被 case float f 支配（16_777_216 可无条件精确转 float）
+//   byte x = ...; switch (x) { case short s -&gt; {} case 42 -&gt; {} }
+//     → 编译错误：case 42 被 case short s 支配
+// 对比：25（JEP 507）上这些 switch 是合法的——530 是<strong>源码不兼容收紧</strong>，会拒掉旧代码</code></pre>
+<p>❌ 未实测。轮次：455（23 首次）→ 488（24 第二次）→ 507（25 第三次）→ <strong>530（26 第四次）</strong> → 532（27 第五次）。530 相对 507 的改动只有两条：加强「无条件精确（unconditionally exact）」的定义、给 switch 加更严的 dominance 检查（部分以前合法的 switch 现在编译报错）。25 对照实测：<code>case int i when ...</code> 与 <code>instanceof int v &amp;&amp; v &gt; 5</code> 在 25 预览下可用（见 25.1），本节代码属同一特性家族的 26 轮形态。</p>
+
+<h3>26.7 后量子密码：素材勘误条目</h3>
+<p>素材把「ML-DSA 正式落地」记在 Java 26 名下——<strong>与 JEP 史实不符</strong>：ML-KEM（JEP 496）与 ML-DSA（JEP 497）都在 <strong>JDK 24</strong> 交付，JDK 26 的 JEP 清单里没有任何后量子密码条目。本机 25 免预览实测（见 24.8）：<code>ML-DSA verify=true sigLen=3309</code>、<code>ML-KEM encap=1088 sharedMatch=true</code>；对照 <code>SLH-DSA</code>/<code>HQC</code>/<code>XMSS</code> 在 25 上 <code>KeyPairGenerator.getInstance</code> 不可用（探测抛 not available）。26 的相关进展属于 TLS 层，要到 27（JEP 527）才交付——见 27.1。</p>
+
+<h3>26.8 Vector API（JEP 529 · 第十一次孵化）</h3>
+<p>❌ 未实测。仍是 <code>jdk.incubator.vector</code> 孵化模块（用法与 25.6 完全一致，需 <code>--add-modules jdk.incubator.vector</code>），较 508 无对外语法变化，仅实现/覆盖度推进；25.6 的代码原样可在 26 上跑（需 JDK 26）。27 还有第十二次（JEP 537），见 27.5。</p>
+
+<h2>Java 27（2026-09-15 · 非 LTS）</h2>
+
+<div class="info">
+<div class="info-title">本节全部 ❌ 未实测</div>
+<p>JDK 27 于 2026-09-15 GA，本机（仅 JDK 25）无法实测。以下均为按 JEP 版本忠实写法，<code>--enable-preview</code> 轮次以各 JEP 标注为准。</p>
+</div>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（27 时点）</th><th>示例</th></tr>
+<tr><td>安全</td><td>Post-Quantum Hybrid Key Exchange for TLS 1.3：ML-KEM 混合密钥交换（JEP 527）</td><td>正式</td><td>27.1</td></tr>
+<tr><td>API</td><td>Lazy Constants（JEP 531）</td><td>预览（第三次）</td><td>27.2</td></tr>
+<tr><td>语法</td><td>Primitive Types in Patterns, instanceof, and switch（JEP 532）</td><td>预览（第五次·无改动）</td><td>27.3</td></tr>
+<tr><td>API</td><td>PEM Encodings of Cryptographic Objects（JEP 538）</td><td>预览（第三次）</td><td>27.4</td></tr>
+<tr><td>API</td><td>Vector API（JEP 537）</td><td>孵化（第十二次）</td><td>27.5</td></tr>
+<tr><td>并发</td><td>Structured Concurrency（JEP 533）</td><td>预览（第七次）</td><td><a href="../lessons/0025-java21-structured-concurrency.html">SC 专题</a></td></tr>
+<tr><td>运行时</td><td>G1 成为所有环境默认 GC（JEP 523）、紧凑对象头默认开启（JEP 534）、JFR 进程内数据脱敏（JEP 536）</td><td>正式</td><td>本页不展开</td></tr>
+</table>
+
+<h3>27.1 Post-Quantum Hybrid Key Exchange for TLS 1.3（JEP 527 · 正式）</h3>
+<pre><code>// ❌ 未实测：需 JDK 27（混合组名要 27 才注册到 Java Security 标准算法名）
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
+public class TlsPq {
+  public static void main(String[] a) throws Exception {
+    SSLSocket sock = (SSLSocket) SSLContext.getDefault().getSocketFactory().createSocket();
+    SSLParameters params = sock.getSSLParameters();
+    params.setNamedGroups(new String[]{
+        "SecP256r1MLKEM768", "X25519MLKEM768", "secp256r1", "x25519"});
+    sock.setSSLParameters(params);
+    System.out.println(String.join(",", params.getNamedGroups()));
+  }
+}
+// 预期输出（未实测）：SecP256r1MLKEM768,X25519MLKEM768,secp256r1,x25519</code></pre>
+<p>❌ 未实测。要点：三个混合组——<code>X25519MLKEM768</code>、<code>SecP256r1MLKEM768</code>、<code>SecP384r1MLKEM1024</code>（ECDHE + ML-KEM，任一算法未破即安全，防「先 Harvest 后解密」）。<strong>默认零改动</strong>：JDK 把 <code>X25519MLKEM768</code> 放到默认 named group 列表首位（完整默认序：<code>X25519MLKEM768, x25519, secp256r1, secp384r1, secp521r1, x448, ffdhe2048/3072/4096</code>），不改代码也能用上；自定义用 <code>SSLParameters.setNamedGroups</code>（本机 javap 对照：<code>SSLParameters.get/setNamedGroups</code> 在 <strong>25 已存在</strong>，缺的是 27 才注册的混合组名）或系统属性 <code>jdk.tls.namedGroups</code>。非目标：只做 TLS 1.3、只走 <code>javax.net.ssl</code>，暂不提供纯 ML-KEM 组（JEP 明示未来可能）。前序积木：KEM API（JEP 452, 21）+ ML-KEM（JEP 496, 24，见 24.8）。</p>
+
+<h3>27.2 Lazy Constants（JEP 531 · 第三次预览）</h3>
+<pre><code>// ❌ 未实测：需 JDK 27，javac --release 27 --enable-preview / java --enable-preview
+import java.lang.LazyConstant;
+public class Lazy27 {
+  enum Option { VERBOSE, DRY_RUN, STRICT }
+  static final java.util.Set&lt;Option&gt; OPTIONS =
+      java.util.Set.ofLazy(java.util.EnumSet.allOf(Option.class), o -&gt; o == Option.DRY_RUN);
+  static final LazyConstant&lt;String&gt; CFG = LazyConstant.of(() -&gt; "cfg");
+  public static void main(String[] a) {
+    System.out.println(CFG.get());
+    System.out.println(OPTIONS.contains(Option.DRY_RUN) + " " + OPTIONS.contains(Option.STRICT));
+  }
+}
+// 预期输出（未实测）：
+// cfg
+// true false</code></pre>
+<p>❌ 未实测。要点（JEP 531 相对 526 的两处变化）：① <strong>新增 <code>Set.ofLazy(...)</code></strong>——候选集 + 判定函数，成员判定至多算一次且可常量折叠，至此 <code>List/Set/Map</code> 懒工厂齐备；② <strong>删除低层方法 <code>isInitialized()</code> 与 <code>orElse(...)</code></strong>——因此 25.3 那套 <code>StableValue</code> 写法（<code>orElse/orElseSet/isSet</code>）在 27 已不存在，只保留 <code>LazyConstant.of(计算)</code> + <code>get()</code>。类型演进链：<code>StableValue</code>（25, JEP 502）→ <code>LazyConstant</code>（26, JEP 526）→ 27 增 <code>Set.ofLazy</code>（JEP 531）。</p>
+
+<h3>27.3 Primitive Types in Patterns, instanceof, and switch（JEP 532 · 第五次预览）</h3>
+<pre><code>// ❌ 未实测：需 JDK 27，javac --release 27 --enable-preview / java --enable-preview
+// JEP 532：第五次预览，相对 530「without change」（无语义改动，再收集一轮反馈）
+record JsonNumber(double d) {}
+public class Pfp27 {
+  public static void main(String[] a) {
+    Object v = new JsonNumber(30);
+    // 记录模式里的基元窄化：double 组件 → int 精确匹配才命中
+    if (v instanceof JsonNumber(int age)) System.out.println("age=" + age);
+    int i = 1000;
+    System.out.println(i instanceof byte ? "byte" : "not byte");
+  }
+}
+// 预期输出（未实测）：
+// age=30
+// not byte</code></pre>
+<p>❌ 未实测。轮次（按 JEP 532 历史）：455（23）→ 488（24）→ 507（25）→ 530（26，收紧无条件精确性 + dominance）→ <strong>532（27，第五次、无改动）</strong>。特性全貌见 24.1 / 25.1 / 26.6；<code>instanceof JsonNumber(int age)</code> 的「窄化不丢精度才匹配」与 <code>i instanceof byte</code>（1000 装不进 byte → false）都是 455 起的既有示例（JEP 532 原文）。25 对照实测：基元模式的顶层 <code>instanceof int i</code>、<code>case int i when ...</code> 在 25 预览下已可用（见 24.1 / 25.1）。</p>
+
+<h3>27.4 PEM Encodings（JEP 538 · 第三次预览）</h3>
+<pre><code>// ❌ 未实测：需 JDK 27，javac --release 27 --enable-preview / java --enable-preview
+import java.security.BinaryEncodable;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.PEM;
+import java.security.PEMDecoder;
+import java.security.PEMEncoder;
+public class Pem27 {
+  public static void main(String[] a) throws Exception {
+    var kp = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+    String pem = PEMEncoder.of().encodeToString(new KeyPair(kp.getPublic(), kp.getPrivate()));
+    BinaryEncodable back = PEMDecoder.of().decode(pem);   // 538：接口由 DEREncodable 改名 BinaryEncodable
+    System.out.println(back instanceof KeyPair ? "keypair" : "other");
+    PEM raw = PEMDecoder.of().decode(pem, PEM.class);     // 538：PEM 由 record 改为普通类
+    System.out.println(raw.type() + " bytes=" + raw.decode().length);
+  }
+}
+// 预期输出（未实测）：
+// keypair
+// PRIVATE KEY bytes=...</code></pre>
+<p>❌ 未实测。要点（JEP 538 较 524 的变化）：① <code>DEREncodable</code> 改名 <strong><code>BinaryEncodable</code></strong>（sealed、非穷举 permits，switch 需 <code>default</code>）；② <code>PEM</code> 从 <code>record</code> 改为<strong>普通类</strong>，新增接受 <code>byte[]</code> Base64 内容的构造器；③ <code>PEMDecoder.withFactory</code> 改名 <code>withFactoriesOf</code>；④ <code>EncryptedPrivateKeyInfo</code> 的 <code>getKey/getKeyPair</code> 改收 <code>Key</code>；⑤ 新增 <code>CryptoException</code>。轮次链：470（25 首次，25 上类名 <code>PEMRecord</code>）→ 524（26 第二次，改名 <code>PEM</code>）→ <strong>538（27 第三次）</strong>，未来 JEP 542 拟转正（见 <code>openjdk.org/jeps/542</code>）。</p>
+
+<h3>27.5 Vector API（JEP 537 · 第十二次孵化）</h3>
+<p>❌ 未实测。仍为 <code>jdk.incubator.vector</code> 孵化模块（<code>--add-modules jdk.incubator.vector</code>），用法与 25.6 完全相同；轮次 508（25，第十次）→ 529（26，第十一次）→ <strong>537（27，第十二次）</strong>。与虚拟线程、结构化并发一样，Vector API 长期处于孵化期——本章只给「怎么用、轮次到哪」，深度专题另讲。</p>
+
+<div class="note">
+<div class="note-title">本章状态速览</div>
+<p><strong>✅ 已实测 17 个可运行块</strong>：24 节 8 个（<code>Prim24</code>、<code>Flex24</code>、<code>Simple24</code>、<code>ModImp24</code>、<code>Gather24</code>、<code>ClassFile24</code>、<code>Scoped24</code>、<code>PQC24</code>）+ 25 节 9 个（<code>PrimSw</code>、<code>Scoped25</code>、<code>SV25b</code>、<code>KDF25</code>、<code>PEM25b</code>、<code>Vec25</code>、<code>Flex25</code>、<code>Compact25b</code>、<code>ModImp25</code>）；其中 4 个预览块（<code>Prim24</code>、<code>PrimSw</code>、<code>SV25b</code>、<code>PEM25b</code>）为 <strong>⚠️ <code>--enable-preview --release 25</code></strong>，1 个孵化块（<code>Vec25</code>）为 <strong>⚠️ <code>--add-modules jdk.incubator.vector</code></strong>，其余 12 个免开关。<strong>❌ 全部 26/27 条目未实测</strong>（本机无对应 JDK），另 24.3 顶部那段「24 形态」代码同样 ❌。虚拟线程 / 结构化并发（JEP 505/525/533）与 AOT、GC、JFR、Compact Object Headers 等运行时特性不在本章。</p>
+</div>
+
+<div class="page-nav">
+<span><a href="./java20-23.html">← 上一版段：Java 20–23</a></span>
+<span><a href="./index.html">返回：Java 12–27 特性全景总览 →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})();
+</script>
+</body>
+</html>

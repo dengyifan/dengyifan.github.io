@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 12–15 特性全景与示例 · Java 12–27</title>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12–27 特性全景 · Java 12–15</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Java 12–15 特性全景与可运行示例</h1>
+<div class="article-meta"><span>📚 4 个版本 · 逐条示例</span><span>🔬 JDK 25 实测（openjdk-25.0.1）</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / <a href="./index.html">Java 12–27 特性全景</a> / Java 12–15</div>
+
+<div class="info">
+<div class="info-title">本章怎么读 · 实测口径</div>
+<p>本章按版本逐条覆盖 <strong>语法新特性 + API 增强</strong>，每条都给示例。每版本先看「特性清单」表，再看逐条示例。状态图例：<strong>✅ 已实测</strong>（JDK 25 编译+运行，代码尾部注释即真实输出）；<strong>⚠️ 需 <code>--enable-preview --release 25</code></strong>（已实测）；<strong>❌ 未实测</strong>（特性已撤回 / 对应 API 已从 JDK 移除 / 属于 26–27）。<br/>
+两个约定：① <strong>虚拟线程、结构化并发不在本章</strong>（19–25 均涉及）——已交付为独立深度专题，见 <a href="../lessons/0027-java21-index.html">Java 21 并发专题</a>；② 示例除特别标注外均在本机 <code>openjdk-25.0.1</code> 验证——「Java 12/13 的预览写法」若与 25 现行语法冲突，会同时给出 <strong>版本忠实写法（❌）</strong> 与 <strong>25 等价写法（✅）</strong>。</p>
+</div>
+
+<h2>Java 12（2019-03-19 · 非 LTS）</h2>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（12 时点）</th><th>示例</th></tr>
+<tr><td>语法</td><td>Switch Expressions：<code>case L -&gt;</code> 箭头标签，块内 <code>break 值;</code> 产值</td><td>预览（JEP 325）</td><td>12.1</td></tr>
+<tr><td>API</td><td><code>Collectors.teeing()</code>：两个下游合流成一个结果</td><td>正式</td><td>12.2</td></tr>
+<tr><td>API</td><td><code>String.indent(int)</code> / <code>String.transform(Function)</code></td><td>正式</td><td>12.3</td></tr>
+<tr><td>API</td><td><code>String.describeConstable()</code> / <code>resolveConstantDesc()</code></td><td>正式</td><td>12.4</td></tr>
+<tr><td>API</td><td>JVM 常量 API（JEP 334）：<code>ClassDesc</code> 等描述符对象</td><td>正式</td><td>12.5</td></tr>
+<tr><td>API</td><td><code>Files.mismatch(Path, Path)</code>：字节级差异定位</td><td>正式</td><td>12.6</td></tr>
+<tr><td>API</td><td>紧凑数字格式：<code>NumberFormat.getCompactNumberInstance</code></td><td>正式</td><td>12.7</td></tr>
+</table>
+
+<div class="note">
+<div class="note-title">JEP 334 的包名：素材写 <code>java.lang.invoke.constant</code>，交付的是 <code>java.lang.constant</code></div>
+<p>JEP 334 正文写作「new package <code>java.lang.invoke.constant</code>」，但 JDK 12 实际交付与 Oracle JDK 12 API 文档中的包名是 <strong><code>java.lang.constant</code></strong>（源码 <code>src/java.base/share/classes/java/lang/constant/</code>，<code>ConstantDesc</code> 标注 <code>@since 12</code>）。另注意：<strong>JEP 309（CONSTANT_Dynamic 字节码）是 JDK 11 交付的</strong>，JDK 12 交付的是它的 Java 层 API（JEP 334）。</p>
+</div>
+
+<h3>12.1 Switch 表达式（JEP 325 · 预览）</h3>
+<p>版本忠实写法（Java 12 预览：箭头标签 + <code>break 值;</code> 产值）：</p>
+<pre><code>// ❌ 未实测：JDK 12 预览写法（javac --enable-preview --release 12）
+// JDK 13(JEP 354) 改成 yield，JDK 14(JEP 361) 转正——25 上此写法编译不过
+int numLetters = switch (day) {
+    case MONDAY, FRIDAY, SUNDAY -&gt; 6;
+    case TUESDAY                -&gt; 7;
+    case WEDNESDAY              -&gt; 9;
+};
+String out = switch (kind) {
+    case LIGHT -&gt; {
+        String result = "L" + lumens;
+        break result;                 // ← Java 12 的产值写法
+    }
+    case HEAVY -&gt; {
+        if (lumens &gt; 1000) throw new IllegalArgumentException("too bright");
+        break "H" + lumens;
+    }
+};</code></pre>
+<p>JDK 25 等价写法（同一特性现行形态，正式特性）：</p>
+<pre><code data-run="1" data-name="SwitchYield">public class SwitchYield {
+  enum Day { MONDAY, TUESDAY, WEDNESDAY }
+  public static void main(String[] a) {
+    int n = switch (Day.TUESDAY) {
+      case MONDAY    -&gt; 6;
+      case TUESDAY   -&gt; 7;
+      case WEDNESDAY -&gt; 9;
+    };
+    String s = switch (n) {
+      case 7 -&gt; "seven";
+      default -&gt; { yield "other"; }   // 13 起：yield 替代 12 的 break 值
+    };
+    System.out.println(n + " " + s);
+  }
+}
+// 运行输出：7 seven</code></pre>
+<p>✅ 实测通过（JDK 25）。⚠️ 12→13→14 的产值关键字演进：<code>break 值;</code>（12）→ <code>yield 值;</code>（13 预览）→ 正式（14）。</p>
+
+<h3>12.2 Collectors.teeing()</h3>
+<p>把同一份流分别喂给两个下游收集器，再用 merger 合并两个结果——内部是一个 <code>PairBox</code>（左、右两个容器）。</p>
+<pre><code data-run="1" data-name="TeeingD">import java.util.List;
+import java.util.stream.Collectors;
+record Order(String item, int qty, int price) {}
+public class TeeingD {
+  public static void main(String[] a) {
+    var orders = List.of(new Order("pen", 3, 5), new Order("book", 1, 40), new Order("bag", 2, 15));
+    var stats = orders.stream().collect(Collectors.teeing(
+        Collectors.summingInt(o -&gt; o.qty() * o.price()),
+        Collectors.counting(),
+        (sum, cnt) -&gt; "sum=" + sum + ", orders=" + cnt));
+    System.out.println(stats);
+  }
+}
+// 运行输出：sum=85, orders=3</code></pre>
+<p>✅ 实测通过（JDK 25）。并行流下 PairBox 按容器两两 combine，merger 需满足交换律。</p>
+
+<h3>12.3 String.indent() / transform()</h3>
+<pre><code data-run="1" data-name="StrEnh">public class StrEnh {
+  public static void main(String[] a) {
+    String code = "class A {\nvoid run() {\n}\n}";
+    String indented = code.indent(2);
+    System.out.println(indented.startsWith("  class") + " " + indented.endsWith("\n"));
+    System.out.println("abc".transform(String::toUpperCase) + " " + code.indent(-1).lines().count());
+  }
+}
+// 运行输出：
+// true true
+// ABC 4</code></pre>
+<p>✅ 实测通过（JDK 25）。要点：<code>indent(n)</code> 结果<strong>强制以换行结尾</strong>（空串除外）；<code>indent(负数)</code> 按字符数截掉行首；<code>transform</code> 就是 <code>f.apply(this)</code> 的函数式管道。</p>
+
+<h3>12.4 String 的常量双方法（描述 → 解析）</h3>
+<pre><code data-run="1" data-name="ConstStr12">import java.lang.invoke.MethodHandles;
+public class ConstStr12 {
+  public static void main(String[] a) throws Exception {
+    String s = "hello";
+    System.out.println(s.describeConstable().orElseThrow());
+    System.out.println(s.resolveConstantDesc(MethodHandles.lookup()));
+  }
+}
+// 运行输出：
+// hello
+// hello</code></pre>
+<p>✅ 实测通过（JDK 25）。<code>describeConstable()</code> 把对象「翻译成可写入常量池的描述」（String 自身即描述），<code>resolveConstantDesc()</code> 是逆向「从描述还原运行时值」，二者构成 JEP 334 的核心协议。</p>
+
+<h3>12.5 JVM 常量 API（JEP 334 · java.lang.constant）</h3>
+<pre><code data-run="1" data-name="ConstDesc12">import java.lang.constant.ClassDesc;
+public class ConstDesc12 {
+  public static void main(String[] a) {
+    var cd = ClassDesc.of("java.util", "List");
+    System.out.println(cd.descriptorString());
+    System.out.println(cd.arrayType().descriptorString());
+  }
+}
+// 运行输出：
+// Ljava/util/List;
+// [Ljava/util/List;</code></pre>
+<p>✅ 实测通过（JDK 25）。同族还有 <code>MethodTypeDesc</code>、<code>MethodHandleDesc</code>、<code>DynamicConstantDesc</code> 等，全部是「常量池条目」的对象模型。</p>
+<div class="warning">
+<div class="warning-title">本机实测踩到的一个初始化顺序坑（openjdk-25.0.1）</div>
+<p>在全新 JVM 里直接调用 <code>ClassDesc.ofDescriptor("I")</code>（原始类型描述符）或 <code>MethodTypeDesc.ofDescriptor(...)</code>，本机会抛 <code>ExceptionInInitializerError</code>：<code>PrimitiveClassDescImpl</code> 与 <code>java.lang.constant.ConstantDescs</code> 存在<strong>循环类初始化</strong>（后者 <code>&lt;clinit&gt;</code> 中 <code>ofConstantBootstrap</code> 收到 null）。先执行 <code>Class.forName("java.lang.constant.ConstantDescs")</code> 即可规避。引用类型描述符（如 12.5 的 <code>ClassDesc.of</code>）不受影响。若你的 JDK 版本复现不了，以自身环境为准。</p>
+</div>
+
+<h3>12.6 Files.mismatch()</h3>
+<pre><code data-run="1" data-name="MismatchD">import java.nio.file.Files;
+public class MismatchD {
+  public static void main(String[] a) throws Exception {
+    var p1 = Files.createTempFile("t1", ".txt");
+    var p2 = Files.createTempFile("t2", ".txt");
+    Files.writeString(p1, "hello");
+    Files.writeString(p2, "hellp");
+    System.out.println("mismatch@" + Files.mismatch(p1, p2));
+    Files.writeString(p2, "hello");
+    System.out.println("same=" + (Files.mismatch(p1, p2) == -1));
+    Files.deleteIfExists(p1);
+    Files.deleteIfExists(p2);
+  }
+}
+// 运行输出：
+// mismatch@4
+// same=true</code></pre>
+<p>✅ 实测通过（JDK 25）。<code>static long mismatch(Path, Path) throws IOException</code>（<code>@since 12</code>）：按<strong>字节级字典序</strong>比较两个文件的内容，返回值语义如下：</p>
+<ul>
+<li>返回<strong>首个不同字节的偏移量</strong>（从 0 起，本例 <code>"hello"</code> 与 <code>"hellp"</code> 第 5 个字节不同 → <code>4</code>）；</li>
+<li>两文件内容完全相同 → 返回 <code>-1</code>；</li>
+<li>长度不同、且较短文件是较长文件的前缀 → 返回<strong>较短文件的大小</strong>（实测：<code>"hello"</code> vs <code>"hello!"</code> → <code>5</code>；<code>"hello"</code> vs 空文件 → <code>0</code>）；</li>
+<li>任一文件不存在 → 抛 <code>NoSuchFileException</code>（<strong>是异常，不是返回值</strong>——实测确认，注意与「返回 -1」区分）。</li>
+</ul>
+<p>实现是<strong>分块流式读取</strong>（固定缓冲区 + <code>Arrays.mismatch</code> 逐块比较），不会把整个文件读进内存，比「读两个 <code>byte[]</code> 再手写 diff」省一次全量拷贝；与其它文件系统操作之间<strong>不保证原子性</strong>，文件保持静态时满足自反性（<code>mismatch(f, f)</code> 恒为 <code>-1</code>）与对称性。</p>
+<p><strong>解决什么问题</strong>：JDK 12 之前标准库没有「按内容比较文件」的 API，常见替代各有硬伤——<code>Files.readAllBytes</code> 全量读入再比，大文件有 OOM 风险且多一次全量拷贝；引第三方 Commons IO 的 <code>FileUtils.contentEquals</code>，为一个小功能加依赖；拿时间戳 <code>Files.getLastModifiedTime</code> 凑合，mtime 相同内容也可能不同（拷贝、版本控制、云同步场景下并不可靠）。<code>Files.mismatch</code> 把「两个文件是否一致、第一处差异在哪」变成一次无依赖的标准库调用。</p>
+<p><strong>正确使用场景</strong>：</p>
+<ul>
+<li><strong>等价性快速判定（早停优势）</strong>：配置文件/部署产物与预期是否一致、缓存是否失效、上传下载是否损坏。差异靠前时，读到第一个不同字节就返回，不必扫完全文件——这是它相对 SHA-256 等散列（必须读完整个文件才能出结果）的核心优势；两者在内容完全相同时都要全量读。</li>
+<li><strong>增量同步/备份的「跳过」判断</strong>：源文件与副本是否一致，一致则跳过拷贝——时间戳判断不可靠时的内容级兜底。</li>
+<li><strong>回归测试 / golden 文件比对</strong>：生成产物 vs 基线文件是否一致，并用返回的偏移量直接定位第一处偏差，再决定是否需要拉起行级 diff 工具深挖。</li>
+<li><strong>大文件首错定位</strong>：日志、数据导出的完整性校验，先拿到偏移量（配合可估算出大致行/位置）再做结构化 diff。</li>
+</ul>
+<div class="warning">
+<div class="warning-title">不该用它做什么</div>
+需要<strong>多处差异的完整对比报告</strong>（行级/并排 diff）——它只回答「第一处差异在哪」，那是 diff 工具的活；比较期间文件可能被<strong>并发修改</strong>——结果不保证原子性，先固定快照（拷贝或加锁）再比；两个<strong>完全相同的大文件</strong>仍需全量读两遍，海量小文件场景可先比大小（<code>Files.size</code>）短路，再调 mismatch 精确比内容。
+</div>
+
+<h3>12.7 紧凑数字格式（Compact Number Formatting）</h3>
+<pre><code data-run="1" data-name="CompactNum">import java.text.NumberFormat;
+import java.util.Locale;
+public class CompactNum {
+  public static void main(String[] a) {
+    var en = NumberFormat.getCompactNumberInstance(Locale.ENGLISH, NumberFormat.Style.SHORT);
+    var enL = NumberFormat.getCompactNumberInstance(Locale.ENGLISH, NumberFormat.Style.LONG);
+    var zh = NumberFormat.getCompactNumberInstance(Locale.CHINA, NumberFormat.Style.SHORT);
+    System.out.println(en.format(1234567) + " / " + enL.format(1234567));
+    System.out.println(zh.format(1234567) + " / " + zh.format(100000000));
+  }
+}
+// 运行输出：
+// 1M / 1 million
+// 123万 / 1亿</code></pre>
+<p>✅ 实测通过（JDK 25）。注意：中文 SHORT 与 LONG 输出相同（都用「万/亿」）；<code>999000</code> 在中文 SHORT 下进位为 <code>100万</code>——这是格式化取整，不是四舍五入错误。</p>
+
+<h2>Java 13（2019-09-17 · 非 LTS）</h2>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（13 时点）</th><th>示例</th></tr>
+<tr><td>语法</td><td>Text Blocks：<code>"""</code> 多行字符串</td><td>预览（JEP 355）</td><td>13.1</td></tr>
+<tr><td>语法</td><td>Switch Expressions 第二次预览：<code>yield</code> 替代 <code>break 值;</code></td><td>预览（JEP 354）</td><td>13.2</td></tr>
+<tr><td>API</td><td>Socket API 重构（JEP 353，实现重写、API 签名不变）</td><td>正式</td><td>13.3</td></tr>
+<tr><td>API</td><td><code>FileSystems.newFileSystem(Path)</code> 单参重载</td><td>正式</td><td>13.4</td></tr>
+<tr><td>API</td><td><code>String.stripIndent()</code> / <code>translateEscapes()</code> / <code>formatted()</code>（13 随 Text Blocks 预览诞生、15 转正）</td><td>预览关联（15 转正）</td><td>13.5 / 15.7</td></tr>
+<tr><td>API</td><td>Unicode 12.0 / 12.1 字符数据</td><td>正式</td><td>13.6</td></tr>
+</table>
+
+<h3>13.1 Text Blocks（预览）</h3>
+<pre><code data-run="1" data-name="TB13">public class TB13 {
+  public static void main(String[] a) {
+    String html = """
+        &lt;html&gt;
+            &lt;body&gt;hi&lt;/body&gt;
+        &lt;/html&gt;
+        """;
+    System.out.println(html.lines().count());
+    System.out.println(html.stripIndent().startsWith("&lt;html&gt;"));
+    System.out.println(html.contains("\n    &lt;body&gt;"));
+  }
+}
+// 运行输出：
+// 3
+// true
+// true</code></pre>
+<p>✅ 实测通过（JDK 25，15 起为正式特性故免预览开关）。行数 3：结尾换行不计行；内部缩进按「最短公共前缀」为偶发缩进被剥除，正文中的相对缩进保留。</p>
+
+<h3>13.2 yield：switch 产值关键字定型</h3>
+<pre><code data-run="1" data-name="Yield13">public class Yield13 {
+  public static void main(String[] a) {
+    String size = switch (a.length) {
+      case 0 -&gt; {
+        String s = "small";
+        yield s;               // 13 起：yield（12 是 break s;）
+      }
+      default -&gt; "large";
+    };
+    System.out.println(size);
+  }
+}
+// 运行输出：small</code></pre>
+<p>✅ 实测通过（JDK 25）。这是 12→13 唯一的语法差异点：块内产值关键字 <code>break</code> → <code>yield</code>。</p>
+
+<h3>13.3 Socket API 重构（JEP 353）</h3>
+<pre><code data-run="1" data-name="Sock13">import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+public class Sock13 {
+  public static void main(String[] a) throws Exception {
+    try (var server = new ServerSocket(0)) {
+      int port = server.getLocalPort();
+      var t = new Thread(() -&gt; {
+        try (var s = server.accept()) {
+          s.getInputStream().readNBytes(5);
+          s.getOutputStream().write("pong".getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) { throw new RuntimeException(e); }
+      });
+      t.start();
+      try (var c = new Socket("127.0.0.1", port)) {
+        c.getOutputStream().write("ping!".getBytes(StandardCharsets.UTF_8));
+        System.out.println(new String(c.getInputStream().readNBytes(4), StandardCharsets.UTF_8));
+      }
+      t.join();
+      System.out.println("localPort=" + (port &gt; 0));
+    }
+  }
+}
+// 运行输出：
+// pong
+// localPort=true</code></pre>
+<p>✅ 实测通过（JDK 25）。JEP 353 只是把 <code>Socket/ServerSocket</code> 底层实现换成 NIO 通道版（更好调试、共享同一套实现），<strong>公开 API 一个签名都没变</strong>——示例即按老 API 写，12 及以前同样能跑。</p>
+
+<h3>13.4 FileSystems.newFileSystem(Path) 重载</h3>
+<pre><code data-run="1" data-name="FSZip13">import java.nio.file.*;
+import java.util.zip.*;
+public class FSZip13 {
+  public static void main(String[] a) throws Exception {
+    Path zip = Files.createTempFile("demo", ".zip");
+    try (var z = new ZipOutputStream(Files.newOutputStream(zip))) {
+      z.putNextEntry(new ZipEntry("note.txt"));
+      z.write("hi from zip".getBytes());
+      z.closeEntry();
+    }
+    try (var fs = FileSystems.newFileSystem(zip)) {
+      System.out.println(new String(Files.readAllBytes(fs.getPath("note.txt"))));
+    }
+    Files.deleteIfExists(zip);
+  }
+}
+// 运行输出：hi from zip</code></pre>
+<p>✅ 实测通过（JDK 25）。路径后缀决定文件系统提供者（<code>.zip</code> → zipfs）；13 之前必须写 <code>newFileSystem(zip, Map.of())</code> 或带 ClassLoader 的三参版本。</p>
+
+<h3>13.5 String.stripIndent() / translateEscapes()</h3>
+<p>两个方法各解决一个问题：</p>
+<ul>
+<li><strong><code>stripIndent()</code></strong> —— 文本块在<strong>编译期</strong>自动剥掉「为了和源码对齐而加的公共缩进」，但运行时才拿到的多行字符串（读文件/配置、字符串拼接、模板、代码生成）没有这个待遇。<code>stripIndent()</code> 把编译器同一套「偶然缩进剥离算法」搬到运行时。Oracle 官方定位：<em>程序把文本当输入数据读进来、想按文本块同样的方式剥缩进时用它</em>。</li>
+<li><strong><code>translateEscapes()</code></strong> —— 有些字符串里的 <code>\t</code>、<code>\n</code> 不是控制字符，而是<strong>反斜杠+t 两个普通字符</strong>（来自配置文件、JSON、网络或别的程序）。它按 Java 字符串字面量的规则把这些反斜杠序列还原成真实字符。</li>
+</ul>
+<pre><code data-run="1" data-name="Str13">public class Str13 {
+  public static void main(String[] a) {
+    // 1) 拼出来的多行串带公共缩进 → 剥掉，相对缩进保留
+    String sql = "    SELECT *\n" +
+                 "    FROM t\n" +
+                 "      WHERE id = 1";
+    System.out.println("[" + sql.stripIndent().replace("\n", "|") + "]");
+    // 2) 以换行结尾 → 末尾空行以 0 计入 → 不剥（见下方 warning）
+    String nl = "    x\n";
+    System.out.println("[" + nl.stripIndent().replace("\n", "|") + "]");
+    // 3) 配置里存的字面 \t \n → 真实控制字符
+    String cfg = "col1\\tcol2\\nnext";
+    String real = cfg.translateEscapes();
+    System.out.println("tab=" + real.contains("\t") + " nl=" + real.contains("\n"));
+  }
+}
+// 运行输出：
+// [SELECT *|FROM t|  WHERE id = 1]
+// [    x|]
+// tab=true nl=true</code></pre>
+<p>✅ 实测通过（JDK 25）。</p>
+<p><strong><code>stripIndent()</code> 算法规则</strong>（原 CSR <strong>JDK-8223776</strong> / javadoc）：</p>
+<ol>
+<li>按行终止符切行；<strong>最后一行即使全空白也参与「最小公共缩进」计算</strong>（原文称 significant trailing line 政策，本意是让文本块闭合定界符行的缩进也算数）。</li>
+<li>取计入行前导空白的最小值 min：每个非空行剥掉 min 个前导空白（<strong>相对缩进保留</strong>），行尾「隐藏空白」一并去掉，全空白行变空串。</li>
+<li>行终止符归一为 LF；输入以换行结尾，输出也以换行结尾。</li>
+</ol>
+<div class="warning">
+<div class="warning-title">反直觉：以换行结尾的字符串不会被剥缩进</div>
+<p>规则 1 的直接后果：字符串以 <code>\n</code> 结尾 → 末尾空行按「0 个空白」计入 → min=0 → 前导缩进完全不剥（行尾空白仍清理）。JDK 25 源码对此有显式特判（<code>String.java</code> <code>stripIndent()</code>：<code>boolean optOut = lastChar == '\n' || lastChar == '\r'</code> → <code>outdent = 0</code>；JDK 17/21 源码同款，非新行为）。实测：<code>"    a\n    b\n"</code> 原样返回，<code>"    a\n    b"</code> 才被剥离。想剥带尾换行的文本：先 <code>s.stripTrailing().stripIndent()</code>（已实测）。另注意：文本块的值编译期已剥过缩进，再调 <code>stripIndent()</code> 无效果。</p>
+</div>
+<p><strong><code>translateEscapes()</code> 的边界</strong>：</p>
+<ul>
+<li>支持的转义：<code>\b \f \n \r \s \t \' \" \\</code>、八进制 <code>\0–\377</code>、行继续（反斜杠+真实换行 → 丢弃）。</li>
+<li><strong><code>\uXXXX</code> 直接抛 <code>IllegalArgumentException</code></strong>——javadoc 明说 Unicode 转义由编译器处理、不属于字符串字面量规范；其他未知转义（如 <code>\q</code>）同样抛。</li>
+<li>它复刻的是「Java 字面量」转义集，与 JSON、.properties 的转义集并不相同——别拿它当通用 unescape。</li>
+</ul>
+<div class="note">
+<div class="note-title">与相近 API 的分工</div>
+<p><code>strip()</code> 只去整串首尾；<code>stripIndent()</code> 按行去公共前缀并清行尾空白。文本块字面量编译期已剥缩进；<code>stripIndent()</code> 服务运行时字符串。还原转义时，<code>translateEscapes()</code> 按字面量规则一次处理全部种类，比手写 <code>replaceAll("\\\\n", "\n")</code> 全面且不易错。</p>
+</div>
+<div class="warning">
+<div class="warning-title">版本沿革：13 诞生（预览绑定），15 转正</div>
+<p>素材把 <code>stripIndent() / translateEscapes() / formatted()</code> 列在 Java 13——<strong>有历史依据</strong>：三者确实随 JEP 355（Text Blocks 第二次预览）在 13 出生，当时源码标注为 <code>@since 13</code> + <code>@Deprecated(forRemoval=true, since="13")</code>（原文注明「与预览特性 text blocks 关联」，可编译运行但带弃用警告），14 仍标注与预览绑定；15 随 JEP 378（Text Blocks 正式）解除弃用，<strong>现行 JDK 源码对三者统一标 <code>@since 15</code></strong>（JDK 25 实测）。引用时区分「诞生版本（13）」与「转正版本（15）」。<code>formatted()</code> 示例见 15.7。</p>
+</div>
+
+<h3>13.6 Unicode 12.0 / 12.1</h3>
+<pre><code data-run="1" data-name="Uni121">public class Uni121 {
+  public static void main(String[] a) {
+    System.out.println(Character.getName(0x1B000));   // Unicode 12.0 新增
+    System.out.println(Character.getName(0x32FF));    // Unicode 12.1 唯一新增：令和方块
+    System.out.println(Character.UnicodeBlock.of(0x32FF));
+  }
+}
+// 运行输出：
+// KATAKANA LETTER ARCHAIC E
+// SQUARE ERA NAME REIWA
+// ENCLOSED_CJK_LETTERS_AND_MONTHS</code></pre>
+<p>✅ 实测通过（JDK 25）。12.1 是一次「只为日本令和年号加 1 个码位」的小版本——<code>U+32FF SQUARE ERA NAME REIWA</code>；JDK 8 时代 <code>getName(0x32FF)</code> 返回 <code>null</code>（字符数据太旧）。</p>
+
+<h2>Java 14（2020-03-17 · 非 LTS）</h2>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（14 时点）</th><th>示例</th></tr>
+<tr><td>语法</td><td>Switch Expressions <strong>转正</strong>（JEP 361）</td><td>正式</td><td>14.1</td></tr>
+<tr><td>语法</td><td>Records</td><td>预览（JEP 359）</td><td>14.2</td></tr>
+<tr><td>语法</td><td>Pattern Matching for instanceof（JEP 305）</td><td>预览</td><td>14.3</td></tr>
+<tr><td>语法</td><td>Text Blocks 第二次预览（JEP 368）</td><td>预览</td><td>14.4</td></tr>
+<tr><td>语法</td><td>Helpful NullPointerException 消息（JEP 358）</td><td>正式</td><td>14.5</td></tr>
+<tr><td>API</td><td>JFR 事件流 <code>RecordingStream</code>（JEP 349）</td><td>正式</td><td>14.6</td></tr>
+<tr><td>API</td><td>Non-Volatile Mapped Byte Buffers（JEP 352）</td><td>正式</td><td>14.7</td></tr>
+<tr><td>API</td><td>会计货币格式 <code>(-u-cf-account)</code></td><td>正式</td><td>14.8</td></tr>
+<tr><td>API</td><td>SimpleFormatter 支持 <code>%t</code> 打印线程名（素材说法）</td><td>⚠️ 素材存疑</td><td>14.9</td></tr>
+</table>
+
+<h3>14.1 Switch 表达式正式（JEP 361）</h3>
+<pre><code data-run="1" data-name="Switch14">public class Switch14 {
+  public static void main(String[] a) {
+    int week = 3;
+    String s = switch (week) {
+      case 1, 2, 3, 4, 5 -&gt; "工作日";
+      case 6, 7 -&gt; "周末";
+      default -&gt; "?";
+    };
+    System.out.println(s);
+  }
+}
+// 运行输出：工作日</code></pre>
+<p>✅ 实测通过（JDK 25，正式特性）。14 起不再需要 <code>--enable-preview</code>；逗号多标签、箭头无 fall-through、产值用 <code>yield</code> 全部定型。</p>
+
+<h3>14.2 Records（预览）</h3>
+<pre><code data-run="1" data-name="Rec14">public class Rec14 {
+  record Point(int x, int y) {}
+  public static void main(String[] a) {
+    var p = new Point(3, 4);
+    System.out.println(p + " " + (p.x() + p.y()));
+    System.out.println(p.equals(new Point(3, 4)));
+  }
+}
+// 运行输出：
+// Point[x=3, y=4] 7
+// true</code></pre>
+<p>✅ 实测通过（JDK 25；16 转正）。免费获得：全参构造、<code>accessor</code>、<code>equals/hashCode/toString</code>；不可继承、无额外实例字段。</p>
+
+<h3>14.3 Pattern Matching for instanceof（预览）</h3>
+<pre><code data-run="1" data-name="PM14">public class PM14 {
+  static String debug(Object o) {
+    if (o instanceof String s &amp;&amp; s.length() &gt; 3) return "str:" + s;
+    return "other";
+  }
+  public static void main(String[] a) {
+    System.out.println(debug("hello") + "/" + debug(42));
+  }
+}
+// 运行输出：str:hello/other</code></pre>
+<p>✅ 实测通过（JDK 25；16 转正）。模式变量只在条件为真的分支里可见，天然支持 <code>&amp;&amp;</code> 守卫——不用再手写 cast。</p>
+
+<h3>14.4 Text Blocks 第二次预览（JEP 368）</h3>
+<pre><code data-run="1" data-name="TB14">public class TB14 {
+  public static void main(String[] a) {
+    String cmd = "list";
+    String out = switch (cmd) {
+      case "list" -&gt; """
+          - a
+          - b""";
+      case "help" -&gt; "usage";
+      default -&gt; "";
+    };
+    System.out.println(out.lines().count() + " " + out.startsWith("- a"));
+  }
+}
+// 运行输出：2 true</code></pre>
+<p>✅ 实测通过（JDK 25）。这是 14 的典型组合拳：正式的 switch 表达式 + 预览的文本块，箭头右侧直接给多行文本。</p>
+
+<h3>14.5 Helpful NullPointerException（JEP 358）</h3>
+<pre><code data-run="1" data-name="NPE14">public class NPE14 {
+  public static void main(String[] a) {
+    String city = null;
+    try {
+      System.out.println(city.length());
+    } catch (NullPointerException e) {
+      System.out.println(e.getMessage());
+    }
+  }
+}
+// 运行输出（默认 javac，无 -g）：Cannot invoke "String.length()" because "&lt;local1&gt;" is null
+// 加 javac -g 后输出：Cannot invoke "String.length()" because "city" is null</code></pre>
+<p>✅ 实测通过（JDK 25，两种输出均已核对）。消息里出现 <code>&lt;local1&gt;</code> 还是变量名，取决于编译时有没有生成<strong>局部变量表</strong>（<code>-g</code> 默认不生成 vars）；定位具体是哪个变量/字段/数组判空失败，全靠这条消息。</p>
+
+<h3>14.6 JFR 事件流（JEP 349）</h3>
+<pre><code data-run="1" data-name="JFRStream">import java.util.concurrent.atomic.AtomicLong;
+import jdk.jfr.consumer.RecordingStream;
+public class JFRStream {
+  public static void main(String[] a) throws Exception {
+    var count = new AtomicLong();
+    try (var rs = new RecordingStream()) {
+      rs.onEvent("jdk.ThreadStart", e -&gt; count.incrementAndGet());
+      rs.startAsync();
+      for (int i = 0; i &lt; 3; i++) {
+        Thread t = new Thread(() -&gt; {});
+        t.start();
+        t.join();
+      }
+      Thread.sleep(500);
+      rs.close();
+    }
+    System.out.println("threadStartEvents=" + count.get());
+  }
+}
+// 本机沙箱实测：threadStartEvents=0（事件未回流，运行行为不可信）
+// 正常环境下应 ≥3 —— 代码按 JEP 349 语义书写，编译已实测</code></pre>
+<p>⚠️ 编译实测通过；本机沙箱下事件流未回流（阻塞式 <code>rs.start()</code> 甚至会挂起，故用 <code>startAsync</code>），<strong>运行行为未实测</strong>。API 要点：<code>RecordingStream</code> 是 JDK 9 就有的 <code>Recording</code>（落盘快照）之外的<strong>实时事件订阅</strong>能力——JFR 由此成为可长期开着的生产监控。</p>
+
+<h3>14.7 Non-Volatile Mapped Byte Buffers（JEP 352）</h3>
+<p>版本忠实写法：</p>
+<pre><code>// ❌ 未实测：JDK 14 的 JEP 352（JDK 25 已删除该重载，javap 核对只剩 3 参与 Arena 版）
+try (var ch = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
+    MappedByteBuffer buf = ch.map(FileChannel.MapMode.READ_WRITE, 0, 4096,
+                                  /* isSync = */ true);   // 易失性存储（pmem/SSD）
+}</code></pre>
+<p>现代等价（JDK 22 起 FFM 的 Arena 版 mmap，JDK 25 可运行）：</p>
+<pre><code data-run="1" data-name="ArenaMap">import java.lang.foreign.Arena;
+import java.lang.foreign.ValueLayout;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+public class ArenaMap {
+  public static void main(String[] a) throws Exception {
+    Path p = Files.createTempFile("m", ".bin");
+    Files.write(p, new byte[64]);
+    try (var ch = FileChannel.open(p, StandardOpenOption.READ, StandardOpenOption.WRITE);
+         var arena = Arena.ofConfined()) {
+      var seg = ch.map(FileChannel.MapMode.READ_WRITE, 0, 64, arena);
+      seg.set(ValueLayout.JAVA_INT, 0, 0x1234_5678);
+      System.out.println(Integer.toHexString(seg.get(ValueLayout.JAVA_INT, 0)));
+    }
+    Files.deleteIfExists(p);
+  }
+}
+// 运行输出：12345678</code></pre>
+<p>✅ 实测通过（JDK 25）。JEP 352 的 <code>isSync</code> 语义（映射到易失性存储设备）在 14–21 可用，JDK 22 起随 FFM 重构被移除；存取非易失内存的新写法是 Arena/Segment 一族。</p>
+
+<h3>14.8 会计货币格式（Accounting Currency）</h3>
+<pre><code data-run="1" data-name="Acct14">import java.text.NumberFormat;
+import java.util.Locale;
+public class Acct14 {
+  public static void main(String[] a) {
+    var normal = NumberFormat.getCurrencyInstance(Locale.US);
+    var account = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-US-u-cf-account"));
+    System.out.println(normal.format(-3.27));
+    System.out.println(account.format(-3.27));
+  }
+}
+// 运行输出：
+// -$3.27
+// ($3.27)</code></pre>
+<p>✅ 实测通过（JDK 25）。负数用括号是会计记账惯例；关键在 Locale 扩展 <code>-u-cf-account</code>（<strong>不是</strong> 新方法），JBS：JDK-8215181（fixVersion=14）。⚠️ 勿写 <code>Locale.forString</code>——不存在，API 是 <code>Locale.forLanguageTag</code>。</p>
+
+<h3>14.9 SimpleFormatter 与 <code>%t</code>（素材存疑项）</h3>
+<pre><code data-run="1" data-name="LogFmt14">import java.util.logging.ConsoleHandler;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
+public class LogFmt14 {
+  public static void main(String[] a) throws Exception {
+    System.setProperty("java.util.logging.SimpleFormatter.format", "%4$s %5$s%n");
+    Logger lg = Logger.getLogger("demo");
+    var h = new ConsoleHandler();
+    h.setFormatter(new SimpleFormatter());
+    lg.addHandler(h);
+    lg.setUseParentHandlers(false);
+    lg.info("hello");
+  }
+}
+// 运行输出（中文 locale 环境）：信息 hello
+// （英文环境为 INFO hello；级别文字随 locale 变化）</code></pre>
+<p>⚠️ <strong>素材存疑项的处理</strong>：素材称「Java 14 的 SimpleFormatter 支持 <code>%t</code> 打印线程名」，但实测 jdk13u→jdk14u 的 <code>SimpleFormatter.java</code>/<code>LogRecord.java</code> diff 为空、JBS 无相关记录、JDK 14 release notes 无该条；且 <code>%t</code> 在 <code>java.util.Formatter</code> 里是<strong>日期时间转换前缀</strong>（须写 <code>%1$tX</code>），裸 <code>%t</code> 会因格式非法回落默认格式。上面示例演示的是<strong>实测可用</strong>的 format 属性（<code>%4$s</code>=级别、<code>%5$s</code>=消息）；若确需线程名，需自定义 <code>Formatter</code> 打印 <code>Thread.currentThread().getName()</code>。</p>
+
+<h2>Java 15（2020-09-15 · 非 LTS）</h2>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（15 时点）</th><th>示例</th></tr>
+<tr><td>语法</td><td>Text Blocks <strong>转正</strong>（JEP 378）</td><td>正式</td><td>15.1</td></tr>
+<tr><td>语法</td><td>Sealed Classes（JEP 360 首次预览；17 由 JEP 409 转正）</td><td>预览</td><td>15.2</td></tr>
+<tr><td>语法</td><td>Records 第二次预览（JEP 395）</td><td>预览</td><td>15.3</td></tr>
+<tr><td>语法</td><td>Pattern Matching for instanceof 第二次预览</td><td>预览</td><td>15.4</td></tr>
+<tr><td>语法</td><td>Hidden Classes（JEP 371）</td><td>正式</td><td>15.5</td></tr>
+<tr><td>API</td><td><code>CharSequence.isEmpty()</code> 默认方法（@since 15）</td><td>正式</td><td>15.6</td></tr>
+<tr><td>API</td><td><code>String.formatted(Object...)</code>（@since 15）</td><td>正式</td><td>15.7</td></tr>
+<tr><td>API</td><td>记录组件反射 <code>Class.getRecordComponents()</code></td><td>正式</td><td>15.8</td></tr>
+<tr><td>API</td><td>Foreign-Memory Access API（JEP 383 · Incubator）</td><td>孵化</td><td>15.9</td></tr>
+<tr><td>API</td><td>DatagramSocket API 重构（JEP 373）</td><td>正式</td><td>15.10</td></tr>
+</table>
+
+<h3>15.1 Text Blocks 正式</h3>
+<pre><code data-run="1" data-name="TB15">public class TB15 {
+  public static void main(String[] a) {
+    String json = """
+        {"name": "%s", "age": %d}""".formatted("ann", 3);
+    System.out.println(json);
+    System.out.println(json.stripIndent().startsWith("{"));
+  }
+}
+// 运行输出：
+// {"name": "ann", "age": 3}
+// true</code></pre>
+<p>✅ 实测通过（JDK 25）。15 转正后免预览开关；顺带看到 <code>formatted</code>（15 新增，见 15.7）。</p>
+
+<h3>15.2 Sealed Classes（预览）</h3>
+<p><strong>含义</strong>：<code>sealed</code> 修饰类/接口后，只有 <code>permits</code> 子句列出的直接子类型才可以继承/实现它；每个被许可的子类型必须恰好声明为三态之一——<code>final</code>（叶子，不再往下继承）、<code>sealed</code>（这一支继续受限封闭）、<code>non-sealed</code>（显式重新开放，Java 第一个带连字符的关键字）。</p>
+<p><strong>解决什么问题（为什么提出）</strong>：</p>
+<ul>
+<li><strong>继承默认全开放，缺一个中间态</strong>：Java 里只要一个类能被继承，就能被任何人无限继承——库作者无法声明「我的类型只有这几种」。原有手段只有两档：<code>final</code>（一个子类都不许，连复用都不行）或包私有（用户根本摸不到这个抽象、没法 switch，如 JDK 的 <code>AbstractStringBuilder</code>）。JEP 409 要的正是中间态：<strong>父类型对所有人可见（重要抽象），但只对作者指定的子类可扩展</strong>——「widely accessible but not widely extensible」。</li>
+<li><strong>枚举封闭的是「实例个数」，sealed 封闭的是「值的种类」</strong>：枚举能穷尽 switch 是因为常量集合固定；但要建模「一组有状态、可多实例的类型种类」（图形库只有 Circle/Square、表达式树只有 Plus/Times/Const），枚举做不到，普通类层次又拦不住外来子类。</li>
+<li><strong>为模式匹配的穷尽性检查打地基</strong>（JEP 409 三大目标之一）：if-else instanceof 链漏写一个分支，编译器毫无感知；父类型一旦封闭，编译器就知道全集——17 的 switch 模式匹配（JEP 406，21 转正）漏一个 <code>case</code> 直接编译报错，且可安心省略 <code>default</code>。</li>
+</ul>
+<pre><code data-run="1" data-name="Sealed15">public class Sealed15 {
+  public sealed interface Shape permits Circle, Square {}
+  public record Circle(double r) implements Shape {}
+  public record Square(double s) implements Shape {}
+  public static void main(String[] a) {
+    Shape sh = new Circle(2.0);
+    String d = switch (sh) {
+      case Circle c -&gt; "circle " + c.r();
+      case Square s2 -&gt; "square " + s2.s();
+    };
+    System.out.println(d);
+  }
+}
+// 运行输出：circle 2.0</code></pre>
+<p>✅ 实测通过（JDK 25）。switch 不写 <code>default</code> 能编译通过，正因为 <code>permits</code> 把子类集合钉死了——这正是模式匹配 switch 省略 <code>default</code> 的前提。</p>
+<p><strong>规则要点</strong>：</p>
+<ul>
+<li><code>permits</code> 约束：被许可子类必须与父类型<strong>同模块</strong>（父类型在命名模块时）或<strong>同包</strong>（未命名模块/classpath）；子类与父类型互相可见；必须有规范名（匿名类、局部类不行）。</li>
+<li>子类与 sealed 父类在同一源文件时可<strong>省略 <code>permits</code></strong>，编译器从同文件声明自动推断。</li>
+<li><code>non-sealed</code> 分支虽重新开放，<strong>不破坏 sealed 顶层的穷尽性</strong>：该分支的任何子类实例也算「这一种」，穷尽检查仍成立于直接子类集合。</li>
+<li>JVM 层强制执行：sealed 类的 class 文件带 <code>PermittedSubclasses</code> 属性，装载未授权的子类直接抛 <code>IncompatibleClassChangeError</code>。</li>
+</ul>
+<div class="note">
+<div class="note-title">与 record 组合 = 代数数据类型（ADT）</div>
+<p>record 隐式 final，天生是「积类型」（一组字段的组合）；sealed 封闭可选种类，是「和类型」（N 选一）。两者合写就是 Haskell 风格 ADT 的 Java 表达——JEP 409 官方原话：<em>Record classes allow us to express product types, and sealed classes allow us to express sum types</em>。上面示例的 <code>Shape = Circle | Square</code> 就是最小 ADT。JEP 409 还以 <code>java.lang.constant.ConstantDesc</code> 层次作官方示例（见 0020 课），本机 JDK 25 源码中它确为 sealed。</p>
+</div>
+<p><strong>版本线</strong>：15（JEP 360 首次预览）→ 16（JEP 397 第二次预览，含细化）→ 17（JEP 409 转正，与 16 版本零改动）。反射 API <code>Class.isSealed()</code> / <code>getPermittedSubclasses()</code> 随 17 正式版提供，故本例不演示反射。</p>
+
+<h3>15.3 Records 第二次预览（紧凑构造器）</h3>
+<pre><code data-run="1" data-name="Rec15">public class Rec15 {
+  record Range(int lo, int hi) {
+    Range { if (lo &gt; hi) throw new IllegalArgumentException(lo + "&gt;" + hi); }
+  }
+  public static void main(String[] a) {
+    var r = new Range(2, 5);
+    System.out.println(r + " " + (r.hi() - r.lo()));
+    try { new Range(9, 1); } catch (IllegalArgumentException e) {
+      System.out.println("rejected: " + e.getMessage());
+    }
+  }
+}
+// 运行输出：
+// Range[lo=2, hi=5] 3
+// rejected: 9&gt;1</code></pre>
+<p>✅ 实测通过（JDK 25）。紧凑构造器（compact constructor）不写参数列表，负责校验/归一化——这里演示「lo&gt;hi 直接拒绝」的不变量保护。</p>
+
+<h3>15.4 instanceof 模式匹配第二次预览</h3>
+<pre><code data-run="1" data-name="PM15">public class PM15 {
+  static String handle(Object o) {
+    if (o instanceof Number n &amp;&amp; n.intValue() &gt; 0) return "pos:" + n.intValue();
+    return "other";
+  }
+  public static void main(String[] a) {
+    System.out.println(handle(42) + "/" + handle(-1) + "/" + handle("x"));
+  }
+}
+// 运行输出：pos:42/other/other</code></pre>
+<p>✅ 实测通过（JDK 25）。第二次预览无语法变化（修订围绕 <code>null</code> 与 flow 结合语义），16 定稿转正。</p>
+
+<h3>15.5 Hidden Classes（JEP 371 · 正式）</h3>
+<pre><code data-run="1" data-name="HID">import java.lang.invoke.MethodHandles;
+public class HID {
+  public static void main(String[] a) throws Throwable {
+    byte[] bytes;
+    try (var in = HID.class.getResourceAsStream("HID.class")) { bytes = in.readAllBytes(); }
+    var hidden = MethodHandles.lookup().defineHiddenClass(bytes, true,
+        MethodHandles.Lookup.ClassOption.NESTMATE).lookupClass();
+    System.out.println(hidden.getName() + " hidden=" + hidden.isHidden());
+    System.out.println(hidden.getDeclaredMethod("hi").invoke(null));
+  }
+  public static String hi() { return "hello from hidden"; }
+}
+// 运行输出（0x 后缀随运行变化）：
+// HID/0x0000000130040c00 hidden=true
+// hello from hidden</code></pre>
+<p>✅ 实测通过（JDK 25）。要点：类名形如 <code>HID/0x…</code>（不可从类加载器反查）、<code>isHidden()=true</code>、不进 metaspace 的弱引用命名空间——动态代理/框架字节码（cglib、lambda 的 inner-class 元风格）就靠它省 classloader 泄漏。</p>
+
+<h3>15.6 CharSequence.isEmpty()</h3>
+<pre><code data-run="1" data-name="CsEmpty15">public class CsEmpty15 {
+  public static void main(String[] a) {
+    CharSequence cs = "";
+    System.out.println(cs.isEmpty() + " " + "x".isEmpty());
+  }
+}
+// 运行输出：true false</code></pre>
+<p>✅ 实测通过（JDK 25）。默认方法 <code>return length() == 0</code>，让 <code>CharSequence</code> 消费方不必再先转 <code>String</code>。</p>
+
+<h3>15.7 String.formatted()</h3>
+<pre><code data-run="1" data-name="Fmt15">public class Fmt15 {
+  public static void main(String[] a) {
+    System.out.println("%s-%04d".formatted("id", 7));
+  }
+}
+// 运行输出：id-0007</code></pre>
+<p>✅ 实测通过（JDK 25）。即 <code>String.format(this, args)</code> 的实例方法版——字符串模板在手，比 <code>String.format(fmt, s)</code> 更顺读；<strong>@since 15</strong>（13 随 Text Blocks 预览诞生、15 转正，沿革见 13.5）。</p>
+
+<h3>15.8 Class.getRecordComponents()</h3>
+<pre><code data-run="1" data-name="RecComp15">public class RecComp15 {
+  record User(String name, int age) {}
+  public static void main(String[] a) {
+    var comps = User.class.getRecordComponents();
+    System.out.println(comps.length + " " + comps[0].getName() + ":" + comps[0].getType().getSimpleName());
+  }
+}
+// 运行输出：2 name:String</code></pre>
+<p>✅ 实测通过（JDK 25）。返回 <code>RecordComponent[]</code>（名字、类型、注解、对应 accessor/ctor 参数）——序列化框架、ORM 绑定从此能反射读「记录结构」而不是靠字段猜。</p>
+
+<h3>15.9 Foreign-Memory Access API（JEP 383 · Incubator）</h3>
+<pre><code>// ❌ 未实测：Java 15 孵化版（--add-modules jdk.incubator.foreign）——
+// 该 incubator 模块及其 MemorySession/MemoryAccess 形态的 API 后来多次重构，已不存在于 JDK 25。
+// 可运行的现代等价（FFM 在 JDK 22 转正进 java.base）：
+//   try (var arena = Arena.ofConfined()) {
+//       var seg = arena.allocate(16);
+//       seg.set(ValueLayout.JAVA_INT, 0, 42);
+//       System.out.println(seg.get(ValueLayout.JAVA_INT, 0));   // 42
+//   }
+// 等价语义：原生内存的分配 + 类型化读写 + 作用域结束自动释放（替代 unsafe 手动 free）。</code></pre>
+<p>⚠️ 孵化 API 未实测；上段等价代码与 14.7 的 Arena 用法同族（<code>Arena/Segment/ValueLayout</code>，JDK 25 已实测可用）。JDK 15 的形态是 <code>--add-modules jdk.incubator.foreign</code> 的 <code>jdk.incubator.foreign</code> 模块（JEP 383），19/20 继续预览，22 正式。</p>
+
+<h3>15.10 DatagramSocket API 重构（JEP 373）</h3>
+<pre><code data-run="1" data-name="Dgram15">import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+public class Dgram15 {
+  public static void main(String[] a) throws Exception {
+    try (var ds = new DatagramSocket(0)) {
+      int port = ds.getLocalPort();
+      var t = new Thread(() -&gt; {
+        try {
+          var buf = new byte[64];
+          var pkt = new DatagramPacket(buf, buf.length);
+          ds.receive(pkt);
+          ds.send(new DatagramPacket(pkt.getData(), pkt.getLength(), pkt.getAddress(), pkt.getPort()));
+        } catch (Exception e) { throw new RuntimeException(e); }
+      });
+      t.start();
+      try (var c = new DatagramSocket()) {
+        var data = "ping".getBytes();
+        c.send(new DatagramPacket(data, data.length, InetAddress.getLoopbackAddress(), port));
+        var buf = new byte[64];
+        var rp = new DatagramPacket(buf, buf.length);
+        c.receive(rp);
+        System.out.println(new String(rp.getData(), 0, rp.getLength()));
+      }
+      t.join();
+    }
+  }
+}
+// 运行输出：ping</code></pre>
+<p>✅ 实测通过（JDK 25）。与 13.3 的 Socket 重构同思路：<code>DatagramSocket/DatagramPacket</code> 实现从 <code>PlainDatagramSocketImpl</code> 换成 NIO 通道版，API 不变、诊断信息更透明。</p>
+
+<div class="page-nav">
+<span><a href="./index.html">← 返回：Java 12–27 特性全景总览</a></span>
+<span><a href="./java16-19.html">下一版段：Java 16–19 →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

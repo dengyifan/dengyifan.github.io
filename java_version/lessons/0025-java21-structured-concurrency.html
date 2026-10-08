@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>结构化并发 Structured Concurrency · Java 21</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 21 · 结构化并发</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>结构化并发 — 把一组子任务当作一个工作单元（JEP 453 · 预览）</h1>
+<div class="article-meta"><span>📚 L1–L5 · 并发核心</span><span>🔬 JEP 453 Preview · JDK 25 实测</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / <a href="./0027-java21-index.html">Java 21</a> / 结构化并发</div>
+
+<div class="info">
+<div class="info-title">本课怎么读 · 版本口径（重要）</div>
+<p>结构化并发在 <strong>JDK 21 是第一次预览（JEP 453）</strong>，主角是 <code>java.util.concurrent.StructuredTaskScope</code>（含 <code>ShutdownOnSuccess</code> / <code>ShutdownOnFailure</code> 两个内置策略）。预览特性编译运行都要加开关：<strong>javac 用 <code>--enable-preview --release 21</code>，运行 <code>java --enable-preview</code></strong>。<br>
+本课以 <strong>21 的 API 为主线</strong>（忠于 Oracle Java 21 文档）；本机用 <code>openjdk-25.0.1</code> 实测时，该特性已演进到 <strong>JEP 505（第五次预览）且 API 重新设计</strong>（<code>open(Joiner)</code> 模型，不再有两个嵌套子类）——L4 层专门给出 21 → 25 演进与实测对照。</p>
+</div>
+
+<h2>L1 · 概念层：什么是结构化并发</h2>
+
+<p><strong>结构化并发把在不同线程中运行的一组相关任务当作单一工作单元</strong>，从而简化错误处理与取消、提升可靠性、增强可观测性。</p>
+
+<p>核心类是 <code>java.util.concurrent.StructuredTaskScope</code>：用它把一组并发子任务作为一个整体协调——<strong>fork</strong> 每个子任务（各自在独立线程中运行），然后把它们作为整体 <strong>join</strong>。scope 保证主任务继续之前子任务都已结束；也可以指定「某个子任务成功就继续」。</p>
+
+<h3>非结构化并发的三个老问题</h3>
+
+<p>传统写法用 <code>ExecutorService</code> + <code>Future</code>：</p>
+
+<pre><code>Response handle() throws Exception {
+  Future&lt;String&gt; user  = exec.submit(this::findUser);
+  Future&lt;Integer&gt; order = exec.submit(this::fetchOrder);
+  String u = user.get();          // 任一失败 / 请求被取消时……
+  int o = order.get();
+  return new Response(u, o);
+}</code></pre>
+
+<table>
+<tr><th>问题</th><th>表现</th></tr>
+<tr><td><strong>线程泄漏</strong></td><td><code>findUser</code> 失败了，<code>fetchOrder</code> 仍在自己的线程里跑——它的结果已无人需要，却要手动取消；忘了就泄漏成「孤儿线程」</td></tr>
+<tr><td><strong>取消传播困难</strong></td><td>请求超时 / 被中断时，需要把取消信号逐个传给子线程；异常从 <code>Future.get()</code> 里以 <code>ExecutionException</code> 包装抛出，处理啰嗦且易漏</td></tr>
+<tr><td><strong>无可观测结构</strong></td><td>thread dump 里子任务与父任务是一堆平级线程，看不出谁属于谁、谁在等谁</td></tr>
+</table>
+
+<div class="note">
+<div class="note-title">「结构化」的含义</div>
+<p>类比结构化编程里 <code>{ ... }</code> 代码块：进入块、块内语句、退出块——控制流嵌套、寿命有界。结构化并发让<strong>线程的寿命也嵌套在语法结构里</strong>：子任务在 scope 内 fork，scope 关闭（退出 try 块）时所有子任务必然已结束。于是「父任务活着时子任务必活着，父任务结束前子任务必结束」成为可由代码结构保证的不变式。</p>
+</div>
+
+<h2>L2 · 原理层：scope 的生命周期</h2>
+
+<h3>六步流程</h3>
+
+<ol>
+<li>创建 <code>StructuredTaskScope</code>，并用 <code>try</code>-with-resources 管理；</li>
+<li>把子任务定义为 <code>Callable</code>；</li>
+<li>在 try 块内用 <code>StructuredTaskScope::fork</code> 让每个子任务在自己的线程运行；</li>
+<li>调用 <code>StructuredTaskScope::join</code>；</li>
+<li>处理子任务的结果；</li>
+<li>确保 scope 被关闭（try-with-resources 自动完成）。</li>
+</ol>
+
+<div class="mermaid">
+sequenceDiagram
+    participant P as 父任务（owner）
+    participant S as StructuredTaskScope
+    participant T1 as 子任务 1 线程
+    participant T2 as 子任务 2 线程
+    P->>S: new（try-with-resources）
+    P->>T1: fork(callable1)
+    P->>T2: fork(callable2)
+    P->>S: join()
+    Note over S: 等待所有子任务完成（或策略短路）
+    T1-->>S: complete
+    T2-->>S: complete
+    S-->>P: join 返回
+    P->>P: 读取 Subtask 结果
+    Note over P: try 块结束 → close()<br/>等待任何未完成子任务结束
+</div>
+
+<h3>关闭、短路与取消传播</h3>
+
+<table>
+<tr><th>机制</th><th>语义</th></tr>
+<tr><td><code>shutdown()</code></td><td>不关闭 scope 而停止接收新任务：<strong>中断线程以取消所有未完成子任务</strong>；子类用它实现「不必等全部完成」的策略</td></tr>
+<tr><td><code>close()</code>（try 退出）</td><td>关闭 scope，并<strong>等待运行未完成子任务的线程结束</strong>——保证 try 之后无孤儿线程</td></tr>
+<tr><td>短路（short-circuiting）</td><td>主任务在结果已定时中断/取消不再需要的子任务，促使它们尽快结束</td></tr>
+<tr><td>owner</td><td>创建并 fork/join 的那个线程；结果访问与关闭都受 owner 约束</td></tr>
+</table>
+
+<h2>L3 · API 层：内置的两种关闭策略（JDK 21）</h2>
+
+<h3>基本骨架</h3>
+
+<pre><code>Callable&lt;String&gt; task1 = ...
+Callable&lt;Integer&gt; task2 = ...
+
+try (var scope = new StructuredTaskScope&lt;Object&gt;()) {
+
+    Subtask&lt;String&gt; subtask1 = scope.fork(task1);
+    Subtask&lt;Integer&gt; subtask2 = scope.fork(task2);
+
+    scope.join();
+
+    // ... 处理结果 / 异常 ...
+
+} // close：等待任何未完成子任务结束</code></pre>
+
+<h3>策略 1：ShutdownOnFailure — 一个失败就全部取消</h3>
+
+<p>经典的「聚合多个下游服务」场景：任一下游失败，请求就无法成功，立即取消其余子任务。</p>
+
+<pre><code>record User(String name, int order, String tag) {}
+
+User handle() throws ExecutionException, InterruptedException {
+    try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        Subtask&lt;String&gt; name  = scope.fork(this::findName);
+        Subtask&lt;Integer&gt; order = scope.fork(this::fetchOrder);
+        Subtask&lt;String&gt; tag   = scope.fork(this::fetchTag);
+
+        scope.join()
+             .throwIfFailed();          // 有失败 → 原样抛出捕获的异常；全部成功 → 继续
+
+        return new User(name.get(), order.get(), tag.get());
+    }
+}</code></pre>
+
+<ul>
+<li><code>ShutdownOnFailure</code> 捕获<strong>第一个</strong>子任务抛出的异常，然后调用 <code>shutdown</code>：阻止新子任务启动、中断其余未完成线程，让应用得以继续。</li>
+<li>访问捕获的异常用 <code>exception()</code>；想重新抛出用 <code>throwIfFailed()</code>（本例用法）。</li>
+<li>join 之后、全部成功时，<code>Subtask.get()</code> 才能安全取到结果。</li>
+</ul>
+
+<h3>策略 2：ShutdownOnSuccess — 谁先成功用谁的结果</h3>
+
+<p>适合「多个等价来源取最快的一个」（如多副本 / 多地域）：捕获第一个<strong>成功</strong>完成的子任务结果，然后 shutdown 取消其余。</p>
+
+<pre><code>String fastest() throws ExecutionException, InterruptedException {
+    try (var scope = new StructuredTaskScope.ShutdownOnSuccess&lt;String&gt;()) {
+        scope.fork(() -&gt; fetchFrom("region-a"));
+        scope.fork(() -&gt; fetchFrom("region-b"));
+        scope.fork(() -&gt; fetchFrom("region-c"));
+        scope.join();
+        return scope.result();          // 第一个成功子任务的结果
+    }
+}</code></pre>
+
+<p>官方示例 <code>SCRandomTasks</code> 同时演示两者：fork 5 个随机时长的任务，超阈值就抛 <code>TooSlowException</code>——<code>ShutdownOnFailure</code> 在无异常时打印总时长，<code>ShutdownOnSuccess</code> 打印最先完成者：</p>
+
+<pre><code>// ShutdownOnFailure：无异常 → 汇总；有异常 → throwIfFailed 抛出
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    var subtasks = IntStream.range(0, 5)
+        .mapToObj(i -&gt; scope.fork(() -&gt; randomTask(1000, 850)))
+        .toList();
+    scope.join().throwIfFailed();
+    var total = subtasks.stream().map(Subtask::get).reduce(0, Integer::sum);
+    System.out.println("Total duration: " + total);
+}
+
+// ShutdownOnSuccess：最先完成者
+try (var scope = new StructuredTaskScope.ShutdownOnSuccess&lt;Integer&gt;()) {
+    IntStream.range(0, 5)
+        .mapToObj(i -&gt; scope.fork(() -&gt; randomTask(1000, 850)))
+        .toList();
+    scope.join();
+    System.out.println("First: " + scope.result());
+}
+// 实测输出片段：
+// Total duration: 2263
+// First task to finish: 40</code></pre>
+
+<h2>L4 · 边界层：自定义策略、预览开关与版本演进</h2>
+
+<h3>自定义 StructuredTaskScope 策略</h3>
+
+<p>继承 <code>StructuredTaskScope</code> 可实现不同于内置两者的策略——核心是重写 <code>handleComplete</code>，在每个子任务完成时按状态分流。下例 <code>CollectingScope</code> 把成功与失败子任务分别收入两个队列：</p>
+
+<pre><code>public class CollectingScope&lt;T&gt; extends StructuredTaskScope&lt;T&gt; {
+    private final Queue&lt;Subtask&lt;? extends T&gt;&gt; successSubtasks = new LinkedTransferQueue&lt;&gt;();
+    private final Queue&lt;Subtask&lt;? extends T&gt;&gt; failedSubtasks  = new LinkedTransferQueue&lt;&gt;();
+
+    @Override
+    protected void handleComplete(Subtask&lt;? extends T&gt; subtask) {
+        if (subtask.state() == Subtask.State.SUCCESS) {
+            successSubtasks.add(subtask);
+        } else if (subtask.state() == Subtask.State.FAILED) {
+            failedSubtasks.add(subtask);
+        }
+    }
+
+    @Override
+    public CollectingScope&lt;T&gt; join() throws InterruptedException {
+        super.join();
+        return this;
+    }
+
+    public Stream&lt;Subtask&lt;? extends T&gt;&gt; successfulTasks() {
+        super.ensureOwnerAndJoined();          // 仅 owner、且已 join 才可访问
+        return successSubtasks.stream();
+    }
+
+    public Stream&lt;Subtask&lt;? extends T&gt;&gt; failedTasks() {
+        super.ensureOwnerAndJoined();
+        return failedSubtasks.stream();
+    }
+}</code></pre>
+
+<p>三个关键保护：① <code>Subtask.state()</code> 取值 <code>SUCCESS / FAILED</code>（另有未完成态）；② <code>get()</code> / <code>exception()</code> 分别取结果与异常；③ <code>ensureOwnerAndJoined()</code> 强制「<strong>当前线程是 owner、且 fork 之后已 join</strong>」，防止在任务未完成时读到半成品。</p>
+
+<h3>预览特性的编译运行开关</h3>
+
+<table>
+<tr><th>阶段</th><th>命令（JDK 21）</th></tr>
+<tr><td>编译</td><td><code>javac --enable-preview --release 21 Main.java</code></td></tr>
+<tr><td>运行</td><td><code>java --enable-preview Main</code>（<code>java</code> 不支持 <code>--release</code>）</td></tr>
+</table>
+
+<p>预览特性设计、规范、实现已完整，但<strong>不是永久特性</strong>：未来 Java SE 版本可能以不同形式存在、甚至不存在。因此不要在需要长期二进制兼容的库 API 里暴露它。</p>
+
+<h3>与 ScopedValue 配合：上下文安全地传给子任务</h3>
+
+<p>fork 出的子线程可以配合 <code>ScopedValue</code>（21 预览 JEP 446）继承上下文，而不必用 <code>InheritableThreadLocal</code>：绑定在父任务的动态作用域内、scope 关闭即失效。详见 <a href="./0026-java21-thread-local-variables.html">0026 线程局部变量</a>。</p>
+
+<div class="warning">
+<div class="warning-title">版本演进与 JDK 25 实测（API 已重新设计）</div>
+<p>结构化并发经历了多次预览：<strong>21 JEP 453（一）→ 22 JEP 462（二）→ 23 JEP 480（三）→ 24 JEP 499（四）→ 25 JEP 505（五）</strong>。在 25 上：</p>
+<ul>
+<li><code>StructuredTaskScope&lt;T,R&gt;</code> 变成<strong>接口</strong>，不再 <code>new</code>，而用静态工厂 <code>StructuredTaskScope.open(Joiner)</code>；</li>
+<li><code>ShutdownOnFailure</code> / <code>ShutdownOnSuccess</code> 两个嵌套子类被移除，改由 <code>Joiner</code> 工厂表达策略；</li>
+<li><code>join()</code> 直接<strong>返回结果 R</strong>（21 上 join 返回 scope、结果靠 <code>Subtask.get()</code> 取）。</li>
+</ul>
+<table>
+<tr><th>21（JEP 453）</th><th>25（JEP 505，实测）</th></tr>
+<tr><td><code>new StructuredTaskScope.ShutdownOnFailure()</code> + <code>join().throwIfFailed()</code></td><td><code>open(Joiner.awaitAllSuccessfulOrThrow())</code>；任一失败 join 抛 <code>FailedException</code></td></tr>
+<tr><td><code>new StructuredTaskScope.ShutdownOnSuccess&lt;T&gt;()</code> + <code>result()</code></td><td><code>open(Joiner.&lt;T&gt;anySuccessfulResultOrThrow())</code>；join 返回首个成功结果</td></tr>
+<tr><td><code>new StructuredTaskScope&lt;T&gt;()</code>（等全部，含失败）</td><td><code>open(Joiner.awaitAll())</code></td></tr>
+</table>
+<pre><code>// 本机 JDK 25 实测：javac --enable-preview --release 25
+User handle() throws Throwable {
+  try (var scope = StructuredTaskScope.&lt;Object, Stream&lt;Subtask&lt;Object&gt;&gt;&gt;
+           open(Joiner.&lt;Object&gt;allSuccessfulOrThrow())) {
+    Subtask&lt;String&gt; name  = scope.fork(this::findName);
+    Subtask&lt;Integer&gt; order = scope.fork(this::fetchOrder);
+    Subtask&lt;String&gt; tag   = scope.fork(this::fetchTag);
+    scope.join();
+    return new User(name.get(), order.get(), tag.get());
+  }
+}
+// 实测输出：User[name=Alice, order=42, tag=VIP]</code></pre>
+<p>失败短路实测：一个子任务抛 <code>boom</code>，<code>join</code> 抛 <code>FailedException: java.lang.IllegalStateException: boom</code>，并行的慢任务被中断取消（未跑完）。因此<strong>查 21 资料时以 <code>ShutdownOnXxx</code> 为准，在 25 上写代码以 <code>open(Joiner)</code> 为准</strong>，两者不要混用。</p>
+</div>
+
+<h2>观测结构化并发：jcmd JSON 转储</h2>
+
+<p><code>jcmd</code> 的 JSON 线程转储会把 StructuredTaskScope 及其 fork 子任务的线程放在一个<strong>数组（thread container）</strong>里，并给出父容器与 owner 引用，从而可以从转储重建程序的父子结构。</p>
+
+<pre><code>jcmd &lt;pid&gt; Thread.dump_to_file -format=json &lt;file&gt;</code></pre>
+
+<pre><code>{
+  "threadContainers": [
+    {
+      "container": "&lt;root&gt;",
+      "parent": null,
+      "owner": null,
+      "threads": [
+        { "tid": "1", "name": "main",
+          "stack": [
+            "java.base/jdk.internal.misc.ThreadFlock.awaitAll(ThreadFlock.java:315)",
+            "java.base/java.util.concurrent.StructuredTaskScope.join(...)",
+            "SCObservable.handle(SCObservable.java:22)"
+          ]
+        }
+      ]
+    },
+    {
+      "container": "java.util.concurrent.StructuredTaskScope$ShutdownOnFailure@5674cd4d",
+      "parent": "&lt;root&gt;",
+      "owner": "1",
+      "threads": [
+        { "tid": "21", "name": "",
+          "stack": [
+            "java.base/java.lang.VirtualThread.parkNanos(VirtualThread.java:631)",
+            "SCObservable.sleepOneSecond(SCObservable.java:12)",
+            "java.base/java.util.concurrent.StructuredTaskScope$SubtaskImpl.run(...)",
+            "java.base/java.lang.VirtualThread.run(VirtualThread.java:311)"
+          ]
+        }
+      ]
+    }
+  ]
+}</code></pre>
+
+<p>三个可观测要点：① scope 是一个独立 <strong>container</strong>，子任务线程全部归入；② <code>parent</code>/<code>owner</code> 字段把它连回父任务（owner 是 main，tid=1）；③ 子任务线程是<strong>虚拟线程</strong>（栈底 <code>VirtualThread.run</code>），默认无名。这正是结构化并发「增强可观测性」的落地方式。</p>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: 什么是结构化并发？它解决了传统 ExecutorService + Future 的什么痛点？</div>
+<div class="answer"><p>结构化并发把在不同线程运行的一组相关任务当作单一工作单元（JDK 21 JEP 453 预览，核心 <code>StructuredTaskScope</code>）。它解决：① 线程泄漏——一个子任务失败后其余仍在跑、结果已无人需要；② 取消传播困难——超时/中断要逐个处理、异常包装繁琐；③ 无可观测结构——thread dump 里看不出子任务属于谁。try-with-resources 保证 scope 关闭时所有子任务必然结束。</p>
+<div class="key-point">核心不变式：父任务结束前，所有子任务必已结束——由语法结构而非手工约定保证。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — 描述 StructuredTaskScope 的使用步骤；fork 和 join 分别做什么？</div>
+<div class="answer"><p>① try-with-resources 创建 scope；② 子任务写成 <code>Callable</code>；③ <code>fork</code> 让每个子任务在自己的线程启动；④ <code>join</code> 等待；⑤ 处理结果；⑥ close 自动收尾。fork = 启动独立子线程并返回 <code>Subtask</code> 句柄；join = 把所有子任务作为整体等待完成（或等待策略短路）。</p>
+<div class="key-point">close 会等待未完成子任务结束；shutdown 则中断取消未完成子任务。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: ShutdownOnFailure 和 ShutdownOnSuccess 的区别？各举一个使用场景。</div>
+<div class="answer"><p><code>ShutdownOnFailure</code>：捕获第一个异常并 shutdown 取消其余——用于「聚合多个必需的下游服务」，任一下游失败请求即失败，用 <code>join().throwIfFailed()</code>。<code>ShutdownOnSuccess</code>：捕获第一个成功结果并 shutdown——用于「多个等价来源取最快」，用 <code>scope.result()</code>。两者都是短路模式。</p>
+<div class="key-point">一个对「首个失败」短路，一个对「首个成功」短路。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 代码审查 — 为什么在 JDK 25 上这段 JDK 21 代码编译不过？怎么改？</div>
+<div class="answer"><pre><code>try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    scope.fork(this::findName);
+    scope.join().throwIfFailed();
+}</code></pre>
+<p>因为 JDK 25 已演进到 JEP 505（第五次预览）：<code>ShutdownOnFailure</code> 嵌套子类被移除，<code>StructuredTaskScope</code> 改为接口、用 <code>open(Joiner)</code> 创建，<code>join()</code> 直接返回结果。等价写法：</p>
+<pre><code>try (var scope = StructuredTaskScope.open(Joiner.awaitAllSuccessfulOrThrow())) {
+    scope.fork(this::findName);
+    scope.join();
+}</code></pre>
+<div class="key-point">21 与 25 是两套 API 形态：ShutdownOnXxx（21） vs open(Joiner)（25），且都需 --enable-preview。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: 架构师 — 结构化并发和虚拟线程是什么关系？上线要注意什么？</div>
+<div class="answer"><p>两者同属 Project Loom 但正交：虚拟线程提供廉价海量线程；结构化并发提供「把一组线程当单元管理」的纪律。fork 出的子任务默认就跑在虚拟线程上。上线注意：① 21 上结构化并发是<strong>预览特性</strong>，需 <code>--enable-preview --release 21</code>，API 未来可能变（25 已重设计），不宜暴露到长期 API；② 用 jcmd JSON 转储确认父子结构与 owner；③ 子任务上下文优先用 <code>ScopedValue</code> 而非 <code>InheritableThreadLocal</code>；④ 子任务要正确响应中断以便短路取消能及时生效。</p>
+<div class="key-point">虚拟线程解决「线程贵」，结构化并发解决「线程散」；组合使用，但 21 上后者仍是预览。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 故障排查 — jcmd JSON 转储里怎么看出一个卡住请求的子任务结构？</div>
+<div class="answer"><p>① 在 <code>threadContainers</code> 里找到 container 名为 <code>StructuredTaskScope$...</code> 的容器；② 看它的 <code>owner</code>（父任务 tid）与 <code>parent</code>，重建归属；③ 容器内 <code>threads</code> 数组即该 scope fork 的全部子任务，逐个看 <code>stack</code> 定位卡点（如全部 park 在等下游连接）；④ 父线程栈通常停在 <code>ThreadFlock.awaitAll</code> / <code>StructuredTaskScope.join</code>，说明它在等子任务。</p>
+<div class="key-point">container + owner + parent 三字段是从转储重建父子结构的钥匙。</div>
+</div>
+</div>
+
+<div class="page-nav">
+<span><a href="./0024-java21-virtual-threads.html">← 上一课：虚拟线程</a></span>
+<span><a href="./0026-java21-thread-local-variables.html">下一课：线程局部变量 →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 21 — Deep Mastery Course</title>
+<style>
+:root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-blue:#3194d0;--accent-light:#fef0f0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--orange:#f5a623;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}
+.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-.5px}
+.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}
+.container{max-width:1020px;margin:80px auto 80px;padding:0 16px}
+.hero{background:var(--card-bg);border-radius:4px;padding:48px 40px 36px;margin-bottom:24px;border-bottom:1px solid var(--border)}
+.hero h1{font-size:34px;font-weight:700;line-height:1.3;font-family:var(--font-sans);color:var(--text);margin-bottom:12px}
+.hero .subtitle{font-size:17px;color:var(--text-secondary);font-family:var(--font-sans);line-height:1.6}
+.hero .meta{margin-top:20px;font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:24px;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:var(--card-bg);border-radius:4px;padding:20px 24px;text-align:center;border:1px solid var(--border)}
+.stat-card .number{font-size:32px;font-weight:700;font-family:var(--font-sans);color:var(--accent)}
+.stat-card .label{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);margin-top:4px}
+.section{background:var(--card-bg);border-radius:4px;margin-bottom:16px;border:1px solid var(--border);overflow:hidden}
+.section-header{padding:20px 28px;border-bottom:1px solid var(--border);font-family:var(--font-sans);display:flex;align-items:center;gap:12px}
+.section-header h2{font-size:18px;font-weight:700;color:var(--text);flex:1}
+.section-header .badge{font-size:12px;padding:3px 10px;border-radius:12px;font-weight:600}
+.badge.core{background:#fdf2f2;color:#e74c3c}
+.badge.support{background:#f0f7fd;color:var(--accent-blue)}
+.item-list{padding:4px 0}
+.item{display:flex;align-items:center;gap:16px;padding:16px 28px;border-bottom:1px solid var(--border);transition:background .15s;text-decoration:none;color:inherit}
+.item:last-child{border-bottom:none}.item:hover{background:#fafafa}
+.item .icon{width:44px;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;font-family:var(--font-sans);font-weight:700;flex-shrink:0}
+.icon.l1{background:#e8f5e9;color:#42c02e}.icon.l2{background:#f0f7fd;color:#3194d0}.icon.l3{background:#fef0f0;color:#ea6f5a}.icon.l4{background:#fff8e1;color:#f5a623}.icon.l5{background:#f3e5f5;color:#9c27b0}.icon.doc{background:#f5f5f5;color:var(--text-muted)}
+.item .info{flex:1;min-width:0}
+.item .info .title{font-size:16px;font-weight:600;font-family:var(--font-sans);margin-bottom:2px}
+.item .info .desc{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);line-height:1.5}
+.item .info .tags{margin-top:4px;display:flex;gap:6px;flex-wrap:wrap}
+.item .info .tag{font-size:11px;padding:1px 8px;border-radius:10px;font-family:var(--font-sans);background:#f5f5f5;color:var(--text-muted)}
+.item .arrow{color:var(--text-muted);font-size:18px;font-family:var(--font-sans);flex-shrink:0}
+.roadmap{background:var(--card-bg);border-radius:4px;margin-bottom:16px;border:1px solid var(--border);padding:28px}
+.roadmap h2{font-size:18px;font-weight:700;font-family:var(--font-sans);margin-bottom:20px}
+.steps{display:flex;gap:16px;flex-wrap:wrap}
+.step{flex:1;min-width:140px;background:#fafafa;border-radius:8px;padding:20px 16px;text-align:center;border:1px solid var(--border);font-family:var(--font-sans);position:relative}
+.step .step-num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:13px;font-weight:700}
+.step .step-title{font-size:14px;font-weight:600;margin-bottom:4px}.step .step-desc{font-size:12px;color:var(--text-muted);line-height:1.5}
+.step::after{content:"→";position:absolute;right:-14px;top:50%;transform:translateY(-50%);color:var(--border-light);font-size:20px}
+.step:last-child::after{display:none}
+.footer{text-align:center;padding:32px 0 0;font-size:13px;color:var(--text-muted);font-family:var(--font-sans);border-top:1px solid var(--border);margin-top:32px}
+@media(max-width:700px){.hero{padding:32px 20px 24px}.hero h1{font-size:24px}.stats{grid-template-columns:repeat(2,1fr)}.steps{flex-direction:column}.step::after{display:none}.item{padding:14px 20px}}
+</style>
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 21</span></div></nav>
+<div class="container">
+<div class="hero">
+<h1>Java 21 — Deep Mastery Course</h1>
+<p class="subtitle">Project Loom 的爆发年（2023.09 · LTS）：虚拟线程转正（JEP 444）、结构化并发首发预览（JEP 453）、Scoped Values 预览（JEP 446）——围绕「百万并发」重写线程模型与上下文传递。本专题聚焦这三条并发主线；本版本其余特性（Record Patterns / PM switch 转正、Sequenced Collections、KEM、String Templates 预览）见特性全景。</p>
+<div class="meta">
+<span>📚 3 篇专题课件</span>
+<span>🔬 Oracle Java 21 官方文档 + JDK 25 实测</span>
+<span>🌐 中文</span>
+<span>🧪 Aligned with deep-grill interview angles</span>
+</div>
+</div>
+
+<div class="stats">
+<div class="stat-card"><div class="number">3</div><div class="label">Concurrency Lessons</div></div>
+<div class="stat-card"><div class="number">18</div><div class="label">Interview Questions</div></div>
+<div class="stat-card"><div class="number">3</div><div class="label">JEPs (444 / 453 / 446)</div></div>
+<div class="stat-card"><div class="number">1</div><div class="label">Question Bank</div></div>
+</div>
+
+<div class="roadmap">
+<h2>📖 Java 21 并发专题学习路径</h2>
+<div class="steps">
+<div class="step"><div class="step-num">1</div><div class="step-title">虚拟线程</div><div class="step-desc">JEP 444 · M:N 调度 · carrier · pinning · JFR 观测</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-title">结构化并发</div><div class="step-desc">JEP 453 预览 · fork/join · ShutdownOnSuccess/Failure</div></div>
+<div class="step"><div class="step-num">3</div><div class="step-title">线程局部变量</div><div class="step-desc">ThreadLocal 三大缺陷 · ScopedValue（JEP 446）</div></div>
+<div class="step"><div class="step-num">4</div><div class="step-title">面试题库</div><div class="step-desc">五角度 18 题追问链</div></div>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>🎓 Concurrency Lessons</h2><span class="badge core">REQUIRED</span></div>
+<div class="item-list">
+<a class="item" href="./0024-java21-virtual-threads.html"><div class="icon l1">L1</div><div class="info"><div class="title">虚拟线程 — 百万并发的轻量级线程（JEP 444）</div><div class="desc">平台线程 vs 虚拟线程 · M:N 调度与 mount/unmount · carrier · 创建 API · pinning 与 JEP 491 · JFR / jcmd 观测 · 不要池化 · Semaphore 限流</div><div class="tags"><span class="tag">JEP 444</span><span class="tag">VirtualThread</span><span class="tag">Carrier</span><span class="tag">Pinning</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./0025-java21-structured-concurrency.html"><div class="icon l2">L2</div><div class="info"><div class="title">结构化并发 — 把一组子任务当作一个工作单元（JEP 453 · 预览）</div><div class="desc">StructuredTaskScope · fork/join 生命周期 · ShutdownOnFailure / ShutdownOnSuccess · 自定义策略 · 21→25 open(Joiner) 演进 · jcmd JSON 观测</div><div class="tags"><span class="tag">JEP 453</span><span class="tag">Preview</span><span class="tag">StructuredTaskScope</span><span class="tag">短路取消</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./0026-java21-thread-local-variables.html"><div class="icon l3">L3</div><div class="info"><div class="title">线程局部变量 — ThreadLocal 与三大设计缺陷</div><div class="desc">每线程副本机制 · 隐藏方法参数 · InheritableThreadLocal 构造时拷贝 · 无约束可变/无界寿命/昂贵继承 · ScopedValue 继任者（JEP 446）</div><div class="tags"><span class="tag">ThreadLocal</span><span class="tag">InheritableThreadLocal</span><span class="tag">ScopedValue</span><span class="tag">JEP 446</span></div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>🧪 Interview Question Bank</h2><span class="badge core">REQUIRED</span></div>
+<div class="item-list">
+<a class="item" href="../interview/0005-java21-interview.html"><div class="icon l5">L5</div><div class="info"><div class="title">Java 21 并发专题面试题库 — 18 题</div><div class="desc">虚拟线程 / 结构化并发 / ThreadLocal·ScopedValue · 面试官 / 架构师 / 代码审查 / 故障排查 / 技术讲师 五角度追问</div><div class="tags"><span class="tag">面试官</span><span class="tag">架构师</span><span class="tag">代码审查</span><span class="tag">故障排查</span><span class="tag">讲师</span></div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>🗺️ Java 21 其余特性</h2><span class="badge support">ROADMAP</span></div>
+<div class="item-list">
+<a class="item" href="../roadmap/java20-23.html"><div class="icon l4">20–23</div><div class="info"><div class="title">Java 20–23 特性全景与可运行示例</div><div class="desc">Java 21 除并发外的全部特性：Record Patterns / PM switch 转正、Sequenced Collections、KEM、String Templates 预览（后撤回）、Unnamed Patterns/Classes 预览</div><div class="tags"><span class="tag">LTS</span><span class="tag">JEP 440/441</span><span class="tag">JEP 431</span><span class="tag">JEP 452</span></div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>📎 Related Lessons</h2><span class="badge support">PREREQUISITE</span></div>
+<div class="item-list">
+<a class="item" href="./0023-java12-index.html"><div class="icon l1">L0</div><div class="info"><div class="title">Java 12 索引（前一深度版本）</div><div class="desc">理解 12→21 之间预览特性如何一路转正（switch / records / 模式匹配）</div></div><div class="arrow">→</div></a>
+<a class="item" href="./0013-java11-http-client.html"><div class="icon l2">L0</div><div class="info"><div class="title">HTTP Client（Java 11）</div><div class="desc">虚拟线程最典型的搭档：同步阻塞 HTTP 调用直接获得高并发</div></div><div class="arrow">→</div></a>
+<a class="item" href="./0010-java10-thread-local-handshake.html"><div class="icon l3">L0</div><div class="info"><div class="title">Thread-Local Handshakes（Java 10）</div><div class="desc">per-thread 安全点机制是理解虚拟线程 per-thread 挂起/取消的底层前置</div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>📋 Supporting Documents</h2><span class="badge support">REFERENCE</span></div>
+<div class="item-list">
+<a class="item" href="../TOPIC-MAP.md"><div class="icon doc">🗺️</div><div class="info"><div class="title">知识地图 TOPIC-MAP</div><div class="desc">Java 21 并发三主线（虚拟线程 / 结构化并发 / ScopedValue）概念图谱</div></div><div class="arrow">→</div></a>
+<a class="item" href="../RESOURCES.md"><div class="icon doc">📚</div><div class="info"><div class="title">权威资源 RESOURCES</div><div class="desc">JEP 444 / 453 / 446 + Oracle Java 21 Core 官方文档链接</div></div><div class="arrow">→</div></a>
+<a class="item" href="../GLOSSARY.md"><div class="icon doc">📝</div><div class="info"><div class="title">术语表 GLOSSARY</div><div class="desc">virtual thread / carrier / pinning / structured concurrency / scoped value 等</div></div><div class="arrow">→</div></a>
+<a class="item" href="../common-misconceptions.md"><div class="icon doc">⚠️</div><div class="info"><div class="title">常见误区知识库</div><div class="desc">虚拟线程更快 / 池化虚拟线程 / synchronized 钉住的版本差异等 Java 21 易错点</div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="footer">
+<p>Generated by Deep Mastery Skill · OpenJDK 21（文档核对：Oracle Java 21 Core + openjdk.org/jeps/444·453·446，代码实测：本地 openjdk-25.0.1） · 中文</p>
+<p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
+</div>
+</div>
+</body>
+</html>

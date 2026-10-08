@@ -26,8 +26,8 @@
   </div>
 
   <div class="stats">
-    <div class="stat-card"><div class="number">20</div><div class="label">Lessons (L1–L5 + S1)</div></div>
-    <div class="stat-card"><div class="number">81</div><div class="label">Interview Questions</div></div>
+    <div class="stat-card"><div class="number">23</div><div class="label">Lessons (L1–L5 + S1)</div></div>
+    <div class="stat-card"><div class="number">99</div><div class="label">Interview Questions</div></div>
     <div class="stat-card"><div class="number">64</div><div class="label">Source Files Walked</div></div>
     <div class="stat-card"><div class="number">5</div><div class="label">Supporting Docs</div></div>
   </div>
@@ -78,6 +78,17 @@
       <div class="step"><div class="step-num">3</div><div class="step-title">L3: 源码</div><div class="step-desc">Flow·Lower / Collectors / g1CollectedHeap</div></div>
       <div class="step"><div class="step-num">4</div><div class="step-title">L4: 边界</div><div class="step-desc">预览开关 / GC 默认值 / 升级清单</div></div>
       <div class="step"><div class="step-num">5</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度追问链 + 伪代码题</div></div>
+    </div>
+  </div>
+
+  <!-- Java 21 Roadmap -->
+  <div class="roadmap">
+    <h2>📖 Java 21 并发专题学习路径（2023.09 · LTS · Project Loom）</h2>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-title">虚拟线程</div><div class="step-desc">JEP 444 转正 · M:N · carrier · pinning</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-title">结构化并发</div><div class="step-desc">JEP 453 预览 · fork/join · 短路取消</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-title">线程局部变量</div><div class="step-desc">ThreadLocal 缺陷 · ScopedValue(JEP 446)</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度 18 题追问链</div></div>
     </div>
   </div>
 
@@ -312,6 +323,48 @@
     </div>
   </div>
 
+  <!-- Java 21 Concurrency Lessons -->
+  <div class="section">
+    <div class="section-header"><h2>🎓 Java 21 Concurrency Lessons（Project Loom）</h2><span class="badge core">REQUIRED</span></div>
+    <div class="item-list">
+      <a class="item" href="./lessons/0024-java21-virtual-threads.html">
+        <div class="icon l1">L1</div>
+        <div class="info">
+          <div class="title">虚拟线程 — 百万并发的轻量级线程（JEP 444）</div>
+          <div class="desc">平台 vs 虚拟线程 · M:N 调度与 mount/unmount · carrier · pinning 与 JEP 491 · JFR / jcmd 观测 · 不要池化 · Semaphore 限流</div>
+          <div class="tags"><span class="tag">JEP 444</span><span class="tag">VirtualThread</span><span class="tag">Pinning</span><span class="tag">JFR</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0025-java21-structured-concurrency.html">
+        <div class="icon l2">L2</div>
+        <div class="info">
+          <div class="title">结构化并发 — 把一组子任务当作一个工作单元（JEP 453 · 预览）</div>
+          <div class="desc">StructuredTaskScope · fork/join 生命周期 · ShutdownOnFailure / ShutdownOnSuccess · 自定义策略 · 21→25 open(Joiner) 演进</div>
+          <div class="tags"><span class="tag">JEP 453</span><span class="tag">Preview</span><span class="tag">短路取消</span><span class="tag">线程泄漏</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0026-java21-thread-local-variables.html">
+        <div class="icon l3">L3</div>
+        <div class="info">
+          <div class="title">线程局部变量 — ThreadLocal 与三大设计缺陷</div>
+          <div class="desc">每线程副本机制 · InheritableThreadLocal 构造时拷贝 · 无约束可变 / 无界寿命 / 昂贵继承 · ScopedValue 继任者（JEP 446）</div>
+          <div class="tags"><span class="tag">ThreadLocal</span><span class="tag">InheritableThreadLocal</span><span class="tag">ScopedValue</span><span class="tag">JEP 446</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0027-java21-index.html">
+        <div class="icon doc">🗺️</div>
+        <div class="info">
+          <div class="title">Java 21 索引页</div>
+          <div class="desc">本版本 3 篇并发专题 + 题库的总导航（含其余语法特性指向 roadmap）</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
   <!-- Java 12–27 Roadmap -->
   <div class="section">
     <div class="section-header"><h2>🗺️ Java 12–27 特性全景 Roadmap</h2><span class="badge support">16 VERSIONS</span></div>
@@ -320,7 +373,7 @@
         <div class="icon l2">HUB</div>
         <div class="info">
           <div class="title">特性全景总览 — Java 12 → 27</div>
-          <div class="desc">16 个 JDK 的语法新特性与 API 增强逐版本清单，每条特性配完整可运行示例；虚拟线程 / 结构化并发留待后续专题</div>
+          <div class="desc">16 个 JDK 的语法新特性与 API 增强逐版本清单，每条特性配完整可运行示例；虚拟线程 / 结构化并发 / ScopedValue 的深度课件见上方 Java 21 并发专题</div>
           <div class="tags"><span class="tag">96 示例</span><span class="tag">JDK 25 实测</span><span class="tag">勘误对照</span></div>
         </div>
         <div class="arrow">→</div>
@@ -404,6 +457,15 @@
         </div>
         <div class="arrow">→</div>
       </a>
+      <a class="item" href="./interview/0005-java21-interview.html">
+        <div class="icon l5">L5</div>
+        <div class="info">
+          <div class="title">Java 21 并发专题面试题库（五角度 · 18 题）</div>
+          <div class="desc">虚拟线程 / 结构化并发 / ThreadLocal·ScopedValue · 五角度追问链 + 版本差异（21 synchronized pinning → JEP 491；SC 21→25 API）</div>
+          <div class="tags"><span class="tag">JEP 444</span><span class="tag">JEP 453</span><span class="tag">JEP 446</span><span class="tag">JDK 21 LTS</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
     </div>
   </div>
 
@@ -440,7 +502,7 @@
   </div>
 
   <div class="footer">
-    <p>Generated by Deep Mastery Skill · <code>OpenJDK 9-12</code> · 中文</p>
+    <p>Generated by Deep Mastery Skill · <code>OpenJDK 9-25</code> · 中文</p>
     <p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
   </div>
 

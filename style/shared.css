@@ -95,6 +95,15 @@ blockquote {
   font-size: 0.95em;
 }
 
+/* ---------- Figure Caption ---------- */
+.figure-caption {
+  margin: 12px 0 4px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+}
+
 /* ---------- Tables ---------- */
 table {
   border-collapse: collapse;

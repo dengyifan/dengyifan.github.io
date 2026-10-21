@@ -26,9 +26,9 @@
   </div>
 
   <div class="stats">
-    <div class="stat-card"><div class="number">10</div><div class="label">Lessons (L1–L4 + S1)</div></div>
-    <div class="stat-card"><div class="number">35</div><div class="label">Interview Questions</div></div>
-    <div class="stat-card"><div class="number">18</div><div class="label">Source Files Walked</div></div>
+    <div class="stat-card"><div class="number">23</div><div class="label">Lessons (L1–L5 + S1)</div></div>
+    <div class="stat-card"><div class="number">99</div><div class="label">Interview Questions</div></div>
+    <div class="stat-card"><div class="number">64</div><div class="label">Source Files Walked</div></div>
     <div class="stat-card"><div class="number">5</div><div class="label">Supporting Docs</div></div>
   </div>
 
@@ -54,6 +54,41 @@
       <div class="step"><div class="step-num">3</div><div class="step-title">L3: 源码</div><div class="step-desc">Infer.java / G1FullCollector</div></div>
       <div class="step"><div class="step-num">4</div><div class="step-title">L4: 边界</div><div class="step-desc">限制 / 坑 / trade-off</div></div>
       <div class="step"><div class="step-num">5</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度追问链</div></div>
+    </div>
+  </div>
+
+  <!-- Java 11 Roadmap -->
+  <div class="roadmap">
+    <h2>📖 Java 11 学习路径（2018.09 · LTS）</h2>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-title">L1: 概念</div><div class="step-desc">单文件运行 / Lambda var / HTTP Client</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-title">L2: 原理</div><div class="step-desc">模式判定 / 背压与默认值 / 着色指针</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-title">L3: 源码</div><div class="step-desc">SourceLauncher / zGlobals.hpp / String.java</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-title">L4: 边界</div><div class="step-desc">限制 / 坑 / 升级迁移清单</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度追问链 + 伪代码题</div></div>
+    </div>
+  </div>
+
+  <!-- Java 12 Roadmap -->
+  <div class="roadmap">
+    <h2>📖 Java 12 学习路径（2019.03 · 非 LTS）</h2>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-title">L1: 概念</div><div class="step-desc">8 个 JEP 全景 + 非 LTS 定位</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-title">L2: 原理</div><div class="step-desc">switch 穷尽性 / PairBox / 并发疏散</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-title">L3: 源码</div><div class="step-desc">Flow·Lower / Collectors / g1CollectedHeap</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-title">L4: 边界</div><div class="step-desc">预览开关 / GC 默认值 / 升级清单</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度追问链 + 伪代码题</div></div>
+    </div>
+  </div>
+
+  <!-- Java 21 Roadmap -->
+  <div class="roadmap">
+    <h2>📖 Java 21 并发专题学习路径（2023.09 · LTS · Project Loom）</h2>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-title">虚拟线程</div><div class="step-desc">JEP 444 转正 · M:N · carrier · pinning</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-title">结构化并发</div><div class="step-desc">JEP 453 预览 · fork/join · 短路取消</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-title">线程局部变量</div><div class="step-desc">ThreadLocal 缺陷 · ScopedValue(JEP 446)</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度 18 题追问链</div></div>
     </div>
   </div>
 
@@ -151,17 +186,231 @@
         <div class="icon l3">L4</div>
         <div class="info">
           <div class="title">G1 并行 Full GC</div>
-          <div class="desc">JEP 307 · G1FullCollector · 四阶段并行 · Mark-Sweep-Compact</div>
-          <div class="tags"><span class="tag">JEP 307</span><span class="tag">G1</span><span class="tag">STW</span></div>
+          <div class="desc">JEP 307 · G1FullCollector · 四阶段并行 · 交互式动画演示 Mark-Sweep-Compact</div>
+          <div class="tags"><span class="tag">JEP 307</span><span class="tag">G1</span><span class="tag">STW</span><span class="tag">动画</span></div>
         </div>
         <div class="arrow">→</div>
       </a>
-      <a class="item" href="./lessons/0010-java10-thread-local-handshake-gc.html">
+      <a class="item" href="./lessons/0010-java10-thread-local-handshake.html">
         <div class="icon l3">L5</div>
         <div class="info">
           <div class="title">Thread-Local Handshakes 与 GC 接口</div>
           <div class="desc">JEP 312 · JEP 304 · HandshakeState 信号量 · CollectedHeap 抽象</div>
           <div class="tags"><span class="tag">JEP 312</span><span class="tag">Safepoint</span><span class="tag">GC 接口</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Java 11 Core Lessons -->
+  <div class="section">
+    <div class="section-header"><h2>🎓 Java 11 Core Lessons</h2><span class="badge core">REQUIRED</span></div>
+    <div class="item-list">
+      <a class="item" href="./lessons/0012-java11-single-file-source.html">
+        <div class="icon l1">L1</div>
+        <div class="info">
+          <div class="title">单文件源码直接运行与 Lambda 参数 var</div>
+          <div class="desc">JEP 330 · JEP 323 · 模式判定伪代码 · SourceLauncher / MemoryFileManager 源码走读</div>
+          <div class="tags"><span class="tag">JEP 330</span><span class="tag">JEP 323</span><span class="tag">shebang</span><span class="tag">内存编译</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0013-java11-http-client.html">
+        <div class="icon l2">L2</div>
+        <div class="info">
+          <div class="title">HTTP Client 标准化 — java.net.http</div>
+          <div class="desc">JEP 321 · 同步/异步执行模型 · 四个必背默认值 · ofString 字符集真相</div>
+          <div class="tags"><span class="tag">JEP 321</span><span class="tag">Flow API</span><span class="tag">HTTP/2</span><span class="tag">WebSocket</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0014-java11-string-files-api.html">
+        <div class="icon l3">L3</div>
+        <div class="info">
+          <div class="title">String / Files / Collection API 增强</div>
+          <div class="desc">isBlank · strip 的 NBSP 陷阱 · lines 边界 · readString 内存风险 · toArray(IntFunction)</div>
+          <div class="tags"><span class="tag">String.java</span><span class="tag">Files.java</span><span class="tag">isWhitespace</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0015-java11-zgc-epsilon.html">
+        <div class="icon l4">L4</div>
+        <div class="info">
+          <div class="title">ZGC 与 Epsilon GC（实验性）</div>
+          <div class="desc">JEP 333 · JEP 318 · 着色指针与加载屏障伪代码 · zGlobals.hpp 位布局 · GC 选型</div>
+          <div class="tags"><span class="tag">JEP 333</span><span class="tag">JEP 318</span><span class="tag">Load Barrier</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0016-java11-jdk-slim-tls-nashorn.html">
+        <div class="icon l5">L5</div>
+        <div class="info">
+          <div class="title">JDK 瘦身 · TLS 1.3 · Nashorn 弃用</div>
+          <div class="desc">JEP 320 删除 9 个模块与 8 个工具 · 迁移坐标表 · JEP 332 · JEP 335</div>
+          <div class="tags"><span class="tag">JEP 320</span><span class="tag">JEP 332</span><span class="tag">JEP 335</span><span class="tag">升级清单</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0017-java11-index.html">
+        <div class="icon doc">🗺️</div>
+        <div class="info">
+          <div class="title">Java 11 索引页</div>
+          <div class="desc">本版本 5 篇课件 + 题库的总导航（前置依赖：Java 9 JPMS / Java 10 GC 接口）</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Java 12 Core Lessons -->
+  <div class="section">
+    <div class="section-header"><h2>🎓 Java 12 Core Lessons</h2><span class="badge core">REQUIRED</span></div>
+    <div class="item-list">
+      <a class="item" href="./lessons/0018-java12-switch-expressions.html">
+        <div class="icon l1">L1</div>
+        <div class="info">
+          <div class="title">Switch 表达式（JEP 325 · 预览）</div>
+          <div class="desc">case L -&gt; 箭头标签 · Java 12 用 break 产值（13 才改 yield）· 穷尽性校验 · Attr→Flow→Lower 源码走读</div>
+          <div class="tags"><span class="tag">JEP 325</span><span class="tag">Preview</span><span class="tag">Flow.java</span><span class="tag">Lower.java</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0019-java12-api-enhancements.html">
+        <div class="icon l2">L2</div>
+        <div class="info">
+          <div class="title">类库 API 增强 — teeing · 紧凑数字 · String</div>
+          <div class="desc">Collectors.teeing 的 PairBox 双下游模型 · Compact Number Formatting · String.indent/transform · Unicode 11 与令和</div>
+          <div class="tags"><span class="tag">Collectors.java</span><span class="tag">NumberFormat</span><span class="tag">String.java</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0020-java12-constants-api.html">
+        <div class="icon l3">L3</div>
+        <div class="info">
+          <div class="title">JVM 常量 API（JEP 334）</div>
+          <div class="desc">ConstantDesc / Constable 双协议 · describeConstable → resolveConstantDesc · 与 JEP 309（JDK 11 CONDY）的关系</div>
+          <div class="tags"><span class="tag">JEP 334</span><span class="tag">java.lang.constant</span><span class="tag">CONSTANT_Dynamic</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0021-java12-gc.html">
+        <div class="icon l4">L4</div>
+        <div class="info">
+          <div class="title">Shenandoah · G1 可中断混合回收 · 默认 CDS</div>
+          <div class="desc">JEP 189 Brooks 指针并发疏散 · JEP 344 mandatory/optional 回收集 · JEP 346 周期 GC 归还内存（默认关闭）· JEP 341 构建期默认 classes.jsa</div>
+          <div class="tags"><span class="tag">JEP 189</span><span class="tag">JEP 344</span><span class="tag">JEP 346</span><span class="tag">JEP 341</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0022-java12-toolchain.html">
+        <div class="icon l5">L5</div>
+        <div class="info">
+          <div class="title">工具链与平台 — JMH 套件 · 单一 AArch64 端口</div>
+          <div class="desc">JEP 230 test/micro 与 build-microbenchmark · JEP 340 删 arm64 变体 · 预览特性工作流 · 非 LTS 升级三档策略</div>
+          <div class="tags"><span class="tag">JEP 230</span><span class="tag">JEP 340</span><span class="tag">JMH</span><span class="tag">aarch64</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0023-java12-index.html">
+        <div class="icon doc">🗺️</div>
+        <div class="info">
+          <div class="title">Java 12 索引页</div>
+          <div class="desc">本版本 5 篇课件 + 题库的总导航（前置依赖：Java 11 LTS / Java 10 G1·CDS）</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Java 21 Concurrency Lessons -->
+  <div class="section">
+    <div class="section-header"><h2>🎓 Java 21 Concurrency Lessons（Project Loom）</h2><span class="badge core">REQUIRED</span></div>
+    <div class="item-list">
+      <a class="item" href="./lessons/0024-java21-virtual-threads.html">
+        <div class="icon l1">L1</div>
+        <div class="info">
+          <div class="title">虚拟线程 — 百万并发的轻量级线程（JEP 444）</div>
+          <div class="desc">平台 vs 虚拟线程 · M:N 调度与 mount/unmount · carrier · pinning 与 JEP 491 · JFR / jcmd 观测 · 不要池化 · Semaphore 限流</div>
+          <div class="tags"><span class="tag">JEP 444</span><span class="tag">VirtualThread</span><span class="tag">Pinning</span><span class="tag">JFR</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0025-java21-structured-concurrency.html">
+        <div class="icon l2">L2</div>
+        <div class="info">
+          <div class="title">结构化并发 — 把一组子任务当作一个工作单元（JEP 453 · 预览）</div>
+          <div class="desc">StructuredTaskScope · fork/join 生命周期 · ShutdownOnFailure / ShutdownOnSuccess · 自定义策略 · 21→25 open(Joiner) 演进</div>
+          <div class="tags"><span class="tag">JEP 453</span><span class="tag">Preview</span><span class="tag">短路取消</span><span class="tag">线程泄漏</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0026-java21-thread-local-variables.html">
+        <div class="icon l3">L3</div>
+        <div class="info">
+          <div class="title">线程局部变量 — ThreadLocal 与三大设计缺陷</div>
+          <div class="desc">每线程副本机制 · InheritableThreadLocal 构造时拷贝 · 无约束可变 / 无界寿命 / 昂贵继承 · ScopedValue 继任者（JEP 446）</div>
+          <div class="tags"><span class="tag">ThreadLocal</span><span class="tag">InheritableThreadLocal</span><span class="tag">ScopedValue</span><span class="tag">JEP 446</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./lessons/0027-java21-index.html">
+        <div class="icon doc">🗺️</div>
+        <div class="info">
+          <div class="title">Java 21 索引页</div>
+          <div class="desc">本版本 3 篇并发专题 + 题库的总导航（含其余语法特性指向 roadmap）</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Java 12–27 Roadmap -->
+  <div class="section">
+    <div class="section-header"><h2>🗺️ Java 12–27 特性全景 Roadmap</h2><span class="badge support">16 VERSIONS</span></div>
+    <div class="item-list">
+      <a class="item" href="./roadmap/index.html">
+        <div class="icon l2">HUB</div>
+        <div class="info">
+          <div class="title">特性全景总览 — Java 12 → 27</div>
+          <div class="desc">16 个 JDK 的语法新特性与 API 增强逐版本清单，每条特性配完整可运行示例；虚拟线程 / 结构化并发 / ScopedValue 的深度课件见上方 Java 21 并发专题</div>
+          <div class="tags"><span class="tag">96 示例</span><span class="tag">JDK 25 实测</span><span class="tag">勘误对照</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./roadmap/java12-15.html">
+        <div class="icon l1">12–15</div>
+        <div class="info">
+          <div class="title">Java 12–15 — 预览时代（2019–2020）</div>
+          <div class="desc">Switch 表达式 · Text Blocks · Records · instanceof 模式 · Helpful NPE · teeing / 紧凑数字 / indent / 常量 API · 隐藏类</div>
+          <div class="tags"><span class="tag">31 示例</span><span class="tag">JEP 325</span><span class="tag">JEP 349</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./roadmap/java16-19.html">
+        <div class="icon l2">16–19</div>
+        <div class="info">
+          <div class="title">Java 16–19 — 正式化浪潮（2021–2022）</div>
+          <div class="desc">Records / Sealed / instanceof 模式转正 · when 守卫与 Record Patterns 预览 · HexFormat · UTF-8 默认字符集 · jwebserver · Unix-Domain Socket</div>
+          <div class="tags"><span class="tag">22 示例</span><span class="tag">JDK 17 LTS</span><span class="tag">FFM 演进</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./roadmap/java20-23.html">
+        <div class="icon l3">20–23</div>
+        <div class="info">
+          <div class="title">Java 20–23 — 模式匹配收官（2023–2024）</div>
+          <div class="desc">PM switch 正式 · Sequenced Collections · KEM 后量子 · String Templates 撤回 · Gatherers · Class-File API · FFM 正式 · Module Import</div>
+          <div class="tags"><span class="tag">26 示例</span><span class="tag">JDK 21 LTS</span><span class="tag">JEP 430 撤回</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./roadmap/java24-27.html">
+        <div class="icon l4">24–27</div>
+        <div class="info">
+          <div class="title">Java 24–27 — 后量子与常量纪元（2025–2026）</div>
+          <div class="desc">ML-DSA / ML-KEM 交付 · Gatherers 与 Class-File API 转正 · Compact Source Files · KDF / StableValue / PEM · Lazy Constants · 26/27 标注未实测</div>
+          <div class="tags"><span class="tag">17 示例</span><span class="tag">JDK 25 LTS</span><span class="tag">PQC</span></div>
         </div>
         <div class="arrow">→</div>
       </a>
@@ -190,6 +439,33 @@
         </div>
         <div class="arrow">→</div>
       </a>
+      <a class="item" href="./interview/0003-java11-interview.html">
+        <div class="icon l5">L7</div>
+        <div class="info">
+          <div class="title">Java 11 面试题库（五角度 · 22 题）</div>
+          <div class="desc">JEP 330 / 321 / 320 / 333 + String·Files·toArray · 五角度追问链 + 四段伪代码</div>
+          <div class="tags"><span class="tag">SourceLauncher</span><span class="tag">HTTP Client</span><span class="tag">ZGC</span><span class="tag">JEP 320</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./interview/0004-java12-interview.html">
+        <div class="icon l5">L8</div>
+        <div class="info">
+          <div class="title">Java 12 面试题库（五角度 · 24 题）</div>
+          <div class="desc">Switch 预览 / teeing / 常量 API / Shenandoah·G1·CDS / JMH·AArch64 · 五角度追问链 + 伪代码</div>
+          <div class="tags"><span class="tag">JEP 325</span><span class="tag">JEP 334</span><span class="tag">JEP 189</span><span class="tag">G1 344/346</span><span class="tag">非 LTS</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
+      <a class="item" href="./interview/0005-java21-interview.html">
+        <div class="icon l5">L5</div>
+        <div class="info">
+          <div class="title">Java 21 并发专题面试题库（五角度 · 18 题）</div>
+          <div class="desc">虚拟线程 / 结构化并发 / ThreadLocal·ScopedValue · 五角度追问链 + 版本差异（21 synchronized pinning → JEP 491；SC 21→25 API）</div>
+          <div class="tags"><span class="tag">JEP 444</span><span class="tag">JEP 453</span><span class="tag">JEP 446</span><span class="tag">JDK 21 LTS</span></div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
     </div>
   </div>
 
@@ -199,7 +475,7 @@
     <div class="item-list">
       <a class="item" href="./TOPIC-MAP.md">
         <div class="icon doc">📖</div>
-        <div class="info"><div class="title">TOPIC-MAP.md</div><div class="desc">知识地图：Java 9-10 概念图谱与优先级</div></div>
+        <div class="info"><div class="title">TOPIC-MAP.md</div><div class="desc">知识地图：Java 9-12 概念图谱与优先级</div></div>
         <div class="arrow">→</div>
       </a>
       <a class="item" href="./RESOURCES.md">
@@ -226,7 +502,7 @@
   </div>
 
   <div class="footer">
-    <p>Generated by Deep Mastery Skill · <code>OpenJDK 9-10</code> · 中文</p>
+    <p>Generated by Deep Mastery Skill · <code>OpenJDK 9-25</code> · 中文</p>
     <p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
   </div>
 

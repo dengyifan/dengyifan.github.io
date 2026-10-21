@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 20–23 特性全景与示例 · Java 12–27</title>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12–27 特性全景 · Java 20–23</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Java 20–23 特性全景与可运行示例</h1>
+<div class="article-meta"><span>📚 4 个版本 · 逐条示例</span><span>🔬 JDK 25 实测（openjdk-25.0.1）</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / <a href="./index.html">Java 12–27 特性全景</a> / Java 20–23</div>
+
+<div class="info">
+<div class="info-title">本章怎么读 · 实测口径</div>
+<p>本章按版本逐条覆盖 <strong>语法新特性 + API 增强</strong>，每条都给示例。每版本先看「特性清单」表，再看逐条示例。状态图例：<strong>✅ 已实测</strong>（JDK 25 编译+运行，代码尾部注释即真实输出）；<strong>⚠️ 需 <code>--enable-preview --release 25</code></strong>（已实测；javac 用这两个开关，运行时 <code>java</code> 只认 <code>--enable-preview</code>，它不支持 <code>--release</code>）；<strong>❌ 未实测</strong>（特性已撤回 / 对应 API 已从 JDK 移除 / 孵化期写法无法在 25 复现）。<br/>
+三个约定：① <strong>虚拟线程、结构化并发不在本章范围</strong>（20–25 均涉及）——已交付为独立深度专题：<a href="../lessons/0024-java21-virtual-threads.html">虚拟线程</a> / <a href="../lessons/0025-java21-structured-concurrency.html">结构化并发</a> / <a href="../lessons/0026-java21-thread-local-variables.html">线程局部变量</a>；② 示例除特别标注外均在本机 <code>openjdk-25.0.1</code> 验证——「当年的预览写法」若与 25 现行语法冲突，会同时给出 <strong>版本忠实写法（❌）</strong> 与 <strong>25 等价写法（✅）</strong>；③ 史实冲突一律以 <code>openjdk.org/jeps</code> 与 JDK 源码为准，页面就地加<strong>勘误注</strong>。</p>
+</div>
+
+<h2>Java 20（2023-03-21 · 非 LTS）</h2>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（20 时点）</th><th>示例</th></tr>
+<tr><td>语法</td><td>Record Patterns 第二次预览（JEP 432）</td><td>预览</td><td>20.1</td></tr>
+<tr><td>语法</td><td>Pattern Matching for switch 第四次预览（JEP 433）</td><td>预览</td><td>20.2</td></tr>
+<tr><td>并发</td><td>Virtual Threads 第二次预览（JEP 436）、Structured Concurrency 第二次孵化（JEP 437）</td><td><a href="../lessons/0024-java21-virtual-threads.html">并发专题</a></td><td>—</td></tr>
+<tr><td>API</td><td>Scoped Values（Incubator，JEP 429）</td><td>孵化</td><td>20.3</td></tr>
+<tr><td>API</td><td>Foreign Function &amp; Memory API 第二次预览（JEP 434）</td><td>预览</td><td>20.4</td></tr>
+</table>
+
+<h3>20.1 Record Patterns（JEP 432 · 第二次预览）</h3>
+<p>把 <code>record</code> 的组件直接解构成模式变量：既能用在 <code>instanceof</code> 后，也能当 <code>switch</code> 的 <code>case</code> 标签，支持嵌套解构与 <code>var</code>。19 首次预览（JEP 405），20 第二次预览，21（JEP 440）转正——所以 25 上<strong>免预览开关</strong>。</p>
+<pre><code data-run="1" data-name="RP20">import java.util.List;
+public class RP20 {
+  record Point(int x, int y) {}
+  record Box(Point p, String tag) {}
+  static String describe(Object o) {
+    if (o instanceof Point(var x, var y)) return "P(" + x + "," + y + ")";
+    if (o instanceof Box(Point(var x, var y), var tag)) return "B(" + x + "," + y + "," + tag + ")";
+    return "?";
+  }
+  public static void main(String[] a) {
+    var box = new Box(new Point(3, 4), "crate");
+    System.out.println(describe(new Point(1, 2)));
+    System.out.println(describe(box));
+    System.out.println(describe(List.of(1)));
+    String s = switch (box) {
+      case Box(Point(var x, var y), var t) when x == y -&gt; "square " + t;
+      default -&gt; "other";
+    };
+    System.out.println(s);
+  }
+}
+// 运行输出：
+// P(1,2)
+// B(3,4,crate)
+// ?
+// other</code></pre>
+<p>✅ 实测通过（JDK 25）。要点：组件可以用 <code>var</code>（类型由组件推断），可以只解构需要的组件；解构不匹配（如把 <code>List</code> 交给 <code>Box(...)</code>）就落到下一个分支，这正是「模式」与强转的区别。</p>
+
+<h3>20.2 Pattern Matching for switch 第四次预览（JEP 433）</h3>
+<p>17 首次预览（JEP 406）→ 18（420）→ 19（427）→ 20 第四次（433）→ 21 转正（JEP 441）。这一版把<strong>类型模式、守卫 <code>when</code>、<code>null</code> 显式标签、穷尽性检查</strong>四件事定型。</p>
+<pre><code data-run="1" data-name="PMSW20">public class PMSW20 {
+  static String label(Object o) {
+    return switch (o) {
+      case null -&gt; "null";
+      case String s when s.length() &gt; 3 -&gt; "long:" + s;
+      case String s -&gt; "str:" + s;
+      case Integer i when i % 2 == 0 -&gt; "even:" + i;
+      case Integer i -&gt; "odd:" + i;
+      default -&gt; "other";
+    };
+  }
+  public static void main(String[] a) {
+    System.out.println(label(null));
+    System.out.println(label("hello"));
+    System.out.println(label("hi"));
+    System.out.println(label(4));
+    System.out.println(label(7));
+    System.out.println(label(3.14));
+  }
+}
+// 运行输出：
+// null
+// long:hello
+// str:hi
+// even:4
+// odd:7
+// other</code></pre>
+<p>✅ 实测通过（JDK 25）。要点：<code>case null</code> 必须显式写，否则 <code>null</code> 会直接 NPE；守卫 <code>when</code> 只做筛选，不绑定变量；同类型标签按书写顺序匹配，先写带守卫的。</p>
+
+<h3>20.3 Scoped Values（JEP 429 · 孵化）</h3>
+<p>用「不可变 + 作用域绑定」替代 <code>ThreadLocal</code>：写一次、只在 <code>where(...).run(...)</code> 的动态范围内可读、出了作用域自动失效——专为海量虚拟线程设计（不随线程泄漏、无 <code>set</code> 乱改）。</p>
+<pre><code>// ❌ 未实测：JDK 20 孵化写法（JEP 429 · 孵化模块 jdk.incubator.concurrent）
+// 需 javac/java --add-modules jdk.incubator.concurrent；该孵化模块已从 JDK 25 移除
+import jdk.incubator.concurrent.ScopedValue;
+
+final static ScopedValue&lt;String&gt; WHO = ScopedValue.newInstance();
+
+ScopedValue.where(WHO, "main-thread").run(() -&gt; {
+    System.out.println(WHO.get());   // 只在 run(...) 的作用域内可读
+});
+// 形态取自 JEP 429 正文（newInstance / where / run / get），与 25 正式 API 同形</code></pre>
+<p>25 的等价正式写法（JEP 446 在 21 转为预览 → JEP 506 在 25 转正，<code>java.lang.ScopedValue</code>）：</p>
+<pre><code data-run="1" data-name="SV20">public class SV20 {
+  static final ScopedValue&lt;String&gt; WHO = ScopedValue.newInstance();
+  public static void main(String[] a) {
+    ScopedValue.where(WHO, "main-thread").run(() -&gt; {
+      System.out.println("inside=" + WHO.get());
+      try {
+        Thread t = new Thread(() -&gt; System.out.println("child=" + (WHO.isBound() ? WHO.get() : "unbound")));
+        t.start();
+        t.join();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+    });
+    System.out.println("after=" + WHO.isBound());
+  }
+}
+// 运行输出：
+// inside=main-thread
+// child=unbound
+// after=false</code></pre>
+<p>✅ 实测通过（JDK 25，免预览）。注意输出里的 <code>child=unbound</code>：<strong>裸 <code>new Thread()</code> 不继承绑定</strong>，绑定只在当前线程的动态作用域里（要跨线程传递得配合结构化并发的子任务——见 <a href="../lessons/0025-java21-structured-concurrency.html">结构化并发</a> 与 <a href="../lessons/0026-java21-thread-local-variables.html">线程局部变量</a> 两课）。作用域一结束 <code>isBound()</code> 立刻变回 <code>false</code>。</p>
+
+<h3>20.4 Foreign Function &amp; Memory API 第二次预览（JEP 434）</h3>
+<pre><code>// ❌ 未实测：JDK 20 是预览 API（JEP 434，第二次预览），关键形态：
+//   try (var session = MemorySession.open()) {            // 会话作用域
+//       var seg = MemorySegment.allocate(16, session);    // 在会话内分配原生/堆内存
+//       seg.set(ValueLayout.JAVA_INT, 0, 42);
+//   }
+// 演进：17 孵化(JEP 412) → 18 孵化(419) → 19 预览(424) → 20 预览(434)
+//       → 21 预览(442，MemorySession 被 Arena 取代) → 22 转正(454)
+// JDK 25 已无 MemorySession，可运行的等价写法见下（14.7 的 Arena 版 mmap 同族）。</code></pre>
+<pre><code data-run="1" data-name="FFM20">import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
+public class FFM20 {
+  public static void main(String[] a) {
+    try (var arena = Arena.ofConfined()) {
+      MemorySegment seg = arena.allocate(16);
+      seg.set(ValueLayout.JAVA_INT, 0, 42);
+      seg.set(ValueLayout.JAVA_INT, 4, 58);
+      System.out.println(seg.get(ValueLayout.JAVA_INT, 0) + "/" + seg.get(ValueLayout.JAVA_INT, 4));
+      System.out.println(seg.get(ValueLayout.JAVA_BYTE, 0) == 42);
+    }
+  }
+}
+// 运行输出：
+// 42/58
+// true</code></pre>
+<p>✅ 实测通过（JDK 25；FFM 自 22/JEP 454 转正进 <code>java.base</code>，免预览）。<code>Arena.ofConfined()</code> 是「单线程作用域」：try 结束即释放整块内存——这就是它替代 <code>free()</code> 的方式。</p>
+
+<h2>Java 21（LTS · 2023-09-19）</h2>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（21 时点）</th><th>示例</th></tr>
+<tr><td>语法</td><td>Record Patterns <strong>转正</strong>（JEP 440）</td><td>正式</td><td>21.1</td></tr>
+<tr><td>语法</td><td>Pattern Matching for switch <strong>转正</strong>（JEP 441）</td><td>正式</td><td>21.2</td></tr>
+<tr><td>语法</td><td>String Templates（JEP 430）</td><td>预览（后被撤回）</td><td>21.3</td></tr>
+<tr><td>语法</td><td>Unnamed Patterns and Variables（JEP 443）</td><td>预览</td><td>21.4</td></tr>
+<tr><td>语法</td><td>Unnamed Classes and Instance Main Methods（JEP 445）</td><td>预览</td><td>21.5</td></tr>
+<tr><td>API</td><td>Sequenced Collections（JEP 431）</td><td>正式</td><td>21.6</td></tr>
+<tr><td>API</td><td>Scoped Values（JEP 446）</td><td>预览</td><td>21.7</td></tr>
+<tr><td>API</td><td>Key Encapsulation Mechanism API（JEP 452）</td><td>正式</td><td>21.8</td></tr>
+<tr><td>API</td><td><code>StringBuilder</code>/<code>StringBuffer</code> 的 <code>repeat</code> 增强（源码 @since 21，无独立 JEP）</td><td>正式</td><td>21.9</td></tr>
+<tr><td>并发</td><td>Virtual Threads 转正（JEP 444）、Structured Concurrency 预览（JEP 453）</td><td><a href="../lessons/0027-java21-index.html">并发专题</a></td><td>—</td></tr>
+</table>
+
+<h3>21.1 Record Patterns 转正（JEP 440）</h3>
+<p>20 的预览在 21 定稿：嵌套 record、<code>var</code>、组件类型推断全部保留，语法不再变化。</p>
+<pre><code data-run="1" data-name="RP21">public class RP21 {
+  record Point(int x, int y) {}
+  record Segment(Point from, Point to) {}
+  static String show(Object o) {
+    return switch (o) {
+      case Segment(Point(var x1, var y1), Point(var x2, var y2))
+          when x1 == x2 -&gt; "vertical x=" + x1;
+      case Segment(Point(var x1, var y1), Point(var x2, var y2))
+          when y1 == y2 -&gt; "horizontal y=" + y1;
+      case Point(var x, var y) -&gt; "point " + x + "," + y;
+      case null -&gt; "nothing";
+      default -&gt; "unknown";
+    };
+  }
+  public static void main(String[] a) {
+    System.out.println(show(new Segment(new Point(2, 1), new Point(2, 9))));
+    System.out.println(show(new Segment(new Point(1, 5), new Point(7, 5))));
+    System.out.println(show(new Point(4, 4)));
+    System.out.println(show(null));
+  }
+}
+// 运行输出：
+// vertical x=2
+// horizontal y=5
+// point 4,4
+// nothing</code></pre>
+<p>✅ 实测通过（JDK 25）。深度嵌套（<code>Segment(Point(...), Point(...))</code>）一次解构到底；两个 <code>when</code> 守卫的分支不命中时，会继续往下试 <code>case Point(...)</code>。</p>
+
+<h3>21.2 Pattern Matching for switch 转正（JEP 441）</h3>
+<p>与 Record Patterns 同批转正。三条硬规则：<code>null</code> 必须显式建模；带守卫的分支写在裸类型分支之前；对 <code>sealed</code> 类型可以省略 <code>default</code>（编译器做穷尽性检查）。</p>
+<pre><code data-run="1" data-name="SW21">public class SW21 {
+  sealed interface Shape permits Circle, Rect {}
+  record Circle(double r) implements Shape {}
+  record Rect(double w, double h) implements Shape {}
+  static String describe(Object o) {
+    return switch (o) {
+      case Shape s when s instanceof Circle c &amp;&amp; c.r() &gt; 10 -&gt; "big circle " + c.r();
+      case Circle c -&gt; "circle " + c.r();
+      case Rect r when r.w() == r.h() -&gt; "square " + r.w();
+      case Rect r -&gt; "rect " + r.w() + "x" + r.h();
+      case Integer i when i &gt; 0 -&gt; "count " + i;
+      case null -&gt; "empty";
+      default -&gt; "other";
+    };
+  }
+  public static void main(String[] a) {
+    System.out.println(describe(new Circle(12.0)));
+    System.out.println(describe(new Circle(3.0)));
+    System.out.println(describe(new Rect(4, 4)));
+    System.out.println(describe(new Rect(4, 5)));
+    System.out.println(describe(7));
+    System.out.println(describe(null));
+    System.out.println(describe("x"));
+  }
+}
+// 运行输出：
+// big circle 12.0
+// circle 3.0
+// square 4.0
+// rect 4.0x5.0
+// count 7
+// empty
+// other</code></pre>
+<p>✅ 实测通过（JDK 25）。注意第一行：<code>case Shape s when s instanceof Circle c &amp;&amp; ...</code> 这种「守卫里再做模式匹配」是 21 之后才顺畅的写法——守卫内的模式变量只在守卫为真时可见。</p>
+
+<h3>21.3 String Templates（JEP 430 · 预览 → 23 撤回）</h3>
+<p>当年的卖点：把 <code>STR."... \{expr}"</code> 这种「模板字面量」交给处理器做插值/校验，替代手写 <code>+</code> 拼接与 <code>String.format</code>。它先在 21 预览（JEP 430）、22 二次预览（JEP 459），<strong>23 的第三次预览 JEP 465 被列为 Withdrawn</strong>，此后彻底移除。</p>
+<pre><code>// ❌ 未实测：JDK 21/22 预览写法（JEP 430 / JEP 459）
+// JDK 25 已撤回该特性：STR 模板处理器不存在，这段代码在 25 上 javac 直接报
+// 「错误: 非法转义符」（指向 \{），因此无法在本机实测。
+public class StrTpl21 {
+  public static void main(String[] a) {
+    String name = "world";
+    int x = 40;
+    String s1 = STR."Hello \{name}!";      // 字符串插值
+    String s2 = STR."x = \{x}";
+    System.out.println(s1 + " / " + s2);
+  }
+}
+// 若在 JDK 21/22 开启 --enable-preview 编译运行，预期输出（未实测）：
+// Hello world! / x = 40
+// 现代等价写法（25 可跑）：System.out.println("Hello " + name + "! / x = " + x);</code></pre>
+<p>❌ 未实测（特性已撤回）。本机实测：<code>javac</code> 对 <code>STR."... \{x}"</code> 报「非法转义符」，可佐证 25 语法层已不认识模板字面量。</p>
+
+<h3>21.4 Unnamed Patterns and Variables（JEP 443 · 预览）</h3>
+<p>给「我只需要它存在、不需要它的值」的位置一个统一的下划线：<code>var _</code>、资源变量、增强 for 的循环变量、解构后不用的组件、lambda 形参。21 预览，22（JEP 456）转正。</p>
+<pre><code data-run="1" data-name="UNM21">import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+public class UNM21 {
+  record Box(String tag) {}
+  public static void main(String[] a) throws Exception {
+    var _ = new Object();                       // 未命名变量：只为触发资源/顺序语义
+    int used = 0;
+    for (String _ : List.of("a", "b", "c")) used++;
+    System.out.println("loop=" + used);
+
+    Path p = Files.createTempFile("unm", ".txt");
+    try (var _ = Files.newBufferedReader(p)) {  // 未命名资源变量：关了就行，不引用
+      System.out.println("opened");
+    }
+    Files.deleteIfExists(p);
+
+    Object o = new Box("crate");
+    String s = switch (o) {
+      case Box(String _) -&gt; "named box";        // 未命名模式：解构但不使用
+      default -&gt; "other";
+    };
+    System.out.println(s);
+  }
+}
+// 运行输出：
+// loop=3
+// opened
+// named box</code></pre>
+<p>✅ 实测通过（JDK 25，22 起免预览）。与匿名占位名（<code>ignored</code>、<code>tmp</code>）的区别：<code>_</code> 是语言关键字，编译器知道你<strong>故意</strong>不用，能顺带消除「未使用变量」告警。</p>
+
+<h3>21.5 Unnamed Classes and Instance Main Methods（JEP 445 · 预览）</h3>
+<p>单文件小程序不必再写 <code>public class X</code> + <code>static void main</code>：顶层写 <code>void main()</code> 即可，编译器生成未命名类。后续几次预览里它一路改名：22/23「Implicitly Declared Classes」→ 24「Simple Source Files」（JEP 495）→ 25「Compact Source Files and Instance Main Methods」（JEP 512，<strong>正式</strong>）。</p>
+<pre><code data-run="1" data-name="UCL21">void main(String... args) {
+  String who = "Java 21";
+  System.out.println("unnamed class in " + who);
+  System.out.println("args=" + args.length);
+}
+// 运行输出：
+// unnamed class in Java 21
+// args=0</code></pre>
+<p>✅ 实测通过（JDK 25；21 当年需 <code>--enable-preview --release 21</code>，25 已是正式特性）。<code>main</code> 是实例方法，所以可以自然地调用同文件里的其它方法与字段；<code>args</code> 由启动器注入。</p>
+
+<h3>21.6 Sequenced Collections（JEP 431）</h3>
+<p>给所有「有顺序的集合」统一一套端点操作：新接口 <code>SequencedCollection</code>（List/Deque 继承）、<code>SequencedSet</code>、<code>SequencedMap</code>，并补齐 <code>getFirst/getLast/addFirst/addLast/removeFirst/removeLast/reversed</code>。</p>
+<pre><code data-run="1" data-name="SEQ21">import java.util.ArrayDeque;
+import java.util.List;
+import java.util.SequencedCollection;
+public class SEQ21 {
+  public static void main(String[] a) {
+    List&lt;String&gt; list = List.of("a", "b", "c");
+    System.out.println(list.getFirst() + " " + list.getLast());
+    System.out.println(list.reversed());
+    System.out.println(list.reversed().getFirst());
+
+    ArrayDeque&lt;String&gt; dq = new ArrayDeque&lt;&gt;(List.of("x", "y"));
+    dq.addFirst("z");
+    dq.addLast("w");
+    System.out.println(dq);
+    System.out.println(dq.removeFirst() + "/" + dq.removeLast());
+
+    SequencedCollection&lt;String&gt; sc = new ArrayDeque&lt;&gt;(List.of("p", "q"));
+    System.out.println(sc.getFirst() + " " + sc.getLast());
+  }
+}
+// 运行输出：
+// a c
+// [c, b, a]
+// c
+// [z, x, y, w]
+// z/w
+// p q</code></pre>
+<p>✅ 实测通过（JDK 25）。实测确认：<code>List.of(...)</code> 虽然<strong>不可变</strong>，但 <code>getFirst/getLast/reversed</code> 属于接口默认方法，照样可用；<code>reversed()</code> 返回的是<strong>视图</strong>（改视图等于改原集合，对不可变集合只是读）。</p>
+
+<h3>21.7 Scoped Values（JEP 446 · 预览）</h3>
+<p>从 20 的孵化模块搬进 <code>java.lang</code> 变成预览 API。25 形态：<code>where(...).run(...)</code> 执行不求值、<code>where(...).call(...)</code> 执行并返回结果，读取用 <code>get()</code>，判断用 <code>isBound()</code>。</p>
+<pre><code data-run="1" data-name="SV21">public class SV21 {
+  static final ScopedValue&lt;String&gt; USER = ScopedValue.newInstance();
+  static String read() {
+    return USER.isBound() ? USER.get() : "unbound";
+  }
+  public static void main(String[] a) throws Exception {
+    String v = ScopedValue.where(USER, "alice").call(SV21::read);
+    System.out.println("call=" + v);
+    ScopedValue.where(USER, "bob").run(() -&gt; System.out.println("run=" + read()));
+    System.out.println("after=" + read());
+  }
+}
+// 运行输出：
+// call=alice
+// run=bob
+// after=unbound</code></pre>
+<p>✅ 实测通过（JDK 25，免预览——JEP 506 已在 25 转正）。<code>call</code> 的返回值直接拿到、嵌套绑定只在内层可见，是它比 <code>ThreadLocal</code> 好用的两个关键点。</p>
+
+<h3>21.8 Key Encapsulation Mechanism API（JEP 452）</h3>
+<p>把「后量子密钥封装」（ML-KEM）纳入标准 API：<code>javax.crypto.KEM</code> 统一了封装端/解封装端的三步流程，底层算法由 provider 提供。</p>
+<pre><code data-run="1" data-name="KEM21">import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.util.Arrays;
+import javax.crypto.KEM;
+import javax.crypto.SecretKey;
+public class KEM21 {
+  public static void main(String[] a) throws Exception {
+    KEM kem = KEM.getInstance("ML-KEM");
+    KeyPairGenerator kpg = KeyPairGenerator.getInstance("ML-KEM");
+    KeyPair kp = kpg.generateKeyPair();
+
+    KEM.Encapsulated enc = kem.newEncapsulator(kp.getPublic()).encapsulate();
+    SecretKey senderKey = enc.key();
+    byte[] ct = enc.encapsulation();
+
+    SecretKey receiverKey = kem.newDecapsulator(kp.getPrivate()).decapsulate(ct);
+    boolean same = Arrays.equals(senderKey.getEncoded(), receiverKey.getEncoded());
+    System.out.println("kem=" + kem.getAlgorithm());
+    System.out.println("ctLen=" + ct.length + " keyLen=" + senderKey.getEncoded().length);
+    System.out.println("sharedEqual=" + same);
+  }
+}
+// 运行输出：
+// kem=ML-KEM
+// ctLen=1088 keyLen=32
+// sharedEqual=true</code></pre>
+<p>✅ 实测通过（JDK 25）。要点与坑：生成端调用的是 <code>encapsulate()</code>（<strong>不是</strong> <code>generateEncapsulation()</code>）；返回对象是 <code>KEM.Encapsulated</code>，取密钥用 <code>.key()</code>、取密文用 <code>.encapsulation()</code>（<strong>不是</strong> <code>secretKey()</code>）；两边算出的 <code>getEncoded()</code> 逐字节相等即共享密钥成立。实测 <code>getInstance("X25519")/"DH"/"RSA"</code> 在本机 JDK 25 上取不到（算法名以 provider 列表为准，本机可用的是 <code>ML-KEM</code>）。</p>
+
+<h3>21.9 StringBuilder / StringBuffer 的 repeat 增强</h3>
+<div class="warning">
+<div class="warning-title">素材勘误：21 给 StringBuilder 新增的不是 indexOf / lastIndexOf /charAt</div>
+<p>素材称 Java 21 为 <code>StringBuilder</code>/<code>StringBuffer</code> 增加了 <code>indexOf/lastIndexOf/charAt</code>——这三个方法在 JDK 25 源码里<strong>没有任何 <code>@since</code> 标注</strong>（即随类原生存在，远早于 17，更不是 21），<code>String.indexOf</code> 更是 JDK 1.0 就有。21 真正新增的是两个重载：<strong><code>repeat(int codePoint, int count)</code> 与 <code>repeat(CharSequence str, int count)</code></strong>（<code>java.base/java/lang/StringBuilder.java</code> 中明确标注 <code>@since 21</code>）。另外 <code>String.repeat(int)</code> 是 <strong>JDK 11</strong> 就有的，别混。</p>
+</div>
+<pre><code data-run="1" data-name="SB21">public class SB21 {
+  public static void main(String[] a) {
+    StringBuilder sb1 = new StringBuilder("ab");
+    sb1.repeat("*", 3);                       // 追加 "*" 3 次
+    System.out.println(sb1);
+
+    StringBuilder sb2 = new StringBuilder();
+    sb2.repeat("ab", 2);                      // 追加 "ab" 2 次
+    System.out.println(sb2);
+
+    StringBuilder sb3 = new StringBuilder("x");
+    sb3.repeat('!', 4);                       // 追加码点 '!' 4 次
+    sb3.append(" | ").append("cd".repeat(2)); // String.repeat(int) 是 JDK 11 就有的
+    System.out.println(sb3);
+
+    System.out.println(sb1.indexOf("*") + "/" + sb1.charAt(0));
+  }
+}
+// 运行输出：
+// ab***
+// abab
+// x!!!! | cdcd
+// 2/a</code></pre>
+<p>✅ 实测通过（JDK 25）。语义实测确认：<code>sb.repeat(分隔, 次数)</code> 是<strong>把参数追加到当前内容之后</strong>（返回 <code>this</code>，就地修改），所以 <code>"ab".repeat("*", 3)</code> 是 <code>ab***</code> 而不是 <code>***ab</code>；两个参数的顺序是 <code>(要重复的东西, 次数)</code>，写成 <code>repeat(3, "*")</code> 编译不过。最后一行的 <code>indexOf/charAt</code> 顺带验证它们与 21 无关（一直都在）。</p>
+
+<h2>Java 22（2024-03-19 · 非 LTS）</h2>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（22 时点）</th><th>示例</th></tr>
+<tr><td>语法</td><td>Unnamed Variables &amp; Patterns <strong>转正</strong>（JEP 456）</td><td>正式</td><td>22.1</td></tr>
+<tr><td>语法</td><td>String Templates 第二次预览（JEP 459）</td><td>预览（23 撤回）</td><td>22.2</td></tr>
+<tr><td>语法</td><td>Implicitly Declared Classes &amp; Instance Main Methods 第二次预览（JEP 463）</td><td>预览</td><td>22.3</td></tr>
+<tr><td>语法</td><td>Statements before super(...)（JEP 447）</td><td>预览</td><td>22.4</td></tr>
+<tr><td>语法</td><td>Primitive Types in Patterns, instanceof, and switch</td><td>❌ 勘误：素材列于 22，实为 23 的 JEP 455</td><td>见 23.1</td></tr>
+<tr><td>API</td><td>Stream Gatherers（JEP 461）</td><td>预览</td><td>22.5</td></tr>
+<tr><td>API</td><td>Class-File API（JEP 457）</td><td>预览</td><td>22.6</td></tr>
+<tr><td>API</td><td>Foreign Function &amp; Memory API <strong>转正</strong>（JEP 454）</td><td>正式</td><td>22.7</td></tr>
+<tr><td>API</td><td>Launch Multi-File Source-Code Programs（JEP 458）</td><td>正式</td><td>22.8</td></tr>
+</table>
+
+<div class="warning">
+<div class="warning-title">勘误：Primitive Types in Patterns 不属于 Java 22</div>
+<p>素材把「Primitive Types in Patterns（预览）」放在 22、又把 23 标成「第二次预览」。按 <strong>JEP 455</strong>（Release = <strong>23</strong>，正文 Relates to JEP 488 = Second Preview）：<strong>该特性首次预览在 JDK 23（2024-09）</strong>，22 根本没有这个 JEP；此后 24 是 JEP 488（第二次预览）、25 是 JEP 507（第三次预览，本页实测所用形态）。故 22 保留此行作导航，示例统一放在 <strong>23.1</strong>。</p>
+</div>
+
+<h3>22.1 Unnamed Variables &amp; Patterns 转正（JEP 456）</h3>
+<p>21 的预览在 22 定稿转正，除了 21 已有的四类位置，还明确支持 <strong>lambda 形参</strong> <code>_ -&gt; ...</code>。</p>
+<pre><code data-run="1" data-name="UNM22">import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.function.Function;
+public class UNM22 {
+  record Box(String tag) {}
+  public static void main(String[] a) throws Exception {
+    var _ = new Object();
+    int n = 0;
+    for (String _ : List.of("x", "y")) n++;
+
+    Path p = Files.createTempFile("unm22", ".txt");
+    try (var _ = Files.newBufferedReader(p)) { n++; }
+    Files.deleteIfExists(p);
+
+    Function&lt;String, String&gt; f = _ -&gt; "ignored";   // 未命名 lambda 形参
+    Object o = new Box("b");
+    String s = switch (o) {
+      case Box(String _) -&gt; "box";
+      default -&gt; "other";
+    };
+    System.out.println(n + " " + f.apply("any") + " " + s);
+  }
+}
+// 运行输出：3 ignored box</code></pre>
+<p>✅ 实测通过（JDK 25，正式特性免开关）。注意 <code>_</code> 一旦用作变量名就是「未命名」，不能再当标识符使用。</p>
+
+<h3>22.2 String Templates 第二次预览（JEP 459）</h3>
+<pre><code>// ❌ 未实测：JDK 22 第二次预览写法（JEP 459），语法与 21 相同：
+public class StrTpl22 {
+  public static void main(String[] a) {
+    String item = "book";
+    int qty = 3;
+    String s = STR."order: \{qty} x \{item}";    // 插值交给 STR 处理器
+    System.out.println(s);
+  }
+}
+// 22 的修订点是模板处理的类型推断与 Result 聚合语义（JEP 459 正文），字面量写法不变。
+// 预期输出（未实测，21/22 开预览）：order: 3 x book
+// 25 实测：javac 报「非法转义符」——JEP 465（第三次预览）已 Withdrawn，特性整体撤回</code></pre>
+<p>❌ 未实测（同 21.3，特性已撤回）。两个版本、两次预览都停在 <code>STR."..." + \{...</code> 形态，最终没有进入任何 GA 版本。</p>
+
+<h3>22.3 Implicitly Declared Classes &amp; Instance main（JEP 463 · 第二次预览）</h3>
+<p>第二次预览相对 21 的关键变化：隐式声明的类允许有<strong>字段和方法</strong>（不再只是「包着 main 的壳」），因此可以写有状态的小程序。</p>
+<pre><code data-run="1" data-name="ICL22">int seed = 41;
+int next() { return ++seed; }
+void main() {
+  System.out.println("implicit " + next());
+  System.out.println("implicit " + next());
+}
+// 运行输出：
+// implicit 42
+// implicit 43</code></pre>
+<p>✅ 实测通过（JDK 25；25 的正式名是「Compact Source Files and Instance Main Methods」，JEP 512）。字段 <code>seed</code> 是隐式类的实例字段，两次 <code>main</code> 内的 <code>next()</code> 共享同一实例状态。</p>
+
+<h3>22.4 Statements before super(...)（JEP 447 · 预览）</h3>
+<p>打破「构造器第一条必须是 <code>super(...)</code>/<code>this(...)</code>」：允许在显式构造调用之前放语句（prologue），但<strong>不得触碰正在构造的实例</strong>（不能读字段、调方法），于是可以先校验、先算参数、先打日志。</p>
+<pre><code data-run="1" data-name="SBS22">class Base22 {
+  Base22(int v) { System.out.println("base " + v); }
+}
+class Child22 extends Base22 {
+  Child22(int v) {
+    if (v &lt;= 0) throw new IllegalArgumentException("bad " + v);
+    int doubled = v * 2;
+    System.out.println("stmts " + doubled);
+    super(doubled);
+    System.out.println("after");
+  }
+}
+public class SBS22 {
+  public static void main(String[] a) {
+    new Child22(5);
+    try {
+      new Child22(0);
+    } catch (IllegalArgumentException e) {
+      System.out.println("caught " + e.getMessage());
+    }
+  }
+}
+// 运行输出：
+// stmts 10
+// base 10
+// after
+// caught bad 0</code></pre>
+<p>✅ 实测通过（JDK 25，<strong>免预览</strong>——JEP 513「Flexible Constructor Bodies」已在 25 转正；22 当年需 <code>--enable-preview --release 22</code>）。输出顺序即「prologue → super → epilogue」；失败路径在校验处就抛出，父类构造器根本没跑。</p>
+
+<h3>22.5 Stream Gatherers（JEP 461 · 预览）</h3>
+<p>给 Stream 补上「多对多/有状态」的中间操作：自定义 <code>Gatherer</code>，或直接用内置的 <code>windowFixed</code>、<code>windowSliding</code>、<code>fold</code>。24（JEP 485）转正。</p>
+<pre><code data-run="1" data-name="GAT22">import java.util.stream.Gatherers;
+import java.util.stream.Stream;
+public class GAT22 {
+  public static void main(String[] a) {
+    var windows = Stream.of(1, 2, 3, 4, 5).gather(Gatherers.windowFixed(2)).toList();
+    System.out.println(windows);
+    var running = Stream.of(1, 2, 3, 4).gather(Gatherers.fold(() -&gt; 0, Integer::sum)).toList();
+    System.out.println(running);
+    System.out.println(Stream.of("a", "b", "c").gather(Gatherers.windowFixed(3)).count());
+  }
+}
+// 运行输出：
+// [[1, 2], [3, 4], [5]]
+// [10]
+// 1</code></pre>
+<p>✅ 实测通过（JDK 25，免预览）。要点：<code>windowFixed</code> 末尾不足一窗的元素照样成窗（<code>[5]</code>）；<code>fold</code> 实测只吐<strong>一个终值</strong>（JDK 25 源码 finisher 处才 <code>downstream.push(state.value)</code>），别把它当「滚动累计流」用。</p>
+
+<h3>22.6 Class-File API（JEP 457 · 预览）</h3>
+<p>用对象模型读 class 文件（<code>ClassFile.of().parse(...)</code>），替代散落多年的 <code>com.sun.tools.classfile</code> 与 ASM。24（JEP 484）转正。</p>
+<pre><code data-run="1" data-name="CF22">import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassModel;
+public class CF22 {
+  static int helper(int x) { return x * 2; }
+  public static void main(String[] a) throws Exception {
+    byte[] bytes;
+    try (var in = CF22.class.getResourceAsStream("CF22.class")) {
+      bytes = in.readAllBytes();
+    }
+    ClassModel model = ClassFile.of().parse(bytes);
+    model.methods().forEach(m -&gt; System.out.println(m.methodName().stringValue()));
+    System.out.println("methods=" + model.methods().size() + " bytes=" + bytes.length);
+  }
+}
+// 运行输出：
+// &lt;init&gt;
+// helper
+// main
+// lambda$main$0
+// methods=4 bytes=2466</code></pre>
+<p>✅ 实测通过（JDK 25）。要点：<code>parse</code> 得到 <code>ClassModel</code>（惰性、只读的结构化视图），<code>methodName()</code> 返回 <code>Utf8Entry</code>，取字符串用 <code>stringValue()</code>；连编译器生成的 <code>lambda$main$0</code> 和默认构造器 <code>&lt;init&gt;</code> 都看得见。</p>
+
+<h3>22.7 FFM 转正（JEP 454）</h3>
+<p>预览了四年的 Foreign Function &amp; Memory API 在 22 进入 <code>java.base</code>：分配用 <code>Arena</code>、读写用 <code>MemorySegment</code>、布局用 <code>ValueLayout</code>，字符串拷贝有了 <code>allocateFrom(String)</code>。</p>
+<pre><code data-run="1" data-name="FFM22">import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
+public class FFM22 {
+  public static void main(String[] a) {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment greeting = arena.allocateFrom("hello ffi");
+      System.out.println(greeting.getString(0));
+      MemorySegment nums = arena.allocateFrom(ValueLayout.JAVA_INT, 7, 8, 9);
+      System.out.println(nums.get(ValueLayout.JAVA_INT, 4));
+      System.out.println("bytes=" + nums.byteSize());
+    }
+  }
+}
+// 运行输出：
+// hello ffi
+// 8
+// bytes=12</code></pre>
+<p>✅ 实测通过（JDK 25）。要点：<code>allocateFrom(String)</code> 拷入并以 <code>'\0'</code> 结尾，<code>getString(0)</code> 按 C 字符串读回；<code>allocateFrom(ValueLayout.JAVA_INT, 7, 8, 9)</code> 直接按布局铺开 12 字节，偏移 4 处正是 <code>8</code>。</p>
+
+<h3>22.8 Launch Multi-File Source-Code Programs（JEP 458）</h3>
+<p>源代码启动器从「单文件」升级为「跟着入口走」：<code>java Main.java</code> 会自动在同目录（及入口所在路径）里找到它引用的其它源文件一起编译运行，不用先 <code>javac</code>。</p>
+<pre><code>// Main.java
+public class Main {
+  public static void main(String[] args) {
+    System.out.println(Helper.greet("java 22"));
+  }
+}
+// Helper.java（同目录）
+public class Helper {
+  static String greet(String name) { return "hello " + name; }
+}
+
+// 终端：$ java Main.java        ← 无需先 javac
+// 运行输出：hello java 22</code></pre>
+<p>✅ 手动实测（JDK 25；verify 脚本按「一个代码块 = 一个类」运行，无法覆盖多文件场景，故此条单独验证）：本机执行 <code>java Main.java</code> 输出 <code>hello java 22</code>；再用 <code>javac Main.java &amp;&amp; java Main</code> 复跑结果一致。22 起为正式特性。</p>
+
+<h2>Java 23（2024-09-17 · 非 LTS）</h2>
+
+<table>
+<tr><th>类别</th><th>特性 / API</th><th>状态（23 时点）</th><th>示例</th></tr>
+<tr><td>语法</td><td>Primitive Types in Patterns, instanceof, and switch（JEP 455 · <strong>首次预览</strong>）</td><td>预览</td><td>23.1</td></tr>
+<tr><td>语法</td><td>Module Import Declarations（JEP 476）</td><td>预览</td><td>23.2</td></tr>
+<tr><td>语法</td><td>Implicitly Declared Classes and Instance Main Methods 第三次预览（JEP 477）</td><td>预览</td><td>23.3</td></tr>
+<tr><td>语法</td><td>Flexible Constructor Bodies（JEP 482 · 第二次预览，前身是 22 的 JEP 447）</td><td>预览</td><td>23.4</td></tr>
+<tr><td>语法</td><td>String Templates 第三次预览（JEP 465）</td><td>❌ Withdrawn（撤回）</td><td>见 21.3 / 22.2</td></tr>
+<tr><td>API</td><td>Markdown Documentation Comments（JEP 467）</td><td>正式</td><td>23.5</td></tr>
+<tr><td>API</td><td>Stream Gatherers 第二次预览（JEP 473）</td><td>预览</td><td>23.6</td></tr>
+<tr><td>API</td><td>Class-File API 第二次预览（JEP 466）</td><td>预览</td><td>23.7</td></tr>
+<tr><td>API</td><td>IO 简写类（JEP 477 的 <code>java.io.IO</code> 预览 API → 25 的 <code>java.lang.IO</code>）</td><td>预览 → 见勘误</td><td>23.8</td></tr>
+</table>
+
+<div class="note">
+<div class="note-title">String Templates 的结局</div>
+<p>21（JEP 430）首次预览 → 22（JEP 459）第二次预览 → 23 的第三次预览提案 <strong>JEP 465 被列入 Withdrawn JEPs</strong>（openjdk.org/jeps/0 索引「Withdrawn JEPs」段），特性没有进入任何正式版本。因此 23 的语法清单里<strong>没有</strong> String Templates，本页只在 21.3 / 22.2 留档；25 实测 <code>STR."..."</code> 编译报「非法转义符」。</p>
+</div>
+
+<h3>23.1 Primitive Types in Patterns, instanceof, and switch（JEP 455 · 首次预览）</h3>
+<p>把基元类型纳入模式匹配：<code>o instanceof int i</code> 会按「精确转换」做值检查（装箱拆箱、窄化安全），<code>switch</code> 的选择器也放开到 <code>long/float/double/boolean</code>，<code>case true/false</code> 与 <code>case int i when ...</code> 都能用。</p>
+<pre><code data-run="1" data-name="PTP23" data-flags="--enable-preview --release 25">public class PTP23 {
+  public static void main(String[] a) {
+    Object o = 42;
+    if (o instanceof int i) {
+      System.out.println("instanceof int " + i);
+    }
+    long big = 10_000_000_000L;
+    String s = switch (big) {
+      case 10_000_000_000L -&gt; "ten billion";
+      case long l when l &gt; 0 -&gt; "positive";
+      default -&gt; "other";
+    };
+    System.out.println(s);
+    boolean ok = true;
+    String t = switch (ok) {
+      case true -&gt; "yes";
+      case false -&gt; "no";
+    };
+    System.out.println(t);
+    int n = 42;
+    int over = 1000;
+    System.out.println("42-&gt;byte=" + (n instanceof byte) + " 1000-&gt;byte=" + (over instanceof byte));
+    System.out.println("bound=" + (n instanceof byte b ? b : -1));
+  }
+}
+// 运行输出（javac --enable-preview --release 25；java --enable-preview）：
+// instanceof int 42
+// ten billion
+// yes
+// 42-&gt;byte=true 1000-&gt;byte=false
+// bound=42</code></pre>
+<p>⚠️ 实测通过（JDK 25 预览特性，仍需 <code>--enable-preview --release 25</code>——25 对应 JEP 507 第三次预览，尚未转正）。要点：<code>n instanceof byte</code> 是<strong>值</strong>测试（42 装得下 → true，1000 装不下 → false），不是类型测试；布尔选择器的 <code>case true/false</code> 属于本特性范围，同样必须开预览。复现命令：<code>javac --enable-preview --release 25 PTP23.java</code> + <code>java --enable-preview PTP23</code>（<code>java</code> 不支持 <code>--release</code>）。</p>
+
+<h3>23.2 Module Import Declarations（JEP 476 · 预览）</h3>
+<p>一行 <code>import module java.base;</code> 相当于把该模块所有<strong>导出包</strong>里的一级类型都引进来：写小工具/示例代码时不必再逐个 <code>import java.util.*</code>。25（JEP 511）转正。</p>
+<pre><code data-run="1" data-name="MOD23">import module java.base;
+public class MOD23 {
+  public static void main(String[] a) {
+    var list = List.of("a", "b", "c");
+    System.out.println(list.getFirst() + " " + list.size());
+    System.out.println(String.format("%04d-%s", 7, "ok"));
+    var map = new java.util.HashMap&lt;String, Integer&gt;();
+    System.out.println(map.isEmpty());
+  }
+}
+// 运行输出：
+// a 3
+// 0007-ok
+// true</code></pre>
+<p>✅ 实测通过（JDK 25，免预览）。<code>List</code>（java.util）与 <code>String</code>（java.lang）都没写单类型 import；<code>HashMap</code> 是特意用全限定名演示「模块导入只影响简单名解析」。</p>
+
+<h3>23.3 Implicitly Declared Classes（JEP 477 · 第三次预览）</h3>
+<p>第三次预览里隐式类已经很像「普通类去掉声明」：可以嵌套 record、可以定义泛型方法、<code>main</code> 仍是实例方法。25 的正式名是 Compact Source Files（JEP 512）。</p>
+<pre><code data-run="1" data-name="ICL23">record Result(String name, int score) {}
+String join(java.util.List&lt;?&gt; items) {
+  return items.stream().map(String::valueOf).reduce((a, b) -&gt; a + "," + b).orElse("");
+}
+void main() {
+  var r = new Result("ann", 99);
+  System.out.println(r.name() + "=" + r.score());
+  System.out.println(join(java.util.List.of("a", "b", "c")));
+}
+// 运行输出：
+// ann=99
+// a,b,c</code></pre>
+<p>✅ 实测通过（JDK 25，免预览）。顶层可以并排放 record、方法和 <code>main</code>——它们同属这个隐式声明的编译单元类。</p>
+
+<h3>23.4 Flexible Constructor Bodies（JEP 482 · 第二次预览）</h3>
+<p>在 22 的 JEP 447 基础上再进一步：prologue 里不但能打日志、算参数，还允许<strong>给本类自己的（无初始化器的）字段赋值</strong>——从而让父类构造器回调被重写方法时，读到的是子类的真实值而不是 <code>0</code>/<code>null</code>。</p>
+<pre><code data-run="1" data-name="FCB23">class Super23 {
+  Super23() { overridden(); }
+  void overridden() { System.out.println("hello"); }
+}
+class Sub23 extends Super23 {
+  final int x;
+  Sub23(int x) {
+    this.x = x;
+    super();
+  }
+  @Override void overridden() { System.out.println("x=" + x); }
+}
+public class FCB23 {
+  public static void main(String[] a) {
+    new Sub23(42);
+    Sub23 s = new Sub23(7);
+    System.out.println("field=" + s.x);
+  }
+}
+// 运行输出：
+// x=42
+// x=7
+// field=7</code></pre>
+<p>✅ 实测通过（JDK 25，<strong>免预览</strong>——JEP 513 已在 25 转正；23 当年需 <code>--enable-preview --release 23</code>）。对照 JEP 482 的经典反例：<code>new Sub23(42)</code> 若按老规则，父类回调会打印 <code>x=0</code>（子类字段还没赋值）；现在 prologue 先 <code>this.x = x</code>，输出变成 <code>x=42</code>。注意 prologue 里<strong>能写不能读</strong>本实例字段，也不能调用本实例方法。</p>
+
+<h3>23.5 Markdown Documentation Comments（JEP 467 · 正式）</h3>
+<p>文档注释可以直接写 Markdown：新形态是<strong>逐行 <code>///</code> 开头</strong>的注释（不是在 <code>/** ... */</code> 里塞 <code>```markdown</code> 围栏），空行分段、<code>-</code> 列表、反引号行内代码、<code>#</code> 标题、引用链接 <code>[java.util.List]</code> 都可用，且与 HTML、<code>@</code> 标签混写。</p>
+<pre><code data-run="1" data-name="MDJ23">/// # Markdown Demo
+///
+/// A short list of steps:
+///
+///   1. write the comment
+///   2. run `javadoc`
+///
+/// Link to [java.util.List] and **bold** text.
+public class MDJ23 {
+  /// Doubles the input.
+  ///
+  /// @param x any number
+  /// @return `x` multiplied by two
+  public int twice(int x) { return x * 2; }
+
+  public static void main(String[] a) {
+    System.out.println(new MDJ23().twice(21));
+  }
+}
+// 运行输出：42</code></pre>
+<p>✅ javac/java 实测通过（JDK 25；JEP 467 在 23 就是正式特性，免预览）。</p>
+<p>✅ <strong>javadoc 手动实测</strong>（verify 脚本只跑 <code>javac</code>/<code>java</code>，不跑 <code>javadoc</code>，故单独执行）：</p>
+<pre><code>$ javadoc -quiet -d out -encoding UTF-8 MDJ23.java
+（2 条与本例无关的「缺少注释」警告，生成成功）
+
+out/MDJ23.html 中的关键片段：
+&lt;h2 id="markdown-demo-heading"&gt;Markdown Demo&lt;/h2&gt;   ← `#` 标题按上下文自动降级
+&lt;ol&gt; ... &lt;/ol&gt;                                       ← `1.` 有序列表
+&lt;code&gt;javadoc&lt;/code&gt;                                 ← 反引号行内代码
+&lt;a href=".../java/util/List.html"&gt;List&lt;/a&gt;           ← [java.util.List] 被解析成 API 链接
+&lt;strong&gt;bold&lt;/strong&gt;                                ← **bold** 加粗</code></pre>
+<p>要点：<code>///</code> 形式还支持围栏代码块（<code>```</code>，info string 会变成 CSS class，可挂语法高亮库）；传统 <code>/** ... */</code> 仍然按 HTML 解析，两者不混。</p>
+
+<h3>23.6 Stream Gatherers 第二次预览（JEP 473）</h3>
+<p>第二次预览主要修订 <code>Windowing</code>/<code>Fold</code> 等的语义细节；24 转正。换个内置 gatherer 复测。</p>
+<pre><code data-run="1" data-name="GAT23">import java.util.stream.Gatherers;
+import java.util.stream.Stream;
+public class GAT23 {
+  public static void main(String[] a) {
+    var sliding = Stream.of(1, 2, 3, 4, 5).gather(Gatherers.windowSliding(2)).toList();
+    System.out.println(sliding);
+    var joined = Stream.of("a", "b", "c").gather(Gatherers.fold(() -&gt; "", (acc, s) -&gt; acc + s)).toList();
+    System.out.println(joined);
+    System.out.println(Stream.of(1, 2, 3).gather(Gatherers.windowFixed(5)).toList());
+  }
+}
+// 运行输出：
+// [[1, 2], [2, 3], [3, 4], [4, 5]]
+// [abc]
+// [[1, 2, 3]]</code></pre>
+<p>✅ 实测通过（JDK 25）。要点：<code>windowSliding</code> 步长恒为 1（窗口重叠）；<code>windowFixed(5)</code> 遇到只有 3 个元素的流时，最后一个「不满的窗口」照样输出。</p>
+
+<h3>23.7 Class-File API 第二次预览（JEP 466）</h3>
+<p>第二次预览把「生成」这一半补全：<code>ClassFile.of().build(ClassDesc, builder)</code> 能凭空造 class 字节，配合 <code>MethodHandles.Lookup.defineClass</code> 直接加载。24（JEP 484）转正。</p>
+<pre><code data-run="1" data-name="CF23">import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassModel;
+import java.lang.constant.ClassDesc;
+import java.lang.constant.MethodTypeDesc;
+import java.lang.invoke.MethodHandles;
+import static java.lang.constant.ConstantDescs.CD_int;
+public class CF23 {
+  public static void main(String[] a) throws Throwable {
+    byte[] bytes = ClassFile.of().build(ClassDesc.of("Gen"), clb -&gt;
+        clb.withMethod("twice", MethodTypeDesc.of(CD_int, CD_int),
+            ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC,
+            mb -&gt; mb.withCode(cb -&gt; cb.iload(0).iconst_2().imul().ireturn())));
+    System.out.println("built=" + bytes.length + " bytes");
+    Class&lt;?&gt; gen = MethodHandles.lookup().defineClass(bytes);
+    System.out.println("twice(21)=" + gen.getMethod("twice", int.class).invoke(null, 21));
+    ClassModel back = ClassFile.of().parse(bytes);
+    System.out.println("methods=" + back.methods().size());
+  }
+}
+// 运行输出：
+// built=107 bytes
+// twice(21)=42
+// methods=1</code></pre>
+<p>✅ 实测通过（JDK 25）。这条把 22.6（读）与 23.7（写）串成闭环：<code>build</code> → <code>defineClass</code> 动态加载 → 反射调用 → 再 <code>parse</code> 回读。字节码只有 5 条指令（<code>iload/iconst_2/imul/ireturn</code>），是「API 直接产出可执行字节」的最小证据。</p>
+
+<h3>23.8 IO 简写类：java.io.IO（23 预览）→ java.lang.IO（25）</h3>
+<div class="warning">
+<div class="warning-title">勘误：包名与版本，两个方向都要澄清</div>
+<p>素材写的是 <code>java.io.IO</code>、用户侧勘误主张「应为 <code>java.lang.IO</code>」。按 <strong>JEP 477 正文</strong>（「The new class <code>java.io.IO</code> is a preview API in JDK 23」）与 JDK 23/24 官方 API 文档：23 的确新增了 <strong><code>java.io.IO</code></strong>（<strong>预览</strong>，基于 <code>System.console()</code>，方法为 <code>println(Object)</code>/<code>print(Object)</code>/<code>readln(String)</code>，Since: 23）。而本机 JDK 25 实测：<strong><code>java.io.IO</code> 已不存在</strong>（<code>javap java.io.IO</code> → 找不到类），取而代之的是 <strong><code>java.lang.IO</code></strong>（JDK 25 源码标注 <code>@since 25</code>，直接写 <code>System.out</code>/<code>System.in</code>，不再依赖控制台对象）。所以：说「23 有 <code>java.io.IO</code>」是对的，说「25 用 <code>java.lang.IO</code>」也是对的，二者是两个不同时点的类，别混为一谈。</p>
+</div>
+<p>本页示例按 25 现行形态（<code>java.lang.IO</code>）给出：</p>
+<pre><code data-run="1" data-name="IO23">import java.lang.IO;
+public class IO23 {
+  public static void main(String[] a) {
+    IO.println("hello java.lang.IO");
+    IO.println(42);
+    IO.print("no newline: ");
+    IO.println(true);
+  }
+}
+// 运行输出：
+// hello java.lang.IO
+// 42
+// no newline: true</code></pre>
+<p>✅ 实测通过（JDK 25，正式 API 免预览）。定位是「给隐式类/入门程序的最短 I/O」：<code>IO.println(...)</code> ≈ <code>System.out.println(...)</code>，<code>IO.readln(...)</code> 读 <code>System.in</code>；23 的 <code>java.io.IO</code> 版本因依赖 <code>System.console()</code>（无控制台时抛 <code>IOError</code>）语义不同，属预览形态。</p>
+
+<div class="page-nav">
+<span><a href="./java16-19.html">← 上一版段：Java 16–19</a></span>
+<span><a href="./java24-27.html">下一版段：Java 24–27 →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

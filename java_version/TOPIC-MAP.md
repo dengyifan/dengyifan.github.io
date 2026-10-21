@@ -79,3 +79,112 @@ mindmap
         Safepoint 机制改进
         per-thread 握手
 ```        
+## Java 12 知识地图
+
+### 概念图谱
+
+```mermaid
+mindmap
+  root((Java 12))
+    语言与预览
+      JEP 325 Switch 表达式
+        case L -> 箭头标签
+        Java 12 用 break 产值
+        13 改 yield / 14 转正
+        穷尽性与完整性校验
+        --enable-preview 工作流
+    核心 API
+      Collectors.teeing
+        PairBox 双下游
+        merger 合并结果
+      紧凑数字格式
+        getCompactNumberInstance
+        Style SHORT / LONG
+      String.indent / transform
+      Unicode 11 与令和
+    常量 API
+      JEP 334 java.lang.constant
+        ConstantDesc / Constable
+        describeConstable 反向协议
+        DynamicConstantDesc 与 BSM
+      JEP 309 CONDY 前置（JDK 11）
+    GC 与运行时
+      JEP 189 Shenandoah
+        Brooks 指针并发疏散
+        暂停与堆大小无关
+        实验性 / 15 转正
+      JEP 344 G1 可中断混合回收
+        mandatory + optional
+        最细到单 region
+      JEP 346 G1 归还空闲内存
+        G1PeriodicGCInterval 默认关
+      JEP 341 默认 CDS 归档
+        构建期 classes.jsa
+        -Xshare auto/off
+    工具链与平台
+      JEP 230 JMH 微基准
+        test/micro
+        build-microbenchmark
+        JDK N vs N-1 对比
+      JEP 340 单一 AArch64 端口
+        删除 arm64 变体
+      非 LTS 版本策略
+```
+
+## Java 21 知识地图（Project Loom 并发专题）
+
+### 概念图谱
+
+```mermaid
+mindmap
+  root((Java 21))
+    虚拟线程 JEP 444 转正
+      Thread 两类
+        平台线程 1:1 OS 线程 昂贵
+        虚拟线程 运行时实现 轻量
+      M:N 调度
+        carrier 载体线程
+        mount / unmount
+        ForkJoin 调度
+      pinning 钉住
+        JDK21 synchronized 钉住
+        native / FFI 钉住
+        JEP 491 JDK24 消除 sync
+      观测
+        jdk.VirtualThreadPinned JFR
+        jcmd Thread.dump_to_file
+      实践
+        不要池化
+        Semaphore 限流
+        CPU 密集不适用
+    结构化并发 JEP 453 预览
+      StructuredTaskScope
+        fork 子任务 Subtask
+        join 整体等待
+        shutdown 短路取消
+        close 无孤儿线程
+      策略
+        ShutdownOnFailure
+        ShutdownOnSuccess
+        自定义策略
+      演进
+        21 JEP453
+        25 JEP505 open Joiner
+    线程局部变量
+      ThreadLocal
+        每线程映射 ThreadLocal 当 key
+        static 共享键
+        线程池需 remove
+      InheritableThreadLocal
+        构造时拷贝非 start
+        浅拷贝传引用
+      三大缺陷
+        无约束可变
+        无界寿命
+        昂贵继承
+      ScopedValue JEP446
+        不可变
+        有界作用域
+        结构化共享
+        JDK25 JEP506 转正
+```

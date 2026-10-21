@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 12 API 增强 — teeing · 紧凑数字 · String.indent · Unicode 11</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12 · 核心 API</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Java 12 API 增强 —— 一次遍历双下游、紧凑数字与字符串整形</h1>
+<div class="article-meta"><span>📚 L1–L5 · 核心 API 层</span><span>🔬 Collectors.java · String.java · NumberFormat.java 源码</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 12 / API 增强</div>
+
+<h2>L1 · 概念层：四组新 API 一句话说清</h2>
+
+<p>Java 12（2019-03-19，非 LTS）的库层面改动不大，但四组 API 都很「顺手」——它们解决的是<strong>反复出现的样板代码</strong>：</p>
+
+<table>
+<tr><th>API</th><th>新增位置</th><th>一句话</th><th>替代的旧写法</th></tr>
+<tr><td><code>Collectors.teeing(c1, c2, merger)</code></td><td><code>java.util.stream</code></td><td><strong>一次遍历喂两个下游</strong>，再用合并函数把两份结果合成一个</td><td>流收集两次 / 手写 <code>reduce</code> / 循环里维护两个累加器</td></tr>
+<tr><td><code>NumberFormat.getCompactNumberInstance(locale, Style)</code></td><td><code>java.text</code></td><td><strong>紧凑数字</strong>：1234567 → <code>123万</code>（zh）/ <code>1M</code>（en SHORT）、<code>1 million</code>（en LONG）</td><td>自己维护千分位/亿单位映射表</td></tr>
+<tr><td><code>String.indent(int n)</code></td><td><code>java.lang</code></td><td>按行整体增/减缩进，<strong>顺带统一换行为 <code>\n</code></strong></td><td><code>lines().map(...).collect(joining)</code> 手搓</td></tr>
+<tr><td><code>String.transform(Function)</code></td><td><code>java.lang</code></td><td>把字符串交给一个函数处理，<strong>返回任意类型</strong></td><td>写一个中间变量或静态工具方法</td></tr>
+<tr><td>Unicode 11.0 + 日本「令和」年号</td><td>CLDR / <code>java.time</code></td><td>新增字符集支持；<code>JapaneseImperialCalendar</code> 认识 <code>Reiwa</code></td><td>手写年号映射</td></tr>
+</table>
+
+<h3>完整使用示例（四组各一份，可直接编译运行）</h3>
+
+<p>下面四个程序都是完整可运行的（<code>javac X.java &amp;&amp; java X</code>），注释里的运行输出为本机实测——这四组 API 自 JDK 12 引入后语义未变，个别 locale 的显示细节以你本机 CLDR 数据为准。</p>
+
+<p><strong>示例① · <code>Collectors.teeing</code>：一次遍历同时得到和与个数</strong></p>
+
+<pre><code>import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+public class TeeingDemo {
+    public static void main(String[] args) {
+        // 一次遍历同时算 sum 与 count，再合成平均值
+        String stats = Stream.of(3, 1, 4, 1, 5, 9, 2, 6)
+            .collect(Collectors.teeing(
+                Collectors.summingInt(Integer::intValue),
+                Collectors.counting(),
+                (sum, cnt) -&gt; "sum=" + sum + ", avg=" + (double) sum / cnt));
+        System.out.println(stats);
+
+        // 最小值与最大值——原本要遍历两次才能拿到的结果
+        String range = Stream.of(3, 1, 4, 1, 5, 9, 2, 6)
+            .collect(Collectors.teeing(
+                Collectors.minBy(Integer::compareTo),
+                Collectors.maxBy(Integer::compareTo),
+                (min, max) -&gt; min.orElseThrow() + ".." + max.orElseThrow()));
+        System.out.println(range);
+    }
+}
+// 运行输出：
+// sum=31, avg=3.875
+// 1..9</code></pre>
+
+<p><strong>示例② · 紧凑数字：<code>getCompactNumberInstance</code> + <code>Style</code></strong></p>
+
+<pre><code>import java.text.NumberFormat;
+import java.util.Locale;
+
+public class CompactNumberDemo {
+    public static void main(String[] args) {
+        NumberFormat zh = NumberFormat.getCompactNumberInstance(
+            Locale.CHINA, NumberFormat.Style.SHORT);
+        NumberFormat enShort = NumberFormat.getCompactNumberInstance(
+            Locale.US, NumberFormat.Style.SHORT);
+        NumberFormat enLong = NumberFormat.getCompactNumberInstance(
+            Locale.US, NumberFormat.Style.LONG);
+
+        System.out.println(zh.format(1234567));       // 中文按「万/亿」分组
+        System.out.println(zh.format(123456789));
+        System.out.println(zh.format(999000));        // 四舍五入到万位 → 100万
+        System.out.println(enShort.format(1234567));  // en SHORT：字母单位
+        System.out.println(enLong.format(1234567));   // en LONG：单词单位
+        System.out.println(enShort.format(999000));
+    }
+}
+// 运行输出：
+// 123万
+// 1亿
+// 100万
+// 1M
+// 1 million
+// 999K</code></pre>
+
+<p><strong>示例③ · <code>String.indent</code> / <code>String.transform</code></strong></p>
+
+<pre><code>public class StringIndentDemo {
+    public static void main(String[] args) {
+        String text = "class Demo {\nint x = 1;\n}";
+        String indented = text.indent(4);              // 每行加 4 空格
+        System.out.print(indented);
+        System.out.println("endsWithNewline=" + indented.endsWith("\n"));
+        System.out.print(indented.indent(-4));         // 再减回去（尾换行仍在）
+
+        // transform 返回泛型 R：要先落到具体类型的变量，
+        // 直接塞进重载方法（如 println）会让类型推断失败、编译报错
+        String wrapped = "  abc  ".transform(String::trim)
+                                .transform(s -&gt; "[" + s + "]");
+        System.out.println(wrapped);
+
+        System.out.println("empty=[" + "".indent(4) + "]");   // 空串短路
+    }
+}
+// 运行输出：
+//     class Demo {
+//     int x = 1;
+//     }
+// endsWithNewline=true
+// class Demo {
+// int x = 1;
+// }
+// [abc]
+// empty=[]</code></pre>
+
+<p><strong>示例④ · Unicode 11.0 与日本「令和」年号</strong></p>
+
+<pre><code>import java.time.LocalDate;
+import java.time.chrono.JapaneseDate;
+import java.time.temporal.ChronoField;
+
+public class ReiwaUnicodeDemo {
+    public static void main(String[] args) {
+        // ① 令和：2019-05-01 起 era 变为 Reiwa（前一天还是 Heisei）
+        JapaneseDate d = JapaneseDate.from(LocalDate.of(2019, 5, 1));
+        System.out.println("era=" + d.getEra()
+            + ", yearOfEra=" + d.get(ChronoField.YEAR_OF_ERA)
+            + ", isoYear=" + d.get(ChronoField.YEAR));
+        System.out.println("prev=" + JapaneseDate.from(LocalDate.of(2019, 4, 30)).getEra());
+
+        // ② Unicode 11.0 新增码位：U+1C90 所在的 Georgian Extended 区块
+        int cp = 0x1C90;
+        System.out.println(Character.UnicodeBlock.of(cp));
+        System.out.println(Character.getName(cp));
+    }
+}
+// 运行输出：
+// era=Reiwa, yearOfEra=1, isoYear=2019
+// prev=Heisei
+// GEORGIAN_EXTENDED
+// GEORGIAN MTAVRULI CAPITAL LETTER AN
+// 注：JDK 12 之前（Unicode 数据 &lt; 11）该码位未分配，
+//     Character.getName(0x1C90) 返回 null（本机 JDK 8 实测）</code></pre>
+
+<div class="note">
+<div class="note-title">为什么 <code>teeing</code> 到 Java 12 才有？</div>
+<p>它需要把「两个独立 Collector 的容器、累加器、合并器、完结器」组合成一个语义正确的 Collector——并行时还要保证两对容器同步合并。<strong>组合子（combinator）写错在并行流下才会暴露</strong>，所以这类 API 一旦仓促发布就容易埋雷。JDK 把它留到 12，配上 <code>PairBox</code> 这种「双容器打包」实现，才敢说并发语义是完备的。</p>
+</div>
+
+<h2>L2 · 原理层</h2>
+
+<h3><code>teeing</code> 的执行模型</h3>
+
+<div class="mermaid">
+flowchart LR
+    A[流元素 t] --&gt; B{PairBox}
+    B --&gt; C1["left 容器<br/>c1Accumulator"]
+    B --&gt; C2["right 容器<br/>c2Accumulator"]
+    C1 --&gt; D["并行时 c1Combiner<br/>合并两个 left"]
+    C2 --&gt; E["并行时 c2Combiner<br/>合并两个 right"]
+    D --&gt; F["c1Finisher(left)"]
+    E --&gt; G["c2Finisher(right)"]
+    F --&gt; H[merger.apply r1, r2]
+    G --&gt; H
+    H --&gt; I[最终结果]
+</div>
+
+<h3>关键判断逻辑伪代码</h3>
+
+<pre><code># ① teeing 的四步（Collectors.teeing0, jdk12u:1927）
+function teeing0(downstream1, downstream2, merger):
+    对 downstream1/2 的 supplier、accumulator、combiner、finisher
+    与 merger 逐一 Objects.requireNonNull(...)      # 8 个函数 + 3 个对象全查
+
+    # characteristics 计算（决定能否走身份优化 / 是否无序）
+    if CH_ID ⊇ c1Characteristics or CH_ID ⊇ c2Characteristics:
+        characteristics = CH_NOID                  # 有下游是「ID + 无序」→ 结果无 ID
+    else:
+        characteristics = (c1 ∩ c2) - {IDENTITY_FINISH}   # 交集且永远去掉 ID
+
+    class PairBox:                                  # 一个盒子里装两套容器
+        left  = c1Supplier.get()
+        right = c2Supplier.get()
+        add(t):     c1Accumulator.accept(left, t); c2Accumulator.accept(right, t)
+        combine(o): left = c1Combiner(left, o.left); right = c2Combiner(right, o.right)
+        get():      merger(c1Finisher(left), c2Finisher(right))
+    return Collector(PairBox::new, PairBox::add, PairBox::combine, PairBox::get, characteristics)
+
+# ② String.indent 的分支（String.java:2842, jdk12u）
+function indent(s, n):
+    if s.isEmpty(): return ""                       # 空串直接返回，不产生 "\n"
+    stream = s.lines()                              # 按行切（已丢弃行终止符）
+    if n &gt; 0:                每行前加 " ".repeat(n)  # 空格只建一次（O(1) 复用）
+    elif n == MIN_VALUE:     每行 stripLeading()     # 特例：完全去掉行首空白
+    elif n &lt; 0:              每行去掉 min(-n, 行首已有空白) 个字符
+    return stream.join("\n", 前缀"", 后缀"\n")       # ← 必带尾换行
+
+# ③ 紧凑数字格式化的选择（NumberFormat.java:640/661, jdk12u）
+function getCompactNumberInstance(locale, style):
+    requireNonNull(locale); requireNonNull(style)   # NPE 在入口就抛
+    return getInstance(locale, style, COMPACTSTYLE)  # 复用工厂，仅把「类型」换成紧凑型
+    # 之后 format() 走 CompactNumberFormat：按 locale 的紧凑样式模式
+    # 把数量级映射到分组（万/亿 或 K/M/B），再按 style 选 SHORT/LONG 修饰</code></pre>
+
+<h3>四维度生产检查</h3>
+
+<table>
+<tr><th>维度</th><th><code>teeing</code></th><th><code>indent</code> / <code>transform</code></th><th>紧凑数字</th></tr>
+<tr><td><strong>并发语义</strong></td><td>并行下两对容器<strong>同步累加、同步 combine</strong>，最后一次性 merger——语义等价于「两个独立收集的串行结果」；<code>IDENTITY_FINISH</code> 被强制剔除（组合后不再是身份完结）。</td><td>纯函数，线程安全由不可变 String 保证；<code>lines()</code> 返回流，<strong>只能消费一次</strong>。</td><td><code>NumberFormat</code> 实例<strong>非线程安全</strong>（JDK 一贯约定），共享需 <code>ThreadLocal</code> 或每次新建。</td></tr>
+<tr><td><strong>异常容错</strong></td><td>下游任何函数为 null → 构造期 <code>NullPointerException</code>（带名字，如 <code>"downstream1 accumulator"</code>）；下游运行期异常原样上抛。</td><td><code>transform(null)</code> → NPE（来自 <code>f.apply</code>）；<code>indent</code> 对空串安全。</td><td>locale/style 为 null → 入口即 NPE；未知 locale 回退默认紧凑样式而非抛错。</td></tr>
+<tr><td><strong>边界判断</strong></td><td><strong>merger 必须处理 null 与顺序无关性</strong>：下游可能产出 null（如 <code>minBy/maxBy</code> 空流），并行/串行下 left-right 次序不保证——<strong>merger 写成有副作用或依赖顺序就是 bug</strong>。</td><td><code>indent</code> 结果<strong>总以 <code>\n</code> 结尾</strong>（非空输入）；负数缩进<strong>不会把行变负</strong>（有 <code>indexOfNonWhitespace</code> 兜底）；<code>Integer.MIN_VALUE</code> 走完全剥离。</td><td>紧凑样式<strong>依赖 locale 数据</strong>：非内置 locale 的样式来自 <code>jdk.localedata</code>，最小化镜像/自定义 jlink 镜像里可能缺失或回退。</td></tr>
+<tr><td><strong>性能开销</strong></td><td>两次累加 + 一个装箱盒对象，<strong>仍是单次遍历</strong>，比「收集两遍」省一半 I/O/CPU；短流下 PairBox 分配可忽略。</td><td><code>indent</code> 每行一次拼接 + <code>joining</code>，<strong>O(n) 但会产生新数组</strong>；大文本批量调用要留意分配。<code>transform</code> 是单次虚调用，开销≈直接调用。</td><td>格式化时要查资源模式 + 数量级判定，<strong>比 <code>format(long)</code> 贵</strong>，别在热点循环里反复 <code>get</code> 实例。</td></tr>
+</table>
+
+<div class="warning">
+<div class="warning-title">三个高频误区</div>
+<p><strong>① 「<code>teeing</code> 就是两次收集」</strong>——不是。它是<strong>一个 Collector、一次遍历</strong>；写成 <code>stream.collect(min); stream.collect(max)</code> 会触发<strong>流被消费两次</strong>的 <code>IllegalStateException</code>，写成 <code>list.stream()...</code> 两遍则白付两遍遍历。<br/>
+<strong>② 「<code>indent(0)</code> 是无操作」</strong>——不是。它仍会按行重拼并<strong>补上尾部 <code>\n</code></strong>，还统一了换行符。想要真无操作要自己判空。<br/>
+<strong>③ 「紧凑数字 = <code>String.format("%.1f")</code>」</strong>——紧凑数字是 <strong>locale 数据驱动</strong>的（中文「万」、英文「K」），数量级分组规则与语言绑定，不能靠四舍五入模板复刻。</p>
+</div>
+
+<h2>L3 · 源码层：三段必读实现</h2>
+
+<div class="info">
+<div class="info-title">源码出处与行号基准</div>
+<p>下述行号取自 <strong>openjdk/jdk12u（master）</strong>：<code>src/java.base/share/classes/java/util/stream/Collectors.java</code>、<code>java/lang/String.java</code>、<code>java/text/NumberFormat.java</code>、<code>java/text/CompactNumberFormat.java</code>。本机 JDK 25 的 <code>lib/src.zip</code> 中同一实现的行号略有漂移（<code>teeing</code> 1913、<code>indent</code> 4028、<code>transform</code> 4355、<code>getCompactNumberInstance</code> 757/778），<strong>逻辑与 JDK 12 一致</strong>，两边可互为参照。</p>
+</div>
+
+<h3>片段一：<code>teeing</code> 与 <code>PairBox</code>（Collectors.java:1920–1985，openjdk/jdk12u）</h3>
+
+<pre><code>// src/java.base/share/classes/java/util/stream/Collectors.java  (openjdk/jdk12u)
+public static &lt;T, R1, R2, R&gt;
+Collector&lt;T, ?, R&gt; teeing(Collector&lt;? super T, ?, R1&gt; downstream1,   // :1920
+                          Collector&lt;? super T, ?, R2&gt; downstream2,
+                          BiFunction&lt;? super R1, ? super R2, R&gt; merger) {
+    return teeing0(downstream1, downstream2, merger);
+}
+
+private static &lt;T, A1, A2, R1, R2, R&gt;
+Collector&lt;T, ?, R&gt; teeing0(Collector&lt;? super T, A1, R1&gt; downstream1,  // :1927
+                           Collector&lt;? super T, A2, R2&gt; downstream2,
+                           BiFunction&lt;? super R1, ? super R2, R&gt; merger) {
+    Objects.requireNonNull(downstream1, "downstream1");
+    ...  // supplier/accumulator/combiner/finisher 共 8 个函数逐一校验
+
+    Set&lt;Collector.Characteristics&gt; characteristics;
+    ...
+    if (CH_ID.containsAll(c1Characteristics) || CH_ID.containsAll(c2Characteristics)) {
+        characteristics = CH_NOID;                     // 含 IDENTITY_FINISH 的一端
+    } else {                                           // 让整体失去身份完结资格
+        EnumSet&lt;Collector.Characteristics&gt; c = EnumSet.noneOf(...);
+        c.addAll(c1Characteristics);
+        c.retainAll(c2Characteristics);                // 取交集
+        c.remove(Collector.Characteristics.IDENTITY_FINISH);
+        characteristics = Collections.unmodifiableSet(c);
+    }
+
+    class PairBox {                                    // 双容器打包，本课关键
+        A1 left = c1Supplier.get();
+        A2 right = c2Supplier.get();
+
+        void add(T t) {
+            c1Accumulator.accept(left, t);             // 同一元素喂两个下游
+            c2Accumulator.accept(right, t);
+        }
+
+        PairBox combine(PairBox other) {
+            left = c1Combiner.apply(left, other.left); // 并行时两对各自合并
+            right = c2Combiner.apply(right, other.right);
+            return this;
+        }
+
+        R get() {
+            R1 r1 = c1Finisher.apply(left);
+            R2 r2 = c2Finisher.apply(right);
+            return merger.apply(r1, r2);               // 最后才合并两份结果
+        }
+    }
+
+    return new CollectorImpl&lt;&gt;(PairBox::new, PairBox::add, PairBox::combine,
+                                PairBox::get, characteristics);
+}</code></pre>
+
+<p><strong>怎么读</strong>：<code>PairBox</code> 就是「把两个 Collector 的状态绑成一个状态机」的全部秘密——<strong>四个函数一一对应 Collector 的四个阶段</strong>（supplier→建双容器、accumulator→双收、combiner→双并、finisher→双完结 + merger）。注意 characteristics 那段：<strong>只要任一下游是「身份完结」，整体就被降级成 <code>CH_NOID</code></strong>——因为 merger 的存在让「原样返回容器」不再可能。</p>
+
+<h3>片段二：<code>String.indent</code> / <code>transform</code>（String.java:2842 / 2888，openjdk/jdk12u）</h3>
+
+<pre><code>// src/java.base/share/classes/java/lang/String.java  (openjdk/jdk12u)
+public String indent(int n) {                              // :2842  @since 12
+    return isEmpty() ? "" : indent(n, false);
+}
+
+private String indent(int n, boolean removeBlanks) {
+    Stream&lt;String&gt; stream = removeBlanks ? lines(Integer.MAX_VALUE, Integer.MAX_VALUE)
+                                         : lines();
+    if (n &gt; 0) {
+        final String spaces = " ".repeat(n);               // 空格串只构造一次
+        stream = stream.map(s -&gt; spaces + s);
+    } else if (n == Integer.MIN_VALUE) {                   // 特例：完全去行首空白
+        stream = stream.map(s -&gt; s.stripLeading());
+    } else if (n &lt; 0) {                                    // 负数：最多剥掉已有缩进
+        stream = stream.map(s -&gt; s.substring(Math.min(-n, s.indexOfNonWhitespace())));
+    }
+    return stream.collect(Collectors.joining("\n", "", "\n"));   // ← 强制尾换行
+}
+
+public &lt;R&gt; R transform(Function&lt;? super String, ? extends R&gt; f) {  // :2888  @since 12
+    return f.apply(this);                                  // 全部实现就这一行
+}</code></pre>
+
+<h3>片段三：紧凑数字入口（NumberFormat.java:640 / 661 / 1055 / 1357，openjdk/jdk12u）</h3>
+
+<pre><code>// src/java.base/share/classes/java/text/NumberFormat.java  (openjdk/jdk12u)
+public static NumberFormat getCompactNumberInstance() {          // :640  @since 12
+    return getInstance(Locale.getDefault(Locale.Category.FORMAT),
+                       NumberFormat.Style.SHORT, COMPACTSTYLE);
+}
+
+public static NumberFormat getCompactNumberInstance(Locale locale,   // :661
+        NumberFormat.Style formatStyle) {
+    Objects.requireNonNull(locale);
+    Objects.requireNonNull(formatStyle);
+    return getInstance(locale, formatStyle, COMPACTSTYLE);       // 复用同一工厂
+}
+
+private static final int COMPACTSTYLE = 5;                        // :1055 类型标识
+
+public enum Style {                                              // :1357  @since 12
+    SHORT,   // "1M"(en) / "123万"(zh)
+    LONG     // "1 million"(en) / "123万"(zh)
+}
+
+// src/java.base/share/classes/java/text/CompactNumberFormat.java:185 (openjdk/jdk12u)
+public final class CompactNumberFormat extends NumberFormat {     // @since 12</code></pre>
+
+<h3>设计原理三问</h3>
+
+<table>
+<tr><th>问题</th><th>答案</th></tr>
+<tr><td><strong>为什么这样设计？</strong></td><td><code>teeing</code>：流式 API 的「单遍语义」与「多统计量需求」矛盾，必须由库层提供<strong>可并行化</strong>的组合子；紧凑数字：显示层需求高度 locale 化，交给 <code>NumberFormat</code> 体系才能复用 CLDR 数据；<code>indent</code>：文本块（JDK 13+ 文本块的前奏）与日志格式化都需要「整体搬运缩进」。</td></tr>
+<tr><td><strong>代价是什么？</strong></td><td><code>teeing</code> 的 merger 要用户自己保证<strong>交换律/结合律</strong>，否则并行结果与串行不一致；<code>indent</code> 强制尾换行带来「静默改变字符串」的坑；紧凑数字引入对 <code>jdk.localedata</code> 的隐性依赖。</td></tr>
+<tr><td><strong>如何改进？</strong></td><td>业界常见改进方向：<code>teeing</code> 增加 null-safe 的结果合并变体；<code>indent</code> 提供「不补尾换行」开关（实际未做，只能自己判空）；紧凑数字在 <code>String</code> 侧提供更轻量的格式化入口（至今未提供，仍走 <code>NumberFormat</code>）。</td></tr>
+</table>
+
+<h2>L4 · 边界层：能不能上生产</h2>
+
+<table>
+<tr><th>场景</th><th>结论</th><th>要点</th></tr>
+<tr><td>Java 12 新 API 在生产（JDK ≥ 12）</td><td>✅ 可用</td><td>四组 API 均为<strong>正式特性</strong>（非预览、非实验）——这是它们与 JEP 325 的本质区别</td></tr>
+<tr><td>需要兼容 JDK 11 的项目</td><td>❌ 不可用</td><td>Java 12 是非 LTS；要用 <code>teeing</code> 等就得升到 12+ 或找替代写法（<code>reduce</code> / 自定义收集器）</td></tr>
+<tr><td>并行流 + <code>teeing</code></td><td>⚠️ 有条件</td><td>merger 必须<strong>无序、无副作用</strong>；下游之一是 <code>groupingBy</code> 等重量级收集器时，双容器内存翻倍</td></tr>
+<tr><td>多线程共享 <code>getCompactNumberInstance</code> 结果</td><td>❌</td><td><code>NumberFormat</code> 非线程安全，共享实例并发格式化会互相污染状态</td></tr>
+<tr><td>对超大文本频繁 <code>indent</code></td><td>⚠️</td><td>每行拼接 + <code>joining</code> 产生新数组，热点路径上要评估分配（可自写 char 数组版本）</td></tr>
+<tr><td>精简 jlink 镜像</td><td>⚠️</td><td>验证目标 locale 的紧凑样式是否随 <code>jdk.localedata</code> 一起被打包</td></tr>
+</table>
+
+<div class="production-note">
+<div class="header">API 选型速查</div>
+<ul>
+<li><strong>一个流要算多个统计量</strong> → <code>Collectors.teeing</code>；要 N（&gt;2）个统计量 → 两两嵌套 <code>teeing</code> 或改用 <code>summaryStatistics</code>。</li>
+<li><strong>展示大数字</strong> → <code>getCompactNumberInstance</code>；要精确分隔格式 → 传统 <code>DecimalFormat</code>。</li>
+<li><strong>整形多行文本</strong> → <code>indent</code>，记得结果尾部有 <code>\n</code>；<strong>链式取值</strong> → <code>transform</code>（可读性糖，非必需）。</li>
+<li>项目还在 JDK 11 → 用 <code>reduce</code> 组合两个统计量模拟 <code>teeing</code>，语义可完全对齐。</li>
+</ul>
+</div>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: Java 12 的 API 层新增了哪些？</div>
+<div class="answer">
+<p>四组：① <code>Collectors.teeing</code>——双下游一次遍历合并；② <code>NumberFormat.getCompactNumberInstance(locale, Style)</code> + <code>NumberFormat.Style{SHORT, LONG}</code> + <code>java.text.CompactNumberFormat</code>；③ <code>String.indent(int)</code>、<code>String.transform(Function)</code>；④ 数据层面 Unicode 11.0 支持与日本「令和（Reiwa）」年号支持。全部是<strong>正式特性</strong>。</p>
+<div class="key-point"><strong>关键点</strong>：与同版本的 switch 表达式（预览）、Shenandoah（实验）区分开——这四组没有状态标签。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — 写出 <code>teeing</code> 的执行模型伪代码，<code>characteristics</code> 怎么算？</div>
+<div class="answer">
+<pre><code>PairBox { left = c1Supplier.get(); right = c2Supplier.get() }
+add(t):     c1Accumulator(left, t); c2Accumulator(right, t)
+combine(o): left = c1Combiner(left, o.left); right = c2Combiner(right, o.right)
+get():      merger(c1Finisher(left), c2Finisher(right))
+
+characteristics:
+  if 任一下游满足 CH_ID ⊆ characteristics:   → CH_NOID
+  else: (c1 ∩ c2) - {IDENTITY_FINISH}</code></pre>
+<p>记忆点：<strong>「双容器绑定 + 四阶段一一对应 + merger 让身份完结失效」</strong>。校验也别忘——merger、两个 downstream 及其各自的四个函数<strong>共 11 个 null 检查</strong>，全部在构造期完成（错误越早暴露越好）。</p>
+<div class="key-point"><strong>关键点</strong>：并行正确性靠 <code>combine</code> 同步合并两对容器，而不是合并两份最终结果。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 代码审查 — <code>String s = text.indent(4)</code> 之后 <code>s.endsWith("\n")</code> 是什么？</div>
+<div class="answer">
+<p>只要 <code>text</code> 非空，就是 <strong><code>true</code></strong>——<code>indent</code> 用 <code>Collectors.joining("\n", "", "\n")</code> 收尾，<strong>固定追加一个换行</strong>。由此派生三个坑：</p>
+<ul>
+<li>把 <code>indent</code> 结果直接拼进 JSON/HTML 属性会多一个换行；</li>
+<li><code>indent(0)</code> <strong>不是无操作</strong>：会去行首统一为 <code>\n</code> + 补尾换行；</li>
+<li>负数缩进不会产生「负长度行」：实际剥掉的字符数取 <code>min(-n, 行首空白长度)</code>；<code>Integer.MIN_VALUE</code> 因为取相反数会溢出，被单独处理成 <code>stripLeading()</code>。</li>
+</ul>
+<p>空串则短路返回 <code>""</code>（既不加缩进也不加换行）。</p>
+<div class="key-point"><strong>关键点</strong>：<code>MIN_VALUE</code> 特判是这道题的「深水区」——<code>-Integer.MIN_VALUE == Integer.MIN_VALUE</code>，不特判会走错分支。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 故障排查 — <code>teeing(minBy, maxBy, ...)</code> 在并行流下结果偶尔不对，为什么？</div>
+<div class="answer">
+<p>先查两点：<strong>① merger 有副作用或依赖顺序</strong>——并行时 <code>merger(r1, r2)</code> 的两个入参分别来自不同线程合并后的结果，先后顺序不固定，<code>r1 - r2</code> 这类写法会得到负数；<strong>② 下游自身不是确定性的</strong>——比如下游用了 <code>HashSet</code> 遍历顺序。</p>
+<p>其次确认调用形态：如果把同一个流先收集一次再收集一次，第二次会抛 <code>IllegalStateException: stream has already been operated upon or closed</code>——<code>teeing</code> 的意义正是<strong>用一次遍历替代两次收集</strong>。</p>
+<div class="key-point"><strong>关键点</strong>：merger 的契约是「纯函数且满足交换律」，这是所有 <code>teeing</code> 并行 bug 的根因。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: 架构师 — 为什么 <code>teeing</code> 不直接做成「把两个统计量塞进一个收集器」？和 <code>reduce</code> 比优势在哪？</div>
+<div class="answer">
+<p>因为 <strong>Collector 契约（supplier/accumulator/combiner/finisher）是为单结果设计的</strong>，两个结果意味着两套容器——只有库层能把这四阶段正确地「叉乘」，用户手写 <code>reduce</code> 很容易漏掉并行分支（combiner）。对比：</p>
+<ul>
+<li><strong>手写 <code>reduce</code></strong>：要自己维护二元组容器、处理 <code>combiner</code>、避免装箱开销，还容易把「两次遍历」写进代码；</li>
+<li><strong><code>teeing</code></strong>：单遍、可并行、校验齐全、与既有收集器自由组合（甚至可以 <code>teeing(groupingBy, counting, ...)</code>）。</li>
+</ul>
+<p>更深一层：<code>teeing</code> 是 <code>Collector</code> 体系成为<strong>可组合代数</strong>的标志——在此之前收集器只能「嵌套」不能「并联」。</p>
+<div class="key-point"><strong>关键点</strong>：并联组合子必须由库提供，因为它要同时保证串行/并行两种执行模型的正确性。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 讲师角度 — <code>transform</code> 存在的意义是什么？不就是 <code>f.apply(s)</code> 吗？</div>
+<div class="answer">
+<p>实现上确实是 <code>return f.apply(this)</code>，价值全在<strong>调用侧的人体工学</strong>：它允许「以字符串为起点」的链式写法，把嵌套调用拉平：</p>
+<pre><code>String a = normalize(trim(input));                 // 从内往外读
+String b = input.transform(this::trim)             // 从左往右读
+                 .transform(this::normalize)
+                 .transform(s -&gt; s.toUpperCase(Locale.ROOT));</code></pre>
+<p>尤其当处理函数是方法引用、或想在链中插入 <code>peek</code>-式的中间步骤时更顺。缺点也直白：<strong>多一层虚调用</strong>，以及让「这是一次函数应用」在调试时不如直接调用直观。</p>
+<div class="key-point"><strong>关键点</strong>：<code>transform</code> 是可读性糖，与 <code>Optional.map</code> 属于同一类「链式上下文」设计。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能列出 Java 12 四组正式 API 及其替代的旧写法（interviewer 角度）</li>
+<li class="done">能写出 PairBox 执行模型与 characteristics 计算伪代码（追问链要求）</li>
+<li class="done">能指出 indent 的尾换行、MIN_VALUE 特判、负数截断三个语义点（code reviewer 角度）</li>
+<li class="done">能做 API 选型（teeing vs reduce、紧凑数字 vs DecimalFormat）（architect 角度）</li>
+<li class="done">能解释「merger 必须交换律」与「NumberFormat 非线程安全」（code reviewer 角度）</li>
+<li>能排查并行 tee 结果不一致、流重复消费、精简镜像 locale 缺失（incident responder 角度）</li>
+<li>能用大白话讲清「收集器从嵌套到并联」的意义（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="./0018-java12-switch-expressions.html">← 上一课：Switch 表达式（预览）</a></span>
+<span><a href="./0020-java12-constants-api.html">下一课：JVM Constants API（JEP 334）→</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

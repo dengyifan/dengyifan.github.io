@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Switch 表达式（预览）· Java 12</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12 · Switch 表达式</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>Switch 表达式（预览）—— 从语句到表达式的第一次跨越</h1>
+<div class="article-meta"><span>📚 L1–L5 · 语言层</span><span>🔬 JEP 325 · javac（Attr / Flow / Lower）源码</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 12 / Switch 表达式</div>
+
+<h2>L1 · 概念层：switch 不再只能「做一件事」，还能「算出一个值」</h2>
+
+<p>Java 12 的 <strong>JEP 325 <em>Switch Expressions</em></strong>（<strong>预览特性</strong>）让 <code>switch</code> 第一次从「语句（statement）」升级为「表达式（expression）」：它可以从一组标签里<strong>算出一个值并参与赋值/返回</strong>，而不是只负责跳转到某段代码。</p>
+
+<table>
+<tr><th></th><th>传统形式（Java 12 仍支持）</th><th>箭头形式（JEP 325 新增）</th><th>switch <strong>表达式</strong>（新增用法）</th></tr>
+<tr><td>写法</td><td><code>case L: statements</code></td><td><code>case L -&gt; expression / block / throw</code></td><td><code>int x = switch (v) { case 1 -&gt; 10; ... };</code></td></tr>
+<tr><td>fall-through</td><td>✅ 有（忘写 break 就掉进下个分支——经典事故源）</td><td>❌ <strong>无</strong>，执行完自然结束</td><td>❌ 无</td></tr>
+<tr><td>多标签</td><td>✅ <code>case A, B:</code>（Java 12 也支持）</td><td>✅ <code>case A, B -&gt;</code></td><td>✅</td></tr>
+<tr><td>产出值</td><td>只能靠外部变量 + break</td><td>直接 <code>-&gt;</code> 一个表达式</td><td>块内用 <strong><code>break 值;</code></strong>（Java 12 写法）</td></tr>
+<tr><td>块内局部变量</td><td>作用域<strong>泄漏</strong>到整个 switch</td><td><strong>不泄漏</strong>到其他分支</td><td>同左</td></tr>
+</table>
+
+<h3>Java 12 的写法长什么样</h3>
+
+<pre><code>// 1) 箭头形式 + 表达式产出值（最常用）
+int numLetters = switch (day) {
+    case MONDAY, FRIDAY, SUNDAY -&gt; 6;
+    case TUESDAY                -&gt; 7;
+    case THURSDAY, SATURDAY     -&gt; 8;
+    case WEDNESDAY              -&gt; 9;
+};
+
+// 2) 箭头 + 块：Java 12 规定用 break &lt;value&gt; 产出（不是 yield！）
+String formatted = switch (kind) {
+    case LIGHT -&gt; {
+        String result = "L" + lumens;
+        break result;          // ← Java 12 预览版的「返回值」写法
+    }
+    case HEAVY -&gt; {
+        if (lumens &gt; 1000) {
+            throw new IllegalArgumentException("too bright");
+        }
+        break "H" + lumens;    // 每条路径要么 break 值、要么 throw
+    }
+};
+
+// 3) 传统形式也能当表达式用（同样的 break 值规则）
+int x = switch (v) {
+    case 1: break 10;
+    case 2: break 20;
+    default: break 0;
+};</code></pre>
+
+<div class="warning">
+<div class="warning-title">误区注入：Java 12 里是 <code>break 值;</code>，不是 <code>yield</code></div>
+<p>网上大量教程写 <code>yield</code>，那是 <strong>JDK 13（JEP 354）</strong> 才改的写法（JDK 13 也是该特性的第二次预览）；<strong>JDK 14（JEP 361）</strong> 才最终定稿转正。所以：<strong>在 Java 12 语境下写 <code>yield x;</code> 是编译不过的</strong>——Java 12 只认 <code>break x;</code>。同理，「switch 表达式是什么时候正式（非预览）进 JDK 的」答案是 <strong>JDK 14</strong>，不是 12 也不是 13。</p>
+</div>
+
+<div class="note">
+<div class="note-title">为什么要消除 fall-through？</div>
+<p>fall-through（从一个 case 直接掉进下一个 case）是 Java switch 最著名的事故源：忘写 <code>break</code> 时程序「看起来正常、实际串了分支」，编译期毫无提示。箭头形式从<strong>语法层面</strong>消灭了这个问题——右侧只能是「表达式 / 语句块 / throw」三者之一，<strong>根本没有「掉进下一个分支」的语义</strong>。这也是 JEP 325 把两种形式并存而非替换旧形式的原因：旧代码零破坏，新代码默认安全。</p>
+</div>
+
+<h3>预览特性的启用方式</h3>
+
+<pre><code>javac --enable-preview --release 12 SwitchDemo.java
+java  --enable-preview SwitchDemo</code></pre>
+
+<p>两个开关缺一不可：<code>--release 12</code> 把语言级别钉在 12，<code>--enable-preview</code> 允许使用「12 中尚未定稿」的语法。<strong>运行时的 <code>java</code> 版本必须等于编译时的 <code>--release</code></strong>——预览特性禁止「12 编译、13 运行」。</p>
+
+<h2>L2 · 原理层</h2>
+
+<h3>必背规则清单（全部来自 JEP 325 原文）</h3>
+
+<ol>
+<li><strong>箭头右侧只有三种合法形态</strong>：表达式、<code>{ ... }</code> 块、<code>throw</code> 语句。没有 <code>;</code> 之外的「语句序列 + fall-through」。</li>
+<li><strong>多标签</strong>：<code>case A, B, C -&gt;</code>（逗号分隔）；传统形式同样支持 <code>case A, B:</code>——这是 Java 12 顺带补上的、对两种形式都生效的能力。</li>
+<li><strong>必须穷尽（exhaustive）</strong>：switch 表达式对「所有可能输入」都要有答案。通常意味着要写 <code>default</code>；<code>switch</code> 枚举且覆盖全部常量时，编译器可以自己兜底。</li>
+<li><strong>必须「有值或抛异常」</strong>：每个分支要么 <code>break &lt;value&gt;</code>（或 <code>-&gt;</code> 一个表达式），要么 <code>throw</code>；<strong>不允许任何路径「直接走完」</strong>。</li>
+<li><strong>是 poly expression</strong>：目标类型向下推断——<code>Object o = switch (x) { case 1 -&gt; "a"; default -&gt; 1; };</code> 会按目标类型检查各分支类型。</li>
+<li><strong>禁止跨越它的跳转</strong>：在 switch 表达式内部，无标签 <code>break</code>（产出值）是唯一合法跳出方式；<strong><code>return</code>、<code>continue</code>、带标签 <code>break</code>、以及跳出到外层循环的 <code>break</code> 都非法</strong>（javac 报 <code>illegal jump through a switch expression</code> 一类错误）。</li>
+<li><strong>作用域更干净</strong>：箭头块里声明的局部变量只在本分支可见，不会像传统形式那样污染整个 switch。</li>
+<li>JEP 原文留了一句「机会主义」备注：未来可能扩展到 <code>float/double/long</code> 选择器。</li>
+</ol>
+
+<h3>关键判断逻辑伪代码：javac 如何判定一个 switch 表达式合法</h3>
+
+<pre><code>function checkSwitchExpression(tree):          # 聚合 Attr / Flow / Lower 三处检查
+    # ---- Attr.java: 类型与跳转 ----
+    tree.polyKind = (目标类型存在) ? POLY : STANDALONE
+    if tree.polyKind == POLY and 目标类型 == void:
+        error "switch expression cannot be void-compatible"
+    for each case c:
+        c.body 用 env.info.breakResult = 目标类型 来归因      # break 值按目标类型检查
+        收集所有 target == tree 的 break 的值类型
+    if 没有任何 case 子句:
+        error "switch expression does not have any case clauses"
+    type = STANDALONE ? lub(break 值类型...) : 目标类型
+
+    # ---- Flow.java: 穷尽性 + 完整性（活性分析）----
+    constants = selector 是 enum ? 全部枚举常量 : null
+    hasDefault = false
+    for each case c:
+        if c 是 default: hasDefault = true
+        else: 从 constants 中扣掉 c 的标签
+        alive = 分析 c.body 是否可能「正常走完」
+        if alive and c 是箭头规则:
+            error "switch rule completes without providing a value"
+        elif alive and 是最后一个 case:
+            error "switch expression completes without providing a value"
+        c.completesNormally = alive
+    if (constants == null or constants 还有剩余) and not hasDefault:
+        error "the switch expression does not cover all possible input values"   # 穷尽性
+
+    # ---- Lower.java: 降糖成普通字节码 ----
+    if 没有 default 分支:
+        追加 default: throw new IncompatibleClassChangeError()   # 兜底，绝不让它走飞
+    把 case A, B -&gt; 展开成 case A: case B: ...                  # 多标签拆开
+    给「正常走完」的箭头规则补一个合成 break;
+    selector 是 enum/string: 改写成 hashCode/序号两级 switch（沿用传统降糖）
+    返回 一个普通 JCSwitch（语句），结果写入临时变量</code></pre>
+
+<div class="mermaid">
+flowchart TB
+    A[源码 switch 表达式] --&gt; B["Attr.java:1407<br/>归因类型 / polyKind / break 值类型"]
+    B --&gt; C["Flow.java:635<br/>穷尽性 NotExhaustive + 完整性 CompletesNormally"]
+    C --&gt; D["Lower.java:3369<br/>补 default: throw ICCE / 展开多标签 / 合成 break"]
+    D --&gt; E["Gen.java<br/>普通 switch 字节码（tableswitch/lookupswitch）"]
+    E --&gt; F[结果值经临时变量写出]
+</div>
+
+<h3>四维度生产检查</h3>
+
+<table>
+<tr><th>维度</th><th>Java 12 switch 表达式的表现</th></tr>
+<tr><td><strong>并发语义</strong></td><td>纯编译期特性，字节码层面与手写 if/switch + 局部变量等价，<strong>无任何新增运行时并发行为</strong>；selector 只求值一次（比手写重复求值更安全）。</td></tr>
+<tr><td><strong>异常容错</strong></td><td>穷尽性检查缺失时，编译器在降糖阶段插入 <code>default: throw new IncompatibleClassChangeError()</code>——<strong>这是「不该发生」的信号</strong>，出现即说明类文件与源码不同步（比如有人手工改了 class）。</td></tr>
+<tr><td><strong>边界判断</strong></td><td>预览特性三重边界：① 需要 <code>--enable-preview</code>；② 编译与运行版本必须一致；③ <strong>语义可能在下个版本变</strong>（12 的 <code>break 值</code> 就被 13 的 <code>yield</code> 推翻）。跨版本混编 = 直接编译错误或运行期拒绝。</td></tr>
+<tr><td><strong>性能开销</strong></td><td>零额外开销，甚至略有收益：降糖由编译器统一完成，枚举/字符串 switch 仍走与传统形式<strong>完全相同</strong>的两级降糖（hashCode → 序号）；空分支不会生成多余代码。</td></tr>
+</table>
+
+<div class="warning">
+<div class="warning-title">两个高频误区</div>
+<p><strong>① 「写了 default 就算穷尽」</strong>——对 switch <strong>表达式</strong>来说还要过第二关：每条路径必须「有值或 throw」。写 <code>default -&gt; {}</code>（空块）依然报 <code>switch rule completes without providing a value</code>。<br/>
+<strong>② 「箭头形式 = 表达式形式」</strong>——不是。<code>switch (v) { case 1 -&gt; foo(); }</code> 单独写仍是<strong>语句</strong>（不产出值）；只有把整个 switch 放在需要值的位置（赋值、return、方法实参……）它才是表达式。判据是<strong>有没有目标类型</strong>，不是有没有箭头。</p>
+</div>
+
+<h2>L3 · 源码层：javac 的四处落点（openjdk/jdk12u）</h2>
+
+<div class="info">
+<div class="info-title">源码出处与获取方式</div>
+<p>以下行号核对自 <strong>openjdk/jdk12u 仓库（master）</strong>的 <code>src/jdk.compiler/share/classes/com/sun/tools/javac/</code>，通过 raw.githubusercontent 抓取原文比对。本地克隆后：<code>git clone https://github.com/openjdk/jdk12u</code>，打开下表文件即可逐行走读。</p>
+</div>
+
+<h3>关键文件清单（已核对）</h3>
+
+<table>
+<tr><th>文件</th><th>行号</th><th>作用</th></tr>
+<tr><td><code>tree/JCTree.java</code></td><td>1246–1300</td><td><code>JCCase</code> 定义：<code>CaseKind caseKind</code>（STATEMENT / RULE）、<strong><code>List&lt;JCExpression&gt; pats</code>（一个 case 携带多个标签）</strong>、<code>JCTree body</code>、<code>boolean completesNormally</code></td></tr>
+<tr><td><code>comp/Attr.java</code></td><td>1407–1447</td><td><code>visitSwitchExpression</code>：polyKind 判定、break 值归因、空分支报错</td></tr>
+<tr><td><code>comp/Attr.java</code></td><td>1900–2050</td><td><code>visitBreak / findJumpTarget / visitReturn</code>：跳转合法性（禁 return / continue / 标签 break）</td></tr>
+<tr><td><code>comp/Flow.java</code></td><td>635–680</td><td><strong>穷尽性 + 完整性检查</strong>（本课最重要的一段）</td></tr>
+<tr><td><code>comp/Flow.java</code></td><td>2190–2232</td><td>definite-assignment 视角的 <code>handleSwitch</code>（各分支独立起点）</td></tr>
+<tr><td><code>comp/Lower.java</code></td><td>3365–3420</td><td>降糖：补默认 throw、展开多标签、合成 break</td></tr>
+<tr><td><code>resources/compiler.properties</code></td><td>188–225 / 1334</td><td>全部相关错误文案（面试可直接引用原文）</td></tr>
+</table>
+
+<h3>片段一：穷尽性与完整性（Flow.java:635，openjdk/jdk12u）</h3>
+
+<pre><code>// src/jdk.compiler/share/classes/com/sun/tools/javac/comp/Flow.java  (openjdk/jdk12u)
+public void visitSwitchExpression(JCSwitchExpression tree) {
+    ...
+    Set&lt;Object&gt; constants = null;
+    if ((tree.selector.type.tsym.flags() &amp; ENUM) != 0) {   // 枚举选择器 → 收集全部常量
+        constants = new HashSet&lt;&gt;();
+        for (Symbol s : ... members().getSymbols(s -&gt; (s.flags() &amp; ENUM) != 0)) {
+            constants.add(s.name);
+        }
+    }
+    boolean hasDefault = false;
+    for (List&lt;JCCase&gt; l = tree.cases; l.nonEmpty(); l = l.tail) {
+        alive = Liveness.ALIVE;
+        JCCase c = l.head;
+        if (c.pats.isEmpty()) hasDefault = true;           // 空标签 = default
+        else {
+            for (JCExpression pat : c.pats) {              // 多标签逐个扫描
+                ...
+                constants.remove(...);                     // 命中一个常量就扣一个
+            }
+        }
+        scanStats(c.stats);
+        if (alive == Liveness.ALIVE) {                     // 分支可能「正常走完」
+            if (c.caseKind == JCCase.RULE) {
+                log.error(..., Errors.RuleCompletesNormally);
+            } else if (l.tail.isEmpty()) {
+                log.error(..., Errors.SwitchExpressionCompletesNormally);
+            }
+        }
+        c.completesNormally = alive != Liveness.DEAD;
+    }
+    if ((constants == null || !constants.isEmpty()) &amp;&amp; !hasDefault) {
+        log.error(tree, Errors.NotExhaustive);             // ← 穷尽性判定的唯一出口
+    }
+    ...
+}</code></pre>
+
+<p><strong>怎么读</strong>：穷尽性是「<code>枚举还没扣完</code> 或 <code>非枚举选择器</code>」且「<code>没有 default</code>」时触发——所以 <strong>非枚举（int/String）的 switch 表达式必须写 default</strong>，而枚举全覆盖可以省略。完整性（每条路径有值）则是「活性分析」的结论：<code>alive == ALIVE</code> 意味着控制流能从这个分支底部走出去而没被 <code>break 值/throw</code> 拦住。</p>
+
+<h3>片段二：降糖时的兜底（Lower.java:3369，openjdk/jdk12u）</h3>
+
+<pre><code>// src/jdk.compiler/share/classes/com/sun/tools/javac/comp/Lower.java  (openjdk/jdk12u)
+public void visitSwitchExpression(JCSwitchExpression tree) {
+    if (tree.cases.stream().noneMatch(c -&gt; c.pats.isEmpty())) {   // 源码里没有 default
+        JCThrow thr = make.Throw(makeNewClass(
+                syms.incompatibleClassChangeErrorType, List.nil()));
+        JCCase c = make.Case(JCCase.STATEMENT, List.nil(), List.of(thr), null);
+        tree.cases = tree.cases.append(c);                        // 降糖时补一个
+    }
+    handleSwitch(tree, tree.selector, tree.cases);
+}
+
+private void handleSwitch(JCTree tree, JCExpression selector, List&lt;JCCase&gt; cases) {
+    // 1) 展开多标签：case C1, C2, C3: ... =&gt; case C1: case C2: case C3: ...
+    ...
+    // 2) 箭头规则若「可能正常走完」，补一个合成 break（对 STATEMENT 目标）
+    for (JCCase c : convertedCases) {
+        if (c.caseKind == JCCase.RULE &amp;&amp; c.completesNormally) {
+            JCBreak b = make_at(c.pos()).Break(null);
+            b.target = tree;
+            c.stats = c.stats.append(b);
+        }
+    }
+    ...
+    if (enumSwitch)   result = visitEnumSwitch(tree, selector, cases);
+    else if (stringSwitch) result = visitStringSwitch(tree, selector, cases);
+}</code></pre>
+
+<p><strong>为什么要补 <code>default: throw new IncompatibleClassChangeError()</code></strong>？Flow 阶段已经用 <code>NotExhaustive</code> 挡住了源码层面的漏写；这里的 throw 是<strong>字节码层的最后保险</strong>——即使有人绕过编译器（或类文件被替换），switch 表达式也<strong>绝不可能「走到底没产出值」</strong>，而是显式抛出一个「类结构被意外修改」语义的错误。这正是 <code>IncompatibleClassChangeError</code> 的本意。</p>
+
+<h3>片段三：跳转限制（Attr.java:1900–2045，openjdk/jdk12u）</h3>
+
+<pre><code>// visitBreak：带值的 break
+if (attribute) {
+    attribTree(tree.value, env, env.info.breakResult);   // break 的值按目标类型归因
+    JCTree immediateTarget = findJumpTarget(...);
+    if (immediateTarget.getTag() != SWITCH_EXPRESSION) {
+        log.error(tree.pos(), Errors.BreakExprNotImmediate(immediateTarget.getTag()));
+        // → "value break not supported in 'LOOP'"：不能用 break 值跳出循环
+    }
+    ...
+} else if (tree.value != null &amp;&amp; !tree.value.hasTag(IDENT)) {
+    log.error(tree.pos(), Errors.BreakComplexValueNoSwitchExpression);
+    // → "unexpected value break"
+}
+
+// findJumpTarget：switch 表达式只接受「无标签 break」
+case SWITCH_EXPRESSION:
+    if (tag == BREAK) {
+        if (label == null) return Pair.of(env1.tree, null);
+        else pendingError = Errors.BreakOutsideSwitchExpression;   // 带标签 break 非法
+    } else {
+        pendingError = Errors.ContinueOutsideSwitchExpression;     // continue 非法
+    }
+
+// visitReturn：正在归因 break 值时（breakResult != null）遇到 return
+} else if (env.info.breakResult != null) {
+    log.error(tree.pos(), Errors.ReturnOutsideSwitchExpression);   // return 非法
+}</code></pre>
+
+<h3>错误文案对照（compiler.properties，openjdk/jdk12u）</h3>
+
+<table>
+<tr><th>行号</th><th>错误 key</th><th>文案（原文）</th><th>触发原因</th></tr>
+<tr><td>191</td><td><code>break.missing.value</code></td><td><code>missing break value</code></td><td>switch 表达式里写了裸 <code>break;</code></td></tr>
+<tr><td>194</td><td><code>break.outside.switch.expression</code></td><td><code>break outside of enclosing switch expression</code></td><td>带标签 break 跳出 switch 表达式</td></tr>
+<tr><td>197</td><td><code>continue.outside.switch.expression</code></td><td><code>continue outside of enclosing switch expression</code></td><td>在 switch 表达式里 <code>continue</code> 外层循环</td></tr>
+<tr><td>200</td><td><code>return.outside.switch.expression</code></td><td><code>return outside of enclosing switch expression</code></td><td>用 <code>return</code> 穿越 switch 表达式</td></tr>
+<tr><td>203</td><td><code>rule.completes.normally</code></td><td><code>switch rule completes without providing a value …</code></td><td>某个箭头分支既不产值也不 throw</td></tr>
+<tr><td>207</td><td><code>switch.expression.completes.normally</code></td><td><code>switch expression completes without providing a value …</code></td><td>整体没有为全部输入提供值</td></tr>
+<tr><td>217</td><td><code>break.expr.not.immediate</code></td><td><code>value break not supported in 'LOOP'</code></td><td><code>break 5;</code> 想跳出循环</td></tr>
+<tr><td>223</td><td><code>switch.expression.empty</code></td><td><code>switch expression does not have any case clauses</code></td><td>一个分支都没写</td></tr>
+<tr><td>1334</td><td><code>not.exhaustive</code></td><td><code>the switch expression does not cover all possible input values</code></td><td>穷尽性失败（最常考）</td></tr>
+</table>
+
+<h3>设计原理三问</h3>
+
+<table>
+<tr><th>问题</th><th>答案</th></tr>
+<tr><td><strong>为什么这样设计？</strong></td><td>两层动机：① <strong>表达式化</strong>——让「多分支取值」这种占绝对多数的用法不再需要先声明临时变量 + break；② <strong>安全化</strong>——用箭头形式在语法上删除 fall-through。而「先以预览发布」是因为<strong>语义仍可能被推翻</strong>：12 用 <code>break 值</code>、13 改 <code>yield</code>，正是预览机制存在的意义。</td></tr>
+<tr><td><strong>代价是什么？</strong></td><td>① 语言复杂度上升：两套形式、三种错误检查要背；② 预览期代码<strong>不能跨版本</strong>，团队若混用 JDK 版本会被编译器直接拒绝；③ 面试/培训要额外解释「12 是 break、13 才是 yield」。</td></tr>
+<tr><td><strong>如何改进？</strong></td><td>JDK 13 用 <code>yield</code> 消除「<code>break</code> 既当跳出又当产值」的歧义；JDK 14 转正后预览开关即可摘除；更远期是 JEP 提到的浮点/长整型选择器与 <code>switch</code> 模式匹配（JDK 17 preview、JDK 21 JEP 441 正式）。</td></tr>
+</table>
+
+<h2>L4 · 边界层：能不能上生产</h2>
+
+<table>
+<tr><th>问题</th><th>结论</th><th>依据</th></tr>
+<tr><td>Java 12 的 switch 表达式能进生产吗？</td><td><strong>不能长期依赖</strong>（可短期试点）</td><td>预览特性 JEP 流程明示：不保证向后兼容，可能被修改或撤回；实际上 13 就改了语法</td></tr>
+<tr><td><code>--enable-preview</code> 能去掉吗？</td><td>不能（12/13 都要）</td><td>转正要等 JDK 14（JEP 361）</td></tr>
+<tr><td>12 写的代码在 13 能跑吗？</td><td><strong>编译期就过不了</strong></td><td><code>break 值;</code> → JDK 13 要求 <code>yield 值;</code>；JDK 14 起 <code>break 值</code> 在块内同样不再合法</td></tr>
+<tr><td>能否只在服务端用、客户端不升级？</td><td>不能</td><td>预览 class 文件要求运行 JVM 与 <code>--release</code> 完全匹配</td></tr>
+<tr><td>传统 switch 写法会被删吗？</td><td>不会</td><td>JEP 325 明确「两种形式并存」，旧代码零迁移成本</td></tr>
+</table>
+
+<h3>版本迁移对照表（面试高频）</h3>
+
+<table>
+<tr><th>点</th><th>Java 12（预览 1）</th><th>Java 13（预览 2 · JEP 354）</th><th>Java 14（正式 · JEP 361）</th></tr>
+<tr><td>块内产出值</td><td><code>break value;</code></td><td><code>yield value;</code></td><td><code>yield value;</code></td></tr>
+<tr><td>裸 <code>break;</code></td><td>报 <code>missing break value</code></td><td>仍不允许（表达式场景）</td><td>仍不允许</td></tr>
+<tr><td>编译开关</td><td colspan="3"><code>--enable-preview --release N</code>（12/13）；14 起不需要</td></tr>
+<tr><td>裸 break 冲突处理</td><td colspan="2">块内 <code>break label</code> 与产值 break 曾有歧义</td><td>13 用 <code>yield</code> 彻底解耦</td></tr>
+</table>
+
+<div class="production-note">
+<div class="header">升级/落地决策清单（Java 12 语境）</div>
+<ul>
+<li><strong>现在（2019，JDK 12）</strong>：仅在「锁定 12、可接受重编译」的实验分支用；主干代码继续写传统形式。</li>
+<li><strong>升到 13</strong>：全局把块内 <code>break 值</code> 改成 <code>yield 值</code>（机械替换，编译器会指出每一处）。</li>
+<li><strong>升到 14+</strong>：摘掉 <code>--enable-preview</code>，箭头形式可以放心写；同时享受 14 对 <code>switch</code> 穷尽性检查的持续增强。</li>
+<li><strong>团队规范建议</strong>：新代码优先箭头形式；涉及 fall-through 语义的旧代码<strong>保持原样</strong>（改写会改变行为），只在测试覆盖下逐步替换。</li>
+</ul>
+</div>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: JEP 325 到底改了什么？</div>
+<div class="answer">
+<p>三点：① <code>switch</code> 可以作为<strong>表达式</strong>产出值（赋值/返回/作实参）；② 引入<strong>箭头标签</strong> <code>case L -&gt;</code>，右侧只能是表达式、块或 throw，<strong>没有 fall-through</strong>；③ 两种形式都支持<strong>逗号分隔多标签</strong>。同时施加两条硬约束：<strong>穷尽性</strong>与<strong>每条路径有值或抛异常</strong>。它是<strong>预览特性</strong>，JDK 14 才转正。</p>
+<div class="key-point"><strong>关键点</strong>：表达式化 + 无 fall-through + 多标签，三件事一起发生，但只有前两件是「语义新增」。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — <code>break</code> 和 <code>yield</code> 分别是哪个版本的？</div>
+<div class="answer">
+<ol>
+<li><strong>Java 12（JEP 325，预览 1）</strong>：块内用 <code>break 值;</code> 产出值——这也是「break 一词两义」的来源；</li>
+<li><strong>Java 13（JEP 354，预览 2）</strong>：改为 <code>yield 值;</code>，与「跳出 switch」的 break 彻底分离；</li>
+<li><strong>Java 14（JEP 361）</strong>：定稿转正，成为正式语法。</li>
+</ol>
+<p>推论题：<code>break;</code>（无值）在 switch 表达式里合法吗？——<strong>不合法</strong>，javac 报 <code>missing break value</code>（compiler.properties:191），因为裸 break 意味着「不产值地走完」，违反完整性约束。</p>
+<div class="key-point"><strong>关键点</strong>：12=break 值 / 13=yield / 14=正式，这个三段式是必背时间线。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — 写出「switch 表达式合法性的编译期判定」伪代码</div>
+<div class="answer">
+<pre><code># 三阶段：Attr(类型) → Flow(活性/穷尽) → Lower(降糖)
+Attr:
+  polyKind = 有目标类型 ? POLY : STANDALONE
+  每个 break &lt;value&gt; 按目标类型归因；收集 break 值类型求 lub
+  无 case 子句 → "does not have any case clauses"
+Flow:
+  enum 选择器 → constants = 全部枚举常量；逐 case 扣减
+  每分支做活性分析：
+     alive &amp;&amp; 箭头规则   → "rule completes without providing a value"
+     alive &amp;&amp; 最后一个分支 → "switch expression completes without providing a value"
+  (constants 有剩余 or 非枚举) &amp;&amp; 无 default → "does not cover all possible input values"
+Lower:
+  无 default → 追加 default: throw IncompatibleClassChangeError
+  多标签展开 + 给可走完的箭头规则补合成 break
+  enum/string 选择器 → 两级降糖</code></pre>
+<p>两个常被追问的判据：<strong>穷尽性看 <code>constants</code> 集合是否扣空</strong>；<strong>完整性看 <code>alive</code> 活性</strong>——不是看语法上有没有 break，而是看控制流会不会「漏出去」。</p>
+<div class="key-point"><strong>关键点</strong>：Flow.java:635–680 三十余行就是全部判定逻辑，面试可直接背出文件与行号。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 故障排查 — 编译报「the switch expression does not cover all possible input values」，怎么修？</div>
+<div class="answer">
+<p>先判断选择器类型，两条路：</p>
+<ul>
+<li><strong>枚举</strong>：说明还有枚举常量没被任何 case（和 default）覆盖。补 default，或补上漏掉的常量。常见陷阱：枚举常量在编译期新增（同仓库另一个文件），本地 switch 忘了更新；</li>
+<li><strong>int / String 等非枚举</strong>：<strong>必须写 default</strong>——因为 <code>constants == null</code> 时恒判为「有剩余」。</li>
+</ul>
+<p>注意这与「某分支没产值」是<strong>不同错误</strong>（后者是 <code>switch rule completes without providing a value</code>），修复方式也不同：前者补覆盖，后者把该分支改成产值表达式或 <code>throw</code>。</p>
+<div class="key-point"><strong>关键点</strong>：看错误文案的后半句——<code>cover all possible input values</code> 是覆盖问题，<code>without providing a value</code> 是产值问题。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: 追问 — 为什么 switch 表达式里禁止 <code>return</code> / <code>continue</code>？</div>
+<div class="answer">
+<p>因为它会<strong>破坏「表达式必须有值」的结构保证</strong>：<code>return</code> 绕过 <code>breakResult</code> 直接结束整个方法，方法返回类型与 switch 表达式的目标类型之间<strong>没有任何检查关系</strong>；<code>continue</code> 跳出后，switch 表达式的值同样无人定义。javac 的实现在 <code>Attr.findJumpTarget</code>：在 <code>SWITCH_EXPRESSION</code> 这一环里，<strong>只有无标签 <code>break</code> 被接受</strong>，<code>continue</code> 记为 <code>ContinueOutsideSwitchExpression</code>；<code>visitReturn</code> 发现 <code>env.info.breakResult != null</code>（正在归因 break 值）就报 <code>ReturnOutsideSwitchExpression</code>。报错文案统一叫「… outside of <strong>enclosing</strong> switch expression」——语义是「你跳出了它的边界」。</p>
+<div class="key-point"><strong>关键点</strong>：约束的本源是「表达式必须收敛成一个值」，跳转指令是收敛性的天敌。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 架构师 — 预览特性该不该进生产代码？怎么给团队定规矩？</div>
+<div class="answer">
+<p>分三档：<strong>① 工具/一次性脚本</strong>——可以试，编译即用，代价可控；<strong>② 主干业务代码</strong>——不允许，理由不是「有 bug」而是<strong>语义无承诺</strong>：JEP 预览流程明确「可修改、可撤回、不保证兼容」，12→13 的 <code>break</code>→<code>yield</code> 就是现实案例；<strong>③ 框架/库</strong>——绝对禁止，因为这会把「预览」传染给所有下游用户。</p>
+<p>落地规矩：编译参数集中到构建脚本（一处控制 <code>--enable-preview</code>）、CI 上跑一次「用下一个 JDK 编译」的预警任务、代码评审规则里把 <code>--enable-preview</code> 列为必须标注的改动。</p>
+<div class="key-point"><strong>关键点</strong>：预览特性 = 「用运行时升级承诺换语法尝鲜」，判断标准是<strong>可回退成本</strong>，不是功能好不好。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q7: 讲师角度 — 用大白话解释什么叫「switch 是 poly expression」？</div>
+<div class="answer">
+<p>普通表达式「自己知道自己是什么类型」，poly expression（多元表达式）<strong>要等目标告诉它是什么类型</strong>，Lambda、方法引用、字符串拼接、switch 表达式都属此类。例子：</p>
+<pre><code>Object o = switch (x) { case 1 -&gt; "a"; default -&gt; 1; };   // 按 Object 检查
+String s = switch (x) { case 1 -&gt; "a"; default -&gt; "b"; }; // 按 String 检查
+// 重载决议时也一样：f(switch(x){...}) 会先看 f 的形参类型再检查各分支</code></pre>
+<p>它的实际后果是：<strong>不能把 switch 表达式单独放在「没有目标类型」的位置</strong>（比如作为某些重载场景的裸实参时会出现歧义），并且分支类型不一致时，报错点是「分支 vs 目标类型」而不是「分支之间互相打架」。</p>
+<div class="key-point"><strong>关键点</strong>：poly = 类型由外向内推；这也是 Attr 里 <code>polyKind = POLY / STANDALONE</code> 分岔的由来。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能说出 JEP 325 的三件事（表达式化 / 箭头无 fall-through / 多标签）与预览状态（interviewer 角度）</li>
+<li class="done">能背 12=break 值、13=yield、14=正式的三段式演进（追问链要求）</li>
+<li class="done">能写出 Attr→Flow→Lower 三阶段合法性判定伪代码（追问链要求）</li>
+<li class="done">能解释穷尽性（constants 扣减）与完整性（活性分析）的差别（instructor 角度）</li>
+<li class="done">能给出 compiler.properties 的错误文案与修复方式（code reviewer 角度）</li>
+<li class="done">能论证「预览特性不进生产」并给出团队级规矩（architect 角度）</li>
+<li>能排查 <code>does not cover all possible input values</code> / <code>missing break value</code> 两类编译错误（incident responder 角度）</li>
+<li>能解释 poly expression 与 <code>breakResult</code> 的关系（instructor 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="./0017-java11-index.html">← 上一课：Java 11 索引</a></span>
+<span><a href="./0019-java12-api-enhancements.html">下一课：Collectors.teeing · 紧凑数字 · String.indent →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

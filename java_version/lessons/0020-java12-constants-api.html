@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JVM 常量 API（JEP 334）· Java 12</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12 · JVM Constants API</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>JVM 常量 API —— 给常量池里每个可加载常量一个 Java 对象</h1>
+<div class="article-meta"><span>📚 L1–L5 · 类库与语言桥接层</span><span>🔬 JEP 334 · java.lang.constant 源码（openjdk/jdk12u）</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / Java 12 / JVM 常量 API</div>
+
+<h2>L1 · 概念层：常量池（classfile）里的东西，Java 代码终于"说得出口"了</h2>
+
+<p>JVM 的常量池（JVMS §4.4）里放着一串<strong>可加载常量</strong>：整数、字符串、类、方法类型、方法句柄，以及 JDK 11 新增的 <code>CONSTANT_Dynamic</code>。字节码指令 <code>ldc</code> 可以把它们压进操作数栈。但在此之前，<strong>Java 层没有任何标准类型能"代表"这些常量</strong>——你写 <code>Class</code> 对象代表的是运行时的类本身，不是常量池里那条符号记录；想生成字节码的库（ASM、各类 codegen 框架）只能各自发明一套常量表示，互不相通。</p>
+
+<p><strong>JEP 334 <em>JVM Constants API</em></strong>（Java 12，正式特性）补上的就是这一层：<strong>名义描述符（nominal descriptor）</strong>——一种纯名字、不含类加载器的 Java 对象，能精确描述任意一种可加载常量；需要时再用一个 <code>MethodHandles.Lookup</code> 把它<strong>解析（resolve）</strong>回真正的值。</p>
+
+<h3>两组核心接口（都是 @since 12）</h3>
+
+<table>
+<tr><th>接口</th><th>方向</th><th>一句话</th></tr>
+<tr><td><code>java.lang.constant.ConstantDesc</code></td><td>描述符 → 值</td><td>"我可以被解析成一个常量值"：<code>Object resolveConstantDesc(Lookup)</code></td></tr>
+<tr><td><code>java.lang.constant.Constable</code></td><td>值 → 描述符</td><td>"我能给出自己的名义描述符"：<code>Optional&lt;? extends ConstantDesc&gt; describeConstable()</code></td></tr>
+</table>
+
+<p>两者构成一对<strong>可往返的协议</strong>：值 <code>describeConstable()</code> → 描述符 <code>resolveConstantDesc(lookup)</code> → 值。描述符是 <strong>nominal</strong> 的——只记名字（类的二进制名、成员名、类型描述符），<strong>不记 ClassLoader</strong>，所以同一个描述符在不同类加载器下可能解析出不同的东西。</p>
+
+<h3>常量池 ↔ 描述符 ↔ 运行时值 对照表（Java 12）</h3>
+
+<table>
+<tr><th>常量池条目</th><th>描述符类型（java.lang.constant）</th><th>运行时值</th></tr>
+<tr><td><code>CONSTANT_Integer / Long / Float / Double / String</code></td><td><strong>值自身就是 ConstantDesc</strong>（Integer、Long、Double、String 直接实现该接口）</td><td>同左</td></tr>
+<tr><td><code>CONSTANT_Class</code></td><td><code>ClassDesc</code></td><td><code>Class</code></td></tr>
+<tr><td><code>CONSTANT_MethodType</code></td><td><code>MethodTypeDesc</code></td><td><code>MethodType</code></td></tr>
+<tr><td><code>CONSTANT_MethodHandle</code></td><td><code>MethodHandleDesc</code>（直接句柄为 <code>DirectMethodHandleDesc</code>）</td><td><code>MethodHandle</code></td></tr>
+<tr><td><code>CONSTANT_InvokeDynamic</code></td><td><code>DynamicCallSiteDesc</code></td><td><code>CallSite</code></td></tr>
+<tr><td><code>CONSTANT_Dynamic</code>（JEP 309，JDK 11）</td><td><code>DynamicConstantDesc&lt;T&gt;</code></td><td>引导方法算出来的任意值</td></tr>
+<tr><td>枚举常量 / <code>VarHandle</code></td><td><code>Enum.EnumDesc</code> / <code>VarHandle.VarHandleDesc</code>（均为 <code>DynamicConstantDesc</code> 子类/包装）</td><td>枚举实例 / VarHandle</td></tr>
+</table>
+
+<div class="note">
+<div class="note-title">和 JEP 309 的关系（面试必考的版本题）</div>
+<p><strong>JEP 309 <em>CONSTANT_Dynamic</em></strong> 的状态是 <code>Closed / Delivered — Release 11</code>（openjdk.org/jeps/309 实测），即 <strong>CONSTANT_Dynamic 这条常量池"能力"是 JDK 11 交付的</strong>（JVM/类文件层）。<strong>JEP 334 交付的是它的 Java API 层</strong>：让 Java 代码能构造、读写这些常量的名义描述符。一句话：<strong>11 造好了"货"，12 给了"货单和提货凭证"</strong>。</p>
+</div>
+
+<h3>一段最小可用示例</h3>
+
+<pre><code>import java.lang.constant.*;
+import java.lang.invoke.*;
+
+// 1) 描述一个类 / 一个方法类型（纯名字，不加载任何类）
+ClassDesc listDesc = ClassDesc.of("java.util.List");          // 接口 ClassDesc, @since 12
+ClassDesc nested   = CD_MethodHandles_Lookup;                  // ConstantDescs 里的现成常量
+MethodTypeDesc mtd = MethodTypeDesc.of(ClassDesc.of(int.class.getName()), CD_String);
+
+// 2) 值 → 描述符（Constable）
+Optional&lt;ClassDesc&gt; d = String.class.describeConstable();      // Optional.of(ClassDesc.of("java.lang.String"))
+Optional&lt;? extends ConstantDesc&gt; sd = "hi".describeConstable();// String 自己就是 ConstantDesc
+
+// 3) 描述符 → 值（ConstantDesc.resolveConstantDesc，模拟 JVMS §5.4.3 解析）
+Class&lt;?&gt; c = (Class&lt;?&gt;) ClassDesc.of("java.lang.String")
+                   .resolveConstantDesc(MethodHandles.lookup());</code></pre>
+
+<div class="warning">
+<div class="warning-title">包名陷阱：JEP 文本与实际交付不一致</div>
+<p><strong>JEP 334 正文</strong>写的是「the new package <code>java.lang.invoke.constant</code>」；但 <strong>JDK 12 实际交付的包是 <code>java.lang.constant</code></strong>，两处硬证据：① openjdk/jdk12u 源码路径 <code>src/java.base/share/classes/java/lang/constant/</code>；② Oracle JDK 12 API 文档 <code>docs.oracle.com/en/java/javase/12/docs/api/java.base/java/lang/constant/package-summary.html</code> 返回 200、标题为「java.lang.constant (Java SE 12 &amp; JDK 12)」，而 <code>java.lang/invoke/constant</code> 路径不存在。因此<strong>不存在"包名后来从 invoke.constant 迁到 constant"这回事</strong>——JDK 25 仍在 <code>java.lang.constant</code>（<code>ConstantDesc</code> 至今标注 <code>@since 12</code>）。答题时以<strong>源码/API 文档为准</strong>，可顺带指出 JEP 文本的滞后。</p>
+</div>
+
+<h2>L2 · 原理层：nominal 描述符为什么"只记名字"，解析时又怎么还原</h2>
+
+<h3>关键判断逻辑伪代码</h3>
+
+<pre><code># ===== 协议一：值 → 描述符（Constable.describeConstable）=====
+class String implements Constable, ConstantDesc:            # String/Integer/... 直接实现两者
+    describeConstable() = Optional.of(this)                 # 自己就是描述符，直接返回自己
+
+class Class implements Constable:
+    describeConstable() =
+        if 是数组/基本类型原始类型: 返回 DynamicConstantDesc(BCI 型 BSM)  # 走特殊引导
+        else: return Optional.of(ClassDesc.of(二进制名))     # 纯名字，不触发类加载
+class MethodHandle implements Constable:
+    describeConstable() =
+        if 是直接句柄(REF_getStatic 等): return Optional.of(DirectMethodHandleDesc)
+        else: return Optional.empty()                       # 组合子造出来的句柄无法名义描述
+
+# ===== 协议二：描述符 → 值（ConstantDesc.resolveConstantDesc）=====
+ConstantDesc.resolveConstantDesc(Lookup lookup):
+    # 模拟 JVMS §5.4.3 Resolution + §5.4.4 访问控制；【不缓存】结果
+    按 lookup 的类加载器解释描述符里的名字
+    抛 ReflectiveOperationException（解析失败）/ LinkageError（链接失败）
+
+# ===== DynamicConstantDesc 的解析 = 现场跑一遍引导方法 =====
+DynamicConstantDesc.resolveConstantDesc(lookup):            # openjdk/jdk12u DynamicConstantDesc.java:260
+    bsm = bootstrapMethod.resolveConstantDesc(lookup)       # 1) 先把"引导方法本身"解析成 MethodHandle
+    检查 bsm 参数0 必须是 MethodHandles.Lookup 否则 BootstrapMethodError
+    args = [lookup, constantName, constantType.resolveConstantDesc(lookup)]
+           + [a.resolveConstantDesc(lookup) for a in bootstrapArgs]   # 2) 递归解析全部静态实参
+    return bsm.invokeWithArguments(args)                    # 3) 调 BSM 得到真正的值
+    # 任何非 Error 异常都被包成 BootstrapMethodError 抛出</code></pre>
+
+<div class="mermaid">
+flowchart LR
+    A["运行时值<br/>Class / String / 枚举"] --&gt; B["describeConstable()<br/>Constable · 得到名义描述符"]
+    B --&gt; C["ConstantDesc<br/>只有名字：ClassDesc / MethodTypeDesc /<br/>DynamicConstantDesc ..."]
+    C --&gt; D["resolveConstantDesc(Lookup)<br/>模拟 JVMS 5.4.3 解析 + 5.4.4 访问控制"]
+    D --&gt; E["还原成运行时值<br/>（不缓存，每次重解析）"]
+</div>
+
+<h3>四维度生产检查</h3>
+
+<table>
+<tr><th>维度</th><th>JVM Constants API 的表现</th></tr>
+<tr><td><strong>并发语义</strong></td><td>描述符设计为<strong>不可变</strong>、且明确"不要依赖对象身份"（比较一律用 <code>equals</code>），可安全跨线程共享；<code>resolveConstantDesc</code> 每次独立执行、<strong>不缓存结果</strong>，多线程并发解析互不干扰，但也不会互相复用成果。</td></tr>
+<tr><td><strong>异常容错</strong></td><td>解析失败抛 <code>ReflectiveOperationException</code>（名字找不到/无访问权），链接阶段失败抛 <code>LinkageError</code>；<code>DynamicConstantDesc</code> 会把 BSM 抛出的任何非 <code>Error</code> 统一包装成 <code>BootstrapMethodError</code>——与 JVM 真正执行 <code>ldc</code> 时的行为对齐。<code>describeConstable()</code> 用 <code>Optional.empty()</code> 表达"我描述不了我自己"（如方法句柄组合子的产物），<strong>不是返回 null</strong>。</td></tr>
+<tr><td><strong>边界判断</strong></td><td>描述符<strong>不含类加载器</strong>：同一个 <code>ClassDesc.of("com.foo.Bar")</code> 在不同 Lookup 下可能解析成两个不同的类；访问控制完全委托给传入的 <code>Lookup</code>（JVMS §5.4.4）——传错 Lookup 是最常见的"解析不到"根因。</td></tr>
+<tr><td><strong>性能开销</strong></td><td><code>resolveConstantDesc</code> javadoc 明言 <strong>No caching of the resulting value is performed</strong>：每次解析都走一遍名称解析/反射/可能的类加载。<strong>适合冷路径</strong>（引导方法、字节码生成、启动期），把它放热路径等于每次重做链接。</td></tr>
+</table>
+
+<div class="warning">
+<div class="warning-title">三个高频误区</div>
+<p><strong>① 「Class 就是 ClassDesc」</strong>——不是。<code>Class</code> 是<strong>值</strong>，<code>ClassDesc</code> 是它的<strong>名义描述符</strong>；<code>Class</code> 实现的是 <code>Constable</code>（能给出 ClassDesc），而 <code>String/Integer/Long/Double/Float</code> 因为本身就是常量池原生条目，才<strong>直接实现 <code>ConstantDesc</code></strong>。<br/>
+<strong>② 「描述符构造完就能用」</strong>——不能，必须 <code>resolveConstantDesc(lookup)</code> 之后才是可执行/可加载的值；描述符阶段不加载任何类。<br/>
+<strong>③ 「describeConstable 返回 empty 是 bug」</strong>——不是，是契约的一部分：有些实例<strong>天然无法名义化</strong>（JEP 334 明确 MethodHandle 组合子产物属于此类）。</p>
+</div>
+
+<h2>L3 · 源码层：openjdk/jdk12u 的 <code>java.lang.constant</code></h2>
+
+<div class="info">
+<div class="info-title">源码出处与获取方式</div>
+<p>行号核对自 <strong>openjdk/jdk12u 仓库（master）</strong> 的 <code>src/java.base/share/classes/java/lang/constant/</code> 与 <code>java/lang/</code>，通过 raw.githubusercontent 抓取原文比对；对照实现另取自本机 JDK 25 <code>src.zip</code>（见"双行号对照"）。克隆：<code>git clone https://github.com/openjdk/jdk12u</code>。</p>
+</div>
+
+<h3>关键文件清单（已核对）</h3>
+
+<table>
+<tr><th>文件（<code>src/java.base/share/classes/</code>）</th><th>行号（jdk12u）</th><th>作用</th></tr>
+<tr><td><code>java/lang/constant/ConstantDesc.java</code></td><td>:87 / :103</td><td>根接口：<code>public interface ConstantDesc</code>（<code>@since 12</code>）与 <code>Object resolveConstantDesc(Lookup)</code></td></tr>
+<tr><td><code>java/lang/constant/Constable.java</code></td><td>:66 / :75</td><td><code>interface Constable</code>：<code>Optional&lt;? extends ConstantDesc&gt; describeConstable()</code></td></tr>
+<tr><td><code>java/lang/constant/ClassDesc.java</code></td><td>:61 / :79 / :98 / :134 / :180 / :204</td><td><code>of(binaryName)</code>、<code>of(pkg, cls)</code>、<code>ofDescriptor</code>、<code>array(rank)</code>、<code>nested(name)</code> 工厂</td></tr>
+<tr><td><code>java/lang/constant/DynamicConstantDesc.java</code></td><td>:59 / :141 / :169 / :217 / :260</td><td>类定义、<code>ofCanonical</code>、<code>ofNamed</code>、<code>constantName()</code>、<strong><code>resolveConstantDesc</code>（BSM 协议）</strong></td></tr>
+<tr><td><code>java/lang/constant/ConstantDescs.java</code></td><td>:54 / :62 / :67 / :145 / :163</td><td>预置常量：<code>DEFAULT_NAME="_"</code>、<code>CD_Object</code>、<code>CD_ConstantDesc</code>、<code>CD_VarHandleDesc</code>…</td></tr>
+<tr><td><code>java/lang/invoke/VarHandle.java</code></td><td>:2124–:2226</td><td>内嵌 <code>public static final class VarHandleDesc extends DynamicConstantDesc&lt;VarHandle&gt;</code>（<code>@since 12</code>，<code>ofField/ofStaticField/ofArray</code>）</td></tr>
+<tr><td><code>java/lang/Enum.java</code></td><td>:67 / :223 / :293 / :319</td><td><code>Enum implements Constable</code>、内嵌 <code>EnumDesc</code> 与其 <code>of</code> 工厂</td></tr>
+<tr><td><code>java/lang/String.java</code> / <code>Integer.java</code></td><td>:133 / :3447；:64 / :1848</td><td><code>implements ..., Constable, ConstantDesc</code> 与各自的 <code>describeConstable</code></td></tr>
+<tr><td><code>java/lang/Class.java</code> / <code>invoke/MethodType.java</code> / <code>invoke/MethodHandle.java</code></td><td>:164 / :4097；:104 / :1215；:440 / :1532</td><td>三个"大件"实现 <code>Constable</code>，分别给出 <code>ClassDesc / MethodTypeDesc / MethodHandleDesc</code></td></tr>
+</table>
+
+<h3>片段一：resolveConstantDesc —— 用 Java 复刻一次 ldc 引导（DynamicConstantDesc.java:260）</h3>
+
+<pre><code>// src/java.base/share/classes/java/lang/constant/DynamicConstantDesc.java (openjdk/jdk12u)
+@SuppressWarnings("unchecked")
+public T resolveConstantDesc(MethodHandles.Lookup lookup) throws ReflectiveOperationException {
+    try {
+        MethodHandle bsm = (MethodHandle) bootstrapMethod.resolveConstantDesc(lookup);
+        if (bsm.type().parameterCount() &lt; 2 ||
+            !MethodHandles.Lookup.class.isAssignableFrom(bsm.type().parameterType(0))) {
+            throw new BootstrapMethodError(
+                    "Invalid bootstrap method declared for resolving a dynamic constant: " + bootstrapMethod);
+        }
+        Object[] bsmArgs = new Object[3 + bootstrapArgs.length];
+        bsmArgs[0] = lookup;
+        bsmArgs[1] = constantName;
+        bsmArgs[2] = constantType.resolveConstantDesc(lookup);
+        for (int i = 0; i &lt; bootstrapArgs.length; i++)
+            bsmArgs[3 + i] = bootstrapArgs[i].resolveConstantDesc(lookup);
+
+        return (T) bsm.invokeWithArguments(bsmArgs);
+    } catch (Error e) {
+        throw e;
+    } catch (Throwable t) {
+        throw new BootstrapMethodError(t);
+    }
+}</code></pre>
+
+<p><strong>怎么读</strong>：这段代码逐字对应 JVMS 给 <code>CONSTANT_Dynamic</code>/<code>CONSTANT_InvokeDynamic</code> 定义的引导方法调用协议——<code>(Lookup, String name, ClassDesc type, ...静态实参)</code>。也就是说，<strong>JDK 12 让"运行时按 classfile 语义造常量"变成了普通 Java 调用</strong>：解析一个动态常量 = 递归解析实参 + 调一次 BSM；异常统一折叠成 <code>BootstrapMethodError</code>，与 JVM 真执行 <code>ldc</code> 的报错口径一致。</p>
+
+<h3>片段二：两个方向的接口（ConstantDesc.java:87 / Constable.java:66）</h3>
+
+<pre><code>// java/lang/constant/ConstantDesc.java (openjdk/jdk12u, @since 12)
+public interface ConstantDesc {
+    /** 以 lookup 提供名称解析(JVMS 5.4.3)与访问控制(5.4.4)上下文；
+     *  不缓存结果。 */
+    Object resolveConstantDesc(MethodHandles.Lookup lookup) throws ReflectiveOperationException;
+}
+
+// java/lang/constant/Constable.java (openjdk/jdk12u, @since 12)
+public interface Constable {
+    Optional&lt;? extends ConstantDesc&gt; describeConstable();
+}
+
+// java/lang/String.java:133 (openjdk/jdk12u)
+public final class String
+    implements java.io.Serializable, Comparable&lt;String&gt;, CharSequence,
+               Constable, ConstantDesc {          // ← 值即描述符
+
+// java/lang/Class.java:164 —— Class 只实现 Constable，不实现 ConstantDesc
+public final class Class&lt;T&gt; implements java.io.Serializable,
+                              GenericDeclaration, Type, AnnotatedElement,
+                              TypeDescriptor.OfField&lt;Class&lt;?&gt;,
+                              Constable {          // ← 给出的是 ClassDesc</code></pre>
+
+<div class="info">
+<div class="info-title">双行号对照（jdk12u vs 本机 JDK 25 src.zip）</div>
+<p>接口位置几乎没动，但 JDK 25 把层级改成了 <strong>sealed</strong>：<code>ConstantDesc</code> jdk12u <code>:87</code> → JDK 25 <code>:79</code>（<code>public sealed interface ... permits ClassDesc, MethodHandleDesc, MethodTypeDesc, Double, DynamicConstantDesc, Float, Integer, Long, String</code>）；<code>ClassDesc</code> <code>:61</code> → <code>:54</code>（sealed）；<code>DynamicConstantDesc</code> 两版都在 <code>:59</code>，但 JDK 25 声明为 <code>abstract non-sealed</code>（因为 <code>EnumDesc/VarHandleDesc</code> 要继续继承）；<code>resolveConstantDesc</code> <code>:260</code> → <code>:250</code>；<code>String.describeConstable()</code> <code>:3447</code> → <code>:4972</code>。<strong>读旧课件/旧博客时对不上行号，先看是不是 sealed 化造成的整体位移。</strong></p>
+</div>
+
+<h3>设计原理三问</h3>
+
+<table>
+<tr><th>问题</th><th>答案</th></tr>
+<tr><td><strong>为什么这样设计？</strong></td><td>① <strong>描述与解析分离</strong>：常量池本质是"名字 + 上下文"，描述符只有纯名字，解析时才绑定 ClassLoader/Lookup——这正是 classfile 的语义；② <strong>让 <code>ldc</code> 操作数在 Java 里可表达</strong>，字节码生成库（以及 javac 自己）不必再用私有协议描述常量；③ 统一 <code>CONSTANT_Dynamic</code>（11 引入）的 Java 侧表示，与 <code>invokedynamic</code>（<code>DynamicCallSiteDesc</code>）形成对称。</td></tr>
+<tr><td><strong>代价是什么？</strong></td><td>① 多一层对象模型（值/描述符/Optional 三种形态），API 面积显著变大；② <strong>解析不缓存</strong>，误用在热路径会造成反复名称解析与类加载；③ <code>describeConstable()</code> 的 <code>Optional</code> 让"不能描述"成为常态分支，调用方必须处理 empty。</td></tr>
+<tr><td><strong>如何改进？</strong></td><td>调用方自行缓存解析结果（并按类加载器维度区分）；JDK 后续把 <code>ConstantDesc</code>/<code>ClassDesc</code> 改为 <strong>sealed</strong>（JDK 25 中已确认），编译期就堵死"第三方直接实现根接口"这条歧路；更远期是让描述符与模式匹配/字符串模板等新特性共享同一套常量表示。</td></tr>
+</table>
+
+<h2>L4 · 边界层：能不能上生产、谁该用</h2>
+
+<table>
+<tr><th>问题</th><th>结论</th><th>依据</th></tr>
+<tr><td>Java 12 能直接用吗？</td><td><strong>能</strong>（正式特性，无预览开关）</td><td>JEP 334 状态 Final / Delivery：Java SE 12 API</td></tr>
+<tr><td>11 及以前有这套 API 吗？</td><td><strong>没有</strong>；11 只有底层 <code>CONSTANT_Dynamic</code> 能力</td><td>JEP 309 = 11 交付（VM/类文件）；JEP 334 = 12 交付（Java API）</td></tr>
+<tr><td>业务代码该用吗？</td><td>一般<strong>不该</strong></td><td>它是给<strong>字节码生成/框架/序列化工具</strong>的基础设施；业务代码里 <code>Class.forName</code>/<code>MethodHandle</code> 更直接</td></tr>
+<tr><td>描述符能跨 ClassLoader 复用吗？</td><td>能复用<em>描述</em>，但<strong>解析结果可能不同</strong></td><td>描述符不含 ClassLoader；解析完全取决于传入 <code>Lookup</code></td></tr>
+<tr><td>解析结果能缓存吗？</td><td>API 自身不缓存；<strong>你自己可以缓存但要连 Lookup/Loader 一起做 key</strong></td><td>javadoc："No caching of the resulting value is performed"</td></tr>
+<tr><td>和反射（Reflection）谁更强？</td><td>互补：反射读<strong>已加载的</strong>结构；常量描述符能表达<strong>还没加载的</strong>、甚至<strong>还不存在的</strong>常量（如要生成的类）</td><td>nominal = 纯名字，天然面向"生成侧"</td></tr>
+</table>
+
+<div class="production-note">
+<div class="header">落地决策清单（Java 12 语境）</div>
+<ul>
+<li><strong>框架作者</strong>：序列化/DI/ORM 里凡是需要"把类型写成常量池条目"的场景，用 <code>ClassDesc</code>/<code>DynamicConstantDesc</code> 替换自家常量表示，可与 ASM 之外的工具（如依赖本 API 的库）互通。</li>
+<li><strong>应用团队</strong>：把该 API 列入<strong>间接依赖敏感区</strong>——它出现在公共 API 签名里就要求使用方 ≥ JDK 12。</li>
+<li><strong>升级检查</strong>：11 → 12 后 javadoc 会多出 <code>java.lang.constant</code> 包；注意 JEP 文本与实际包名的差异，内部文档/培训材料一律写 <code>java.lang.constant</code>。</li>
+<li><strong>诊断技巧</strong>：看到 <code>BootstrapMethodError</code> 来自 <code>DynamicConstantDesc.resolveConstantDesc</code>，方向应查<strong>BSM 与实参解析</strong>，而不是业务逻辑。</li>
+</ul>
+</div>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: JEP 334 是什么？它和 JEP 309 什么关系？</div>
+<div class="answer">
+<p>JEP 334（JVM Constants API，Java 12 正式特性）新增 <code>java.lang.constant</code> 包，用<strong>名义描述符</strong>（<code>ConstantDesc</code> 及其子类型 <code>ClassDesc</code>、<code>MethodTypeDesc</code>、<code>MethodHandleDesc</code>、<code>DynamicConstantDesc</code>，以及配套 <code>Constable</code> 接口）来描述常量池里每一种可加载常量。JEP 309（CONSTANT_Dynamic）状态为 <code>Delivered Release 11</code>——<strong>VM/类文件层能力在 11 就绪，334 是它在 Java API 层的"提货单"</strong>，两者是底层能力与上层 API 的关系。</p>
+<div class="key-point"><strong>关键点</strong>：11 = CONDY 进常量池；12 = 描述这些常量的 Java API（JEP 334）。顺序不可颠倒。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — <code>ConstantDesc</code> 和 <code>Constable</code> 的分工？为什么 String 直接 implements ConstantDesc 而 Class 不是？</div>
+<div class="answer">
+<ul>
+<li><code>ConstantDesc</code>：回答"我<strong>能被解析成</strong>什么值"（向值方向，<code>resolveConstantDesc</code>）；</li>
+<li><code>Constable</code>：回答"我<strong>能给出</strong>自己的描述符"（向描述符方向，<code>describeConstable</code>）。</li>
+</ul>
+<p>因为 <strong>String、Integer、Long、Float、Double 本身就是常量池的原生条目</strong>（<code>CONSTANT_String</code>/<code>CONSTANT_Integer</code>…），它们的名字即值，"描述符"与"值"是同一个对象，所以干脆自己实现 <code>ConstantDesc</code>。而 <code>Class</code> 的常量池形态是"类的二进制名"，必须多走一步 <code>ClassDesc.of(名字)</code>，所以 <code>Class</code> 只实现 <code>Constable</code>，其 <code>describeConstable()</code> 返回 <code>Optional&lt;ClassDesc&gt;</code>。</p>
+<div class="key-point"><strong>关键点</strong>：值即描述符 ⇔ 该常量在常量池里"无附加信息"；否则必须套一层 Desc。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — 写出 <code>resolveConstantDesc</code> 的协议伪代码，并解释它为何"不缓存"。</div>
+<div class="answer">
+<pre><code>DynamicConstantDesc.resolveConstantDesc(lookup):
+    bsm = bootstrapMethod.resolveConstantDesc(lookup)        # 先解析引导方法本身
+    assert bsm 首参是 MethodHandles.Lookup  否则 BootstrapMethodError
+    args = [lookup, constantName, constantType.resolveConstantDesc(lookup)]
+         + [每个 bootstrapArg 递归 resolveConstantDesc]
+    try:    return bsm.invokeWithArguments(args)
+    catch Error: 原样抛
+    catch Throwable t: throw new BootstrapMethodError(t)</code></pre>
+<p>不缓存的原因有二：① 解析强依赖 <strong>Lookup/ClassLoader 上下文</strong>——同一个描述符换个 Lookup 结果不同，缓存必须把上下文纳入 key，收益与复杂度都不划算；② 解析本就是<strong>冷路径</strong>（引导方法、代码生成），正确性优先于速度。需要热路径时由调用方自行缓存，并以 (desc, loader) 为键。</p>
+<div class="key-point"><strong>关键点</strong>：协议 = 递归解析实参 + 调 BSM；不缓存是语义选择（上下文相关）而非疏忽。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 故障排查 — 报 <code>BootstrapMethodError: Invalid bootstrap method declared for resolving a dynamic constant</code>，怎么查？</div>
+<div class="answer">
+<p>这是 <code>DynamicConstantDesc.resolveConstantDesc</code> 的<strong>前置校验</strong>失败：BSM 的方法类型不合法（参数个数 &lt; 2，或第一个参数不是 <code>MethodHandles.Lookup</code>）。排查顺序：</p>
+<ol>
+<li>确认 <code>bootstrapMethod</code> 描述符指向的<strong>确实是引导方法</strong>而不是普通静态方法（自拼 <code>DirectMethodHandleDesc</code> 时最容易错）；</li>
+<li>检查 BSM 签名是否为 <code>(Lookup, String, ClassDesc/Class, ...args)</code>；</li>
+<li>若报的是"被包装过"的 <code>BootstrapMethodError</code>（cause 是业务异常），问题在 BSM 内部——按 cause 栈继续查。</li>
+</ol>
+<p>区分点：<strong>无 cause 或文案为 "Invalid bootstrap method…" = 签名/描述符错；带 cause = BSM 执行期炸了</strong>。</p>
+<div class="key-point"><strong>关键点</strong>：看到该错误先读 BSM 方法类型，再看 cause——两条路完全不同。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: 架构师 — 为什么需要"名义描述符"这种间接层，反射不够吗？</div>
+<div class="answer">
+<p>反射的单位是<strong>已加载的类与成员</strong>，而常量池/字节码的单位是<strong>名字</strong>。三个反射做不到的场景：① <strong>生成侧</strong>——要写出一个"还不存在的类"的常量（代码生成、代理、lambda 实现类）时，反射没有对应物；② <strong>延迟绑定</strong>——描述符可以在完全不触发类加载的前提下随 API 传递、序列化、比较；③ <strong>与 classfile 语义一比一对齐</strong>——<code>DynamicConstantDesc</code> 直接复刻 BSM 调用协议，读写类文件的工具不需要两套模型。代价是多一层对象和"解析要显式传 Lookup"的样板。</p>
+<div class="key-point"><strong>关键点</strong>：反射面向"已存在的东西"，nominal descriptor 面向"类文件里的名字"——一个存在性问题，一个引用性问题。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 讲师角度 — 用大白话解释 nominal descriptor 和"真正解析"的区别。</div>
+<div class="answer">
+<p>把它想成<strong>快递单</strong>：单子上写着"北京市朝阳区 XX 小区 3 号楼"（纯地址、名字），但单子本身不是房子。收件时（<code>resolveConstantDesc(lookup)</code>）你拿着这张单子，<strong>到具体的区县（ClassLoader）去问路</strong>——同一个地址，在朝阳和通州找到的可能不是同一栋楼。而且这张单子<strong>不记你是哪个快递员</strong>（不含 Lookup），所以能随便复制、传给任何人；也因为每次都要重新问路，<strong>官方不帮你做地址簿</strong>（不缓存）。还有一种情况是"我说不清我家地址"（<code>describeConstable()</code> 返回 empty），比如用句柄组合子拼出来的 MethodHandle。</p>
+<div class="key-point"><strong>关键点</strong>：nominal = 只有名字；解析 = 名字 + 上下文 + 一次真正的链接动作。</div>
+</div>
+</div>
+
+<div class="deep-grill-readiness">
+<h4>本课 Deep-Grill 就绪度</h4>
+<ul>
+<li class="done">能画出"值 ⇄ 描述符"双向协议并说出两个接口的分工（instructor 角度）</li>
+<li class="done">能讲清 JEP 309（11，VM 层）与 JEP 334（12，API 层）的先后与边界（interviewer 角度）</li>
+<li class="done">能指出 JDK 12 实际包名是 <code>java.lang.constant</code> 并给出两条证据（code reviewer 角度）</li>
+<li class="done">能默写 <code>resolveConstantDesc</code> 的 BSM 协议伪代码（追问链要求）</li>
+<li class="done">能解释"描述符不含 ClassLoader"带来的复用与解析边界（architect 角度）</li>
+<li class="done">能定位 <code>BootstrapMethodError: Invalid bootstrap method</code> 的两类根因（incident responder 角度）</li>
+<li>能解释为何 String 自己实现 ConstantDesc 而 Class 只实现 Constable（interviewer 角度）</li>
+<li>能说清"不缓存"的语义原因与调用方的缓存策略（architect 角度）</li>
+</ul>
+</div>
+
+<div class="page-nav">
+<span><a href="./0019-java12-api-enhancements.html">← 上一课：Collectors.teeing · 紧凑数字 · String.indent</a></span>
+<span><a href="./0021-java12-gc.html">下一课：Shenandoah · G1 可中断混合回收 · 默认 CDS →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

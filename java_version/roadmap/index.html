@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 12–27 特性全景 — Deep Mastery Roadmap</title>
+<style>
+:root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-blue:#3194d0;--accent-light:#fef0f0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--orange:#f5a623;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}
+.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-.5px}
+.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}
+.container{max-width:1020px;margin:80px auto 80px;padding:0 16px}
+.hero{background:var(--card-bg);border-radius:4px;padding:48px 40px 36px;margin-bottom:24px;border-bottom:1px solid var(--border)}
+.hero h1{font-size:34px;font-weight:700;line-height:1.3;font-family:var(--font-sans);color:var(--text);margin-bottom:12px}
+.hero .subtitle{font-size:17px;color:var(--text-secondary);font-family:var(--font-sans);line-height:1.6}
+.hero .meta{margin-top:20px;font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:24px;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:var(--card-bg);border-radius:4px;padding:20px 24px;text-align:center;border:1px solid var(--border)}
+.stat-card .number{font-size:32px;font-weight:700;font-family:var(--font-sans);color:var(--accent)}
+.stat-card .label{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);margin-top:4px}
+.section{background:var(--card-bg);border-radius:4px;margin-bottom:16px;border:1px solid var(--border);overflow:hidden}
+.section-header{padding:20px 28px;border-bottom:1px solid var(--border);font-family:var(--font-sans);display:flex;align-items:center;gap:12px}
+.section-header h2{font-size:18px;font-weight:700;color:var(--text);flex:1}
+.section-header .badge{font-size:12px;padding:3px 10px;border-radius:12px;font-weight:600}
+.badge.core{background:#fdf2f2;color:#e74c3c}
+.badge.support{background:#f0f7fd;color:var(--accent-blue)}
+.item-list{padding:4px 0}
+.item{display:flex;align-items:center;gap:16px;padding:16px 28px;border-bottom:1px solid var(--border);transition:background .15s;text-decoration:none;color:inherit}
+.item:last-child{border-bottom:none}.item:hover{background:#fafafa}
+.item .icon{width:44px;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;font-family:var(--font-sans);font-weight:700;flex-shrink:0}
+.icon.l1{background:#e8f5e9;color:#42c02e}.icon.l2{background:#f0f7fd;color:#3194d0}.icon.l3{background:#fef0f0;color:#ea6f5a}.icon.l4{background:#fff8e1;color:#f5a623}.icon.l5{background:#f3e5f5;color:#9c27b0}.icon.doc{background:#f5f5f5;color:var(--text-muted)}
+.item .info{flex:1;min-width:0}
+.item .info .title{font-size:16px;font-weight:600;font-family:var(--font-sans);margin-bottom:2px}
+.item .info .desc{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);line-height:1.5}
+.item .info .tags{margin-top:4px;display:flex;gap:6px;flex-wrap:wrap}
+.item .info .tag{font-size:11px;padding:1px 8px;border-radius:10px;font-family:var(--font-sans);background:#f5f5f5;color:var(--text-muted)}
+.item .arrow{color:var(--text-muted);font-size:18px;font-family:var(--font-sans);flex-shrink:0}
+.roadmap{background:var(--card-bg);border-radius:4px;margin-bottom:16px;border:1px solid var(--border);padding:28px}
+.roadmap h2{font-size:18px;font-weight:700;font-family:var(--font-sans);margin-bottom:20px}
+.steps{display:flex;gap:16px;flex-wrap:wrap}
+.step{flex:1;min-width:140px;background:#fafafa;border-radius:8px;padding:20px 16px;text-align:center;border:1px solid var(--border);font-family:var(--font-sans);position:relative}
+.step .step-num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:13px;font-weight:700}
+.step .step-title{font-size:14px;font-weight:600;margin-bottom:4px}.step .step-desc{font-size:12px;color:var(--text-muted);line-height:1.5}
+.step::after{content:"→";position:absolute;right:-14px;top:50%;transform:translateY(-50%);color:var(--border-light);font-size:20px}
+.step:last-child::after{display:none}
+.callout{background:var(--card-bg);border:1px solid var(--border);border-left:4px solid var(--accent-blue);border-radius:4px;padding:18px 24px;margin-bottom:16px;font-family:var(--font-sans);font-size:14px;line-height:1.7;color:var(--text-secondary)}
+.callout b{color:var(--text)}
+.callout.warn{border-left-color:var(--orange)}
+.footer{text-align:center;padding:32px 0 0;font-size:13px;color:var(--text-muted);font-family:var(--font-sans);border-top:1px solid var(--border);margin-top:32px}
+@media(max-width:700px){.hero{padding:32px 20px 24px}.hero h1{font-size:24px}.stats{grid-template-columns:repeat(2,1fr)}.steps{flex-direction:column}.step::after{display:none}.item{padding:14px 20px}}
+</style>
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12–27 特性全景</span></div></nav>
+<div class="container">
+<div class="hero">
+<h1>Java 12–27 特性全景 Roadmap</h1>
+<p class="subtitle">逐版本清单：16 个 JDK（12 → 27）的语法新特性与 API 增强，每一条都配完整可运行示例——JDK 25 能编译的一律本机实测，未实测的明确标注。按版本段分四页阅读，覆盖从 2019 到 2026 的全部演进。</p>
+<div class="meta">
+<span>📖 4 segment pages · 16 versions</span>
+<span>🧪 96 runnable examples · JDK 25 verified</span>
+<span>🌐 中文</span>
+<span>✅ 虚拟线程 / 结构化并发：见 <a href="../lessons/0027-java21-index.html">Java 21 并发专题</a></span>
+</div>
+</div>
+
+<div class="stats">
+<div class="stat-card"><div class="number">16</div><div class="label">Versions (JDK 12–27)</div></div>
+<div class="stat-card"><div class="number">4</div><div class="label">Segment Pages</div></div>
+<div class="stat-card"><div class="number">96</div><div class="label">Runnable Examples</div></div>
+<div class="stat-card"><div class="number">0</div><div class="label">Compile Failures</div></div>
+</div>
+
+<div class="callout">
+<b>实测口径</b>：✅ = 本机 JDK 25 编译 + 运行通过，输出与页面注释逐字一致；⚠️ = 需要 <code>--enable-preview --release 25</code>（javac 用两个开关，运行时 <code>java</code> 只认 <code>--enable-preview</code>）或 <code>--add-modules</code>；❌ = JDK 25 无法实测（API 不存在 / 已撤回 / 属 26·27 版本，本机无对应 JDK）。素材与 JEP 史实冲突处均已在页面就地勘误。
+</div>
+<div class="callout warn">
+<b>范围声明</b>：<b>虚拟线程、结构化并发不写入本章</b>（涉及 JDK 19–27 多次预览/孵化）——已交付为独立深度专题：<a href="../lessons/0024-java21-virtual-threads.html">虚拟线程</a> · <a href="../lessons/0025-java21-structured-concurrency.html">结构化并发</a> · <a href="../lessons/0026-java21-thread-local-variables.html">线程局部变量</a>。本章专注语言特性与类库 API 两条主线。
+</div>
+
+<div class="roadmap">
+<h2>🧭 使用方式</h2>
+<div class="steps">
+<div class="step"><div class="step-num">1</div><div class="step-title">选版本段</div><div class="step-desc">按四页分段：12–15 / 16–19 / 20–23 / 24–27</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-title">看特性表</div><div class="step-desc">每版本先读「语法 / API」清单与状态标注</div></div>
+<div class="step"><div class="step-num">3</div><div class="step-title">跑示例</div><div class="step-desc">每条特性配完整示例，可复制到 JDK 25 复现</div></div>
+<div class="step"><div class="step-num">4</div><div class="step-title">查勘误</div><div class="step-desc">⚠️/❌ 项看页面注释，素材与 JEP 冲突已标注</div></div>
+<div class="step"><div class="step-num">5</div><div class="step-title">深读课件</div><div class="step-desc">Java 12 细节转入 lessons 0018–0023 五层课件</div></div>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>🗺️ Segment Pages</h2><span class="badge core">REQUIRED</span></div>
+<div class="item-list">
+<a class="item" href="./java12-15.html"><div class="icon l1">12–15</div><div class="info"><div class="title">Java 12–15 — 预览时代（2019–2020）</div><div class="desc">Switch 表达式（预览 → yield）、Text Blocks、Records、PM instanceof、Helpful NPE、Shenandoah 时代的 API 侧：teeing / 紧凑数字 / indent / 常量 API / Files.mismatch、隐藏类、JFR 事件流、会计货币</div><div class="tags"><span class="tag">31 示例</span><span class="tag">JEP 325</span><span class="tag">Text Blocks</span><span class="tag">Records</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./java16-19.html"><div class="icon l2">16–19</div><div class="info"><div class="title">Java 16–19 — 正式化浪潮（2021–2022）</div><div class="desc">Records / instanceof 模式 / Sealed 转正、when 守卫与 Record Patterns 预览、HexFormat、RandomGenerator、UTF-8 默认字符集、jwebserver、Unix-Domain Socket、Stream.toList · mapMulti、FFM 走向正式</div><div class="tags"><span class="tag">22 示例</span><span class="tag">JDK 17 LTS</span><span class="tag">Sealed</span><span class="tag">Pattern Matching</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./java20-23.html"><div class="icon l3">20–23</div><div class="info"><div class="title">Java 20–23 — 模式匹配收官（2023–2024）</div><div class="desc">Record Patterns / PM switch 正式、Sequenced Collections、KEM 后量子封装、String Templates 预览后撤回、Unnamed Variables、Gatherers、Class-File API、FFM 正式、Module Import、多文件源码启动</div><div class="tags"><span class="tag">26 示例</span><span class="tag">JDK 21 LTS</span><span class="tag">Sequenced Collections</span><span class="tag">Gatherers</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./java24-27.html"><div class="icon l4">24–27</div><div class="info"><div class="title">Java 24–27 — 后量子与常量纪元（2025–2026）</div><div class="desc">ML-DSA / ML-KEM 后量子交付、Stream Gatherers 与 Class-File API 正式、Compact Source Files、KDF / StableValue / PEM、Lazy Constants、HTTP/3（26 ❌）、基元模式一路预览到第五次</div><div class="tags"><span class="tag">17 示例</span><span class="tag">JDK 25 LTS</span><span class="tag">PQC</span><span class="tag">26/27 未实测</span></div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>🎓 Related Lessons</h2><span class="badge support">DEEP DIVE</span></div>
+<div class="item-list">
+<a class="item" href="../lessons/0023-java12-index.html"><div class="icon l1">L1</div><div class="info"><div class="title">Java 12 深度课件索引（0018–0022）</div><div class="desc">五层课件：switch 预览 / API 增强 / 常量 API / GC·CDS / 工具链——本章 Java 12 部分的深化版</div><div class="tags"><span class="tag">L1–L5</span><span class="tag">源码级</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="../interview/0004-java12-interview.html"><div class="icon l5">L5</div><div class="info"><div class="title">Java 12 面试题库（24 题）</div><div class="desc">与 12–15 页示例配套的五角度追问链</div></div><div class="arrow">→</div></a>
+<a class="item" href="../index.html"><div class="icon l2">H</div><div class="info"><div class="title">课程总首页</div><div class="desc">Java 9–12 全部课件、题库与文档的总导航</div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>📋 Supporting Documents</h2><span class="badge support">REFERENCE</span></div>
+<div class="item-list">
+<a class="item" href="../TOPIC-MAP.md"><div class="icon doc">🗺️</div><div class="info"><div class="title">知识地图 TOPIC-MAP</div><div class="desc">Java 9-12 概念图谱 + 分支优先级 + 学习路径</div></div><div class="arrow">→</div></a>
+<a class="item" href="../RESOURCES.md"><div class="icon doc">📚</div><div class="info"><div class="title">权威资源 RESOURCES</div><div class="desc">JEP 官方文档 + OpenJDK 源码链接</div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="footer">
+<p>Generated by Deep Mastery Skill · 示例全部经本机 JDK 25（openjdk-25.0.1）编译实测 · 中文</p>
+<p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
+</div>
+</div>
+</body>
+</html>

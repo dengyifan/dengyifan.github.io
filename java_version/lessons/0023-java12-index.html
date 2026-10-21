@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 12 — Deep Mastery Course</title>
+<style>
+:root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-secondary:#666;--text-muted:#999;--accent:#ea6f5a;--accent-blue:#3194d0;--accent-light:#fef0f0;--border:#f0f0f0;--border-light:#e8e8e8;--code-bg:#f7f7f7;--green:#42c02e;--orange:#f5a623;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-serif);font-size:17px;line-height:1.8;color:var(--text);background:var(--bg)}
+.top-nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.top-nav .logo{font-size:22px;font-weight:700;color:var(--accent);font-family:var(--font-sans);letter-spacing:-.5px}
+.top-nav .logo span{color:var(--text);font-weight:400;font-size:14px;margin-left:8px}
+.container{max-width:1020px;margin:80px auto 80px;padding:0 16px}
+.hero{background:var(--card-bg);border-radius:4px;padding:48px 40px 36px;margin-bottom:24px;border-bottom:1px solid var(--border)}
+.hero h1{font-size:34px;font-weight:700;line-height:1.3;font-family:var(--font-sans);color:var(--text);margin-bottom:12px}
+.hero .subtitle{font-size:17px;color:var(--text-secondary);font-family:var(--font-sans);line-height:1.6}
+.hero .meta{margin-top:20px;font-size:13px;color:var(--text-muted);font-family:var(--font-sans);display:flex;gap:24px;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.stat-card{background:var(--card-bg);border-radius:4px;padding:20px 24px;text-align:center;border:1px solid var(--border)}
+.stat-card .number{font-size:32px;font-weight:700;font-family:var(--font-sans);color:var(--accent)}
+.stat-card .label{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);margin-top:4px}
+.section{background:var(--card-bg);border-radius:4px;margin-bottom:16px;border:1px solid var(--border);overflow:hidden}
+.section-header{padding:20px 28px;border-bottom:1px solid var(--border);font-family:var(--font-sans);display:flex;align-items:center;gap:12px}
+.section-header h2{font-size:18px;font-weight:700;color:var(--text);flex:1}
+.section-header .badge{font-size:12px;padding:3px 10px;border-radius:12px;font-weight:600}
+.badge.core{background:#fdf2f2;color:#e74c3c}
+.badge.support{background:#f0f7fd;color:var(--accent-blue)}
+.item-list{padding:4px 0}
+.item{display:flex;align-items:center;gap:16px;padding:16px 28px;border-bottom:1px solid var(--border);transition:background .15s;text-decoration:none;color:inherit}
+.item:last-child{border-bottom:none}.item:hover{background:#fafafa}
+.item .icon{width:44px;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;font-family:var(--font-sans);font-weight:700;flex-shrink:0}
+.icon.l1{background:#e8f5e9;color:#42c02e}.icon.l2{background:#f0f7fd;color:#3194d0}.icon.l3{background:#fef0f0;color:#ea6f5a}.icon.l4{background:#fff8e1;color:#f5a623}.icon.l5{background:#f3e5f5;color:#9c27b0}.icon.doc{background:#f5f5f5;color:var(--text-muted)}
+.item .info{flex:1;min-width:0}
+.item .info .title{font-size:16px;font-weight:600;font-family:var(--font-sans);margin-bottom:2px}
+.item .info .desc{font-size:13px;color:var(--text-muted);font-family:var(--font-sans);line-height:1.5}
+.item .info .tags{margin-top:4px;display:flex;gap:6px;flex-wrap:wrap}
+.item .info .tag{font-size:11px;padding:1px 8px;border-radius:10px;font-family:var(--font-sans);background:#f5f5f5;color:var(--text-muted)}
+.item .arrow{color:var(--text-muted);font-size:18px;font-family:var(--font-sans);flex-shrink:0}
+.roadmap{background:var(--card-bg);border-radius:4px;margin-bottom:16px;border:1px solid var(--border);padding:28px}
+.roadmap h2{font-size:18px;font-weight:700;font-family:var(--font-sans);margin-bottom:20px}
+.steps{display:flex;gap:16px;flex-wrap:wrap}
+.step{flex:1;min-width:140px;background:#fafafa;border-radius:8px;padding:20px 16px;text-align:center;border:1px solid var(--border);font-family:var(--font-sans);position:relative}
+.step .step-num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 10px;font-size:13px;font-weight:700}
+.step .step-title{font-size:14px;font-weight:600;margin-bottom:4px}.step .step-desc{font-size:12px;color:var(--text-muted);line-height:1.5}
+.step::after{content:"→";position:absolute;right:-14px;top:50%;transform:translateY(-50%);color:var(--border-light);font-size:20px}
+.step:last-child::after{display:none}
+.footer{text-align:center;padding:32px 0 0;font-size:13px;color:var(--text-muted);font-family:var(--font-sans);border-top:1px solid var(--border);margin-top:32px}
+@media(max-width:700px){.hero{padding:32px 20px 24px}.hero h1{font-size:24px}.stats{grid-template-columns:repeat(2,1fr)}.steps{flex-direction:column}.step::after{display:none}.item{padding:14px 20px}}
+</style>
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12</span></div></nav>
+<div class="container">
+<div class="hero">
+<h1>Java 12 — Deep Mastery Course</h1>
+<p class="subtitle">预览特性之年（2019.03 · 非 LTS）：switch 表达式首发预览、Shenandoah GC 登场、JMH 微基准入库、G1 两项停顿治理、默认 CDS 归档、AArch64 端口合并，外加 teeing / 紧凑数字 / String.indent 一簇正式 API。</p>
+<div class="meta">
+<span>📚 5-layer deep-mastery model</span>
+<span>🔬 JEP 原文 + OpenJDK jdk12u 源码核对</span>
+<span>🌐 中文</span>
+<span>🧪 Aligned with deep-grill interview angles</span>
+</div>
+</div>
+
+<div class="stats">
+<div class="stat-card"><div class="number">5</div><div class="label">Lessons (L1–L5)</div></div>
+<div class="stat-card"><div class="number">24</div><div class="label">Interview Questions</div></div>
+<div class="stat-card"><div class="number">16</div><div class="label">JEPs &amp; Source Files</div></div>
+<div class="stat-card"><div class="number">1</div><div class="label">Question Bank</div></div>
+</div>
+
+<div class="roadmap">
+<h2>📖 Java 12 学习路径</h2>
+<div class="steps">
+<div class="step"><div class="step-num">1</div><div class="step-title">L1: 概念</div><div class="step-desc">8 个 JEP 全景 + 非 LTS 定位</div></div>
+<div class="step"><div class="step-num">2</div><div class="step-title">L2: 原理</div><div class="step-desc">switch 穷尽性 / PairBox / 并发疏散</div></div>
+<div class="step"><div class="step-num">3</div><div class="step-title">L3: 源码</div><div class="step-desc">Flow·Lower / Collectors / g1CollectedHeap</div></div>
+<div class="step"><div class="step-num">4</div><div class="step-title">L4: 边界</div><div class="step-desc">预览开关 / GC 默认值 / 升级清单</div></div>
+<div class="step"><div class="step-num">5</div><div class="step-title">L5: 面试</div><div class="step-desc">五角度追问链 + 伪代码题</div></div>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>🎓 Core Lessons</h2><span class="badge core">REQUIRED</span></div>
+<div class="item-list">
+<a class="item" href="./0018-java12-switch-expressions.html"><div class="icon l1">L1</div><div class="info"><div class="title">Switch 表达式（JEP 325 · 预览）</div><div class="desc">case L -&gt; 箭头标签 · Java 12 用 break 产值（13 才改 yield）· 穷尽性校验 · Attr→Flow→Lower 源码走读</div><div class="tags"><span class="tag">JEP 325</span><span class="tag">Preview</span><span class="tag">Flow.java</span><span class="tag">Lower.java</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./0019-java12-api-enhancements.html"><div class="icon l2">L2</div><div class="info"><div class="title">类库 API 增强 — teeing · 紧凑数字 · String</div><div class="desc">Collectors.teeing 的 PairBox 双下游模型 · Compact Number Formatting · String.indent/transform · Unicode 11 与令和</div><div class="tags"><span class="tag">Collectors.java</span><span class="tag">NumberFormat</span><span class="tag">String.java</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./0020-java12-constants-api.html"><div class="icon l3">L3</div><div class="info"><div class="title">JVM 常量 API（JEP 334）</div><div class="desc">ConstantDesc / Constable 双协议 · describeConstable → resolveConstantDesc · DynamicConstantDesc 的 BSM 解析 · 与 JEP 309（JDK 11 CONDY）的关系</div><div class="tags"><span class="tag">JEP 334</span><span class="tag">java.lang.constant</span><span class="tag">CONSTANT_Dynamic</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./0021-java12-gc.html"><div class="icon l4">L4</div><div class="info"><div class="title">Shenandoah · G1 可中断混合回收 · 默认 CDS</div><div class="desc">JEP 189 Brooks 指针并发疏散 · JEP 344 mandatory/optional 回收集 · JEP 346 周期 GC 归还内存（默认关闭）· JEP 341 构建期默认 classes.jsa</div><div class="tags"><span class="tag">JEP 189</span><span class="tag">JEP 344</span><span class="tag">JEP 346</span><span class="tag">JEP 341</span></div></div><div class="arrow">→</div></a>
+<a class="item" href="./0022-java12-toolchain.html"><div class="icon l5">L5</div><div class="info"><div class="title">工具链与平台 — JMH 套件 · 单一 AArch64 端口</div><div class="desc">JEP 230 test/micro 与 build-microbenchmark · JEP 340 删 arm64 变体 · 预览特性工作流 · 非 LTS 升级三档策略</div><div class="tags"><span class="tag">JEP 230</span><span class="tag">JEP 340</span><span class="tag">JMH</span><span class="tag">aarch64</span></div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>🧪 Interview Question Bank</h2><span class="badge core">REQUIRED</span></div>
+<div class="item-list">
+<a class="item" href="../interview/0004-java12-interview.html"><div class="icon l5">L5</div><div class="info"><div class="title">Java 12 面试题库 — 24 题</div><div class="desc">Switch 预览 / 类库 API / 常量 API / GC·CDS / 工具链·升级 · 五角度 + 伪代码追问</div><div class="tags"><span class="tag">面试官</span><span class="tag">架构师</span><span class="tag">代码审查</span><span class="tag">故障排查</span><span class="tag">讲师</span></div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>📎 Related Lessons</h2><span class="badge support">PREREQUISITE</span></div>
+<div class="item-list">
+<a class="item" href="./0017-java11-index.html"><div class="icon l1">L0</div><div class="info"><div class="title">Java 11 索引</div><div class="desc">LTS 基线：JEP 309(CONDY) 是 334 的底层前置，11→12 是最常见升级对</div></div><div class="arrow">→</div></a>
+<a class="item" href="./0015-java11-zgc-epsilon.html"><div class="icon l4">L0</div><div class="info"><div class="title">ZGC 与 Epsilon（Java 11）</div><div class="desc">与 Shenandoah 对照：着色指针 vs Brooks 指针，两种"暂停与堆无关"的解法</div></div><div class="arrow">→</div></a>
+<a class="item" href="./0008-java10-app-cds.html"><div class="icon l2">L0</div><div class="info"><div class="title">AppCDS（Java 10）</div><div class="desc">JEP 341 之前要手动 -Xshare:dump 的时代，理解"默认归档"改变了什么</div></div><div class="arrow">→</div></a>
+<a class="item" href="./0010-java10-g1-animation.html"><div class="icon l3">L0</div><div class="info"><div class="title">G1 回收动画（Java 10）</div><div class="desc">region/CSet 动画是理解 344 mandatory/optional 回收集的空间直觉</div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>🗺️ Java 12–27 特性全景</h2><span class="badge support">ROADMAP</span></div>
+<div class="item-list">
+<a class="item" href="../roadmap/index.html"><div class="icon l2">12+</div><div class="info"><div class="title">特性全景 Roadmap（Java 12 → 27）</div><div class="desc">逐版本语法与 API 清单 + 96 个经 JDK 25 编译实测的示例——从本页 Java 12 一路看到 2026 的 JDK 27</div><div class="tags"><span class="tag">16 版本</span><span class="tag">可运行示例</span><span class="tag">勘误对照</span></div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="section">
+<div class="section-header"><h2>📋 Supporting Documents</h2><span class="badge support">REFERENCE</span></div>
+<div class="item-list">
+<a class="item" href="../TOPIC-MAP.md"><div class="icon doc">🗺️</div><div class="info"><div class="title">知识地图 TOPIC-MAP</div><div class="desc">Java 9-12 概念图谱 + 分支优先级 + 学习路径</div></div><div class="arrow">→</div></a>
+<a class="item" href="../RESOURCES.md"><div class="icon doc">📚</div><div class="info"><div class="title">权威资源 RESOURCES</div><div class="desc">JEP 官方文档 + OpenJDK 源码链接</div></div><div class="arrow">→</div></a>
+<a class="item" href="../GLOSSARY.md"><div class="icon doc">📝</div><div class="info"><div class="title">术语表 GLOSSARY</div><div class="desc">preview feature / yield / Brooks pointer / CDS / JMH 等</div></div><div class="arrow">→</div></a>
+<a class="item" href="../common-misconceptions.md"><div class="icon doc">⚠️</div><div class="info"><div class="title">常见误区知识库</div><div class="desc">break/yield、teeing、G1PeriodicGCInterval 默认值等 Java 12 易错点</div></div><div class="arrow">→</div></a>
+</div>
+</div>
+
+<div class="footer">
+<p>Generated by Deep Mastery Skill · OpenJDK 12（源码核对：openjdk/jdk12u + 本地 JDK 25 src.zip 对照） · 中文</p>
+<p>Ready for deep-grill verification — go to <code>deep-grill</code> to test your mastery.</p>
+</div>
+</div>
+</body>
+</html>

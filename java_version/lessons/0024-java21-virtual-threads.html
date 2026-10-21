@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>虚拟线程 Virtual Threads · Java 21</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
+<link rel="stylesheet" href="../../style/shared.css">
+</head>
+<body>
+<nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 21 · 虚拟线程</span></div></nav>
+<div class="layout">
+<nav class="toc-sidebar" id="toc"><div class="toc-title">目录</div></nav>
+<main class="content">
+<div class="article-header">
+<h1>虚拟线程 — 百万并发的轻量级线程（JEP 444）</h1>
+<div class="article-meta"><span>📚 L1–L5 · 并发核心</span><span>🔬 JEP 444 · JDK 25 实测</span><span>🌐 中文</span></div>
+</div>
+<div class="article-body">
+<div class="breadcrumb"><a href="../index.html">首页</a> / <a href="./0027-java21-index.html">Java 21</a> / 虚拟线程</div>
+
+<div class="info">
+<div class="info-title">本课怎么读 · 版本口径</div>
+<p>本课讲 <strong>JDK 21 LTS 转正的虚拟线程（JEP 444）</strong>。所有代码示例在本机 <code>openjdk-25.0.1</code> 实测通过（虚拟线程自 21 起为正式特性，免开关）。一处必须提前知道的版本差异：<strong>JDK 21 上虚拟线程跑在 <code>synchronized</code> 块里阻塞会被「钉住」（pinning），该行为已被 JDK 24 的 <a href="https://openjdk.org/jeps/491">JEP 491</a> 消除</strong>——本课在 L4 层给出两个版本的实测对照，别把 25 的行为当成 21 的。</p>
+</div>
+
+<h2>L1 · 概念层：线程的两种实现</h2>
+
+<p>线程是可调度的最小处理单元，是 <code>java.lang.Thread</code> 的实例。从 JDK 21 起，<code>Thread</code> 有两种：<strong>平台线程（platform thread）</strong>与<strong>虚拟线程（virtual thread）</strong>。</p>
+
+<table>
+<tr><th>维度</th><th>平台线程</th><th>虚拟线程</th></tr>
+<tr><td>实现者</td><td>OS（JDK 只是薄封装）</td><td>Java 运行时</td></tr>
+<tr><td>与 OS 线程的关系</td><td>1:1，整个生命周期独占一条 OS 线程</td><td>M:N，不绑定特定 OS 线程，阻塞时让出</td></tr>
+<tr><td>数量上限</td><td>受限于 OS 线程数（几千已吃力）</td><td>同一 JVM 可达百万级</td></tr>
+<tr><td>典型栈深 / 寿命</td><td>深栈、长寿，故需要池化复用</td><td>浅栈、短命（一次 HTTP 调用 / 一次 JDBC 查询）</td></tr>
+<tr><td>适用任务</td><td>所有类型，但是稀缺资源</td><td><strong>大部分时间阻塞等待 I/O</strong> 的任务</td></tr>
+<tr><td>定位</td><td>重量级工作线程</td><td>并发单元，而非更快的线程</td></tr>
+</table>
+
+<h3>平台线程：昂贵的一对一封装</h3>
+
+<p>平台线程是 OS 线程的薄封装：它在底层那条 OS 线程上跑 Java 代码，并且<strong>整个生命周期都霸占这条 OS 线程</strong>。因此平台线程的数量受限于 OS 线程数。平台线程通常带着 OS 维护的大线程栈和其他资源，什么任务都能跑，但可能是稀缺资源——这正是过去必须用线程池的根本原因。</p>
+
+<h3>虚拟线程：运行时模拟「很多线程」</h3>
+
+<p>虚拟线程同样是 <code>java.lang.Thread</code> 的实例，但<strong>不绑定特定 OS 线程</strong>。它仍然在某条 OS 线程上执行代码；然而当虚拟线程里的代码调用阻塞 I/O 操作时，Java 运行时会<strong>挂起</strong>该虚拟线程直到它可以恢复，与之关联的 OS 线程随即被释放出来去服务其他虚拟线程。</p>
+
+<blockquote>
+<p>虚拟线程的实现思路类似虚拟内存：OS 把很大的虚拟地址空间映射到有限的 RAM，以模拟「很多内存」；Java 运行时则把大量虚拟线程映射到少量 OS 线程，以模拟「很多线程」。</p>
+</blockquote>
+
+<div class="note">
+<div class="note-title">两个适用边界</div>
+<ul>
+<li>虚拟线程通常调用栈很浅，只做一次 HTTP 客户端调用或一次 JDBC 查询；单个 JVM 可能承载百万虚拟线程，因此<strong>是否使用线程局部变量要仔细权衡</strong>（见 <a href="./0026-java21-thread-local-variables.html">0026</a>）。</li>
+<li>虚拟线程适合<strong>大部分时间阻塞、常等待 I/O 完成</strong>的任务；<strong>不适合长时间运行的 CPU 密集型操作</strong>。</li>
+</ul>
+</div>
+
+<h3>为什么要用：提供规模（吞吐），不是速度（延迟）</h3>
+
+<p>高吞吐并发应用——典型是服务端，要处理大量执行阻塞 I/O（如抓取资源）的客户端请求——应使用虚拟线程。但务必记住这句话：</p>
+
+<blockquote>
+<p>虚拟线程<strong>不是更快的线程</strong>：它跑代码并不比平台线程快。它的存在是为了<strong>规模（更高吞吐），而不是速度（更低延迟）</strong>。</p>
+</blockquote>
+
+<h2>L2 · 原理层：M:N 调度与 mount/unmount</h2>
+
+<h3>谁来调度：carrier 与挂载</h3>
+
+<p>平台线程何时运行由 OS 调度；虚拟线程何时运行由 Java 运行时调度。运行时调度一个虚拟线程时，会把它<strong>分配/挂载（mount）到一条平台线程</strong>上，然后 OS 照常调度那条平台线程——这条平台线程称为<strong>载体线程（carrier）</strong>。运行一段代码后，虚拟线程可以从载体上<strong>卸载（unmount）</strong>，通常发生在它执行阻塞 I/O 操作时。卸载后载体空闲，调度器就可以把另一个虚拟线程挂上去。</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Sch as 运行时调度器
+    participant C as Carrier（平台线程）
+    participant VT as 虚拟线程
+    Sch->>C: mount(VT)
+    C->>VT: 执行 CPU 计算
+    VT->>VT: 调用阻塞 I/O
+    Note over VT: 发起非阻塞 OS 调用并 park
+    VT-->>C: unmount（VT 挂起）
+    Note over C: 空闲 → 可挂载其他虚拟线程
+    Sch->>C: mount(VT2)
+    Note over VT: I/O 完成 → unpark，稍后重新挂载
+</div>
+
+<h3>阻塞时底层发生了什么</h3>
+
+<p>关键在于 <code>java.*</code> API 里的阻塞操作被运行时「接管」了：虚拟线程遇到阻塞 I/O 时，运行时执行的是<strong>非阻塞 OS 调用</strong>，然后自动挂起虚拟线程，稍后 I/O 就绪再恢复。于是「阻塞一个虚拟线程」很便宜——它不持有 OS 线程。这与阻塞平台线程（昂贵，因为白白占着稀缺线程）形成鲜明对比。</p>
+
+<h3>默认调度器：一个工作窃取池</h3>
+
+<table>
+<tr><th>事实</th><th>说明</th></tr>
+<tr><td>默认 Scheduler</td><td>一个<strong>私有的 <code>ForkJoinPool</code></strong>（工作窃取），并行度默认等于可用 CPU 核数</td></tr>
+<tr><td>并行度可调</td><td>系统属性 <code>jdk.virtualThreadScheduler.parallelism</code></td></tr>
+<tr><td>调度模型</td><td><strong>M:N</strong>：M 个虚拟线程映射到 N 条 OS 线程</td></tr>
+<tr><td>历史对照</td><td>Java 早期的「绿色线程」是 <strong>M:1</strong>（全共享一条 OS 线程），后被 1:1 的平台线程淘汰；虚拟线程回到 M:N 并由运行时负责阻塞挂起</td></tr>
+</table>
+
+<h3>为什么能提升吞吐：Little's Law</h3>
+
+<p>服务端可扩展性受 <strong>Little's Law</strong> 支配，它关联延迟、并发与吞吐：给定请求处理时长（延迟），应用同时处理的请求数（并发）必须与到达速率（吞吐）成比例增长。例如平均延迟 50ms、并发 10 个请求时吞吐 200 req/s；要扩到 2000 req/s，就必须并发处理 100 个请求。<strong>线程数必须随吞吐增长</strong>。</p>
+
+<ul>
+<li><strong>thread-per-request 风格</strong>：一个请求从始至终占用一个线程。易写、易调试（平台的并发单元 = 应用的并发单元），但 OS 线程昂贵，线程数往往在 CPU / 网络打满之前就先成了瓶颈；池化只省了启动开销，并不增加线程总数。</li>
+<li><strong>异步风格</strong>：等待时把线程还给池子，换取高并发，却要放弃顺序组合（循环、<code>try/catch</code>），把逻辑拆成回调 / <code>CompletableFuture</code> 管道；栈追踪无上下文、调试器无法单步、profiler 无法关联成本到调用方。</li>
+<li><strong>虚拟线程</strong>：保留 thread-per-request 风格，让每个请求全程跑在一个虚拟线程上，但它只在 CPU 计算时占用 OS 线程——透明地获得异步风格的可扩展性与近满硬件利用率。</li>
+</ul>
+
+<h2>L3 · API 层：创建与运行虚拟线程</h2>
+
+<p><code>Thread</code> 与 <code>Thread.Builder</code> API 可创建两种线程；<code>java.util.concurrent.Executors</code> 也定义了为每个任务启动一个新虚拟线程的 <code>ExecutorService</code>。</p>
+
+<h3>方式 1：Thread.ofVirtual() + start/join</h3>
+
+<pre><code>// 创建并启动一个打印消息的虚拟线程，再 join 等待它结束
+Thread thread = Thread.ofVirtual().start(() -&gt; System.out.println("Hello"));
+thread.join();</code></pre>
+
+<p><code>Thread.Builder</code> 接口让你用线程名等公共属性来创建线程：子接口 <code>Thread.Builder.OfPlatform</code> 建平台线程，<code>Thread.Builder.OfVirtual</code> 建虚拟线程。</p>
+
+<pre><code>// 具名单个线程
+Thread.Builder builder = Thread.ofVirtual().name("MyThread");
+Runnable task = () -&gt; System.out.println("Running thread");
+Thread t = builder.start(task);
+System.out.println("Thread t name: " + t.getName());
+t.join();
+
+// 前缀 + 起始序号：批量自动命名 worker-0, worker-1 ...
+Thread.Builder workers = Thread.ofVirtual().name("worker-", 0);
+Runnable id = () -&gt; System.out.println("Thread ID: " + Thread.currentThread().threadId());
+Thread t1 = workers.start(id);   // worker-0
+t1.join();
+Thread t2 = workers.start(id);   // worker-1
+t2.join();</code></pre>
+
+<h3>方式 2：newVirtualThreadPerTaskExecutor()（推荐的服务端入口）</h3>
+
+<p>Executor 把线程的管理与创建从应用其余部分分离出来。每次调用 <code>submit</code> 都会创建并启动一个新虚拟线程来跑任务。</p>
+
+<pre><code>try (ExecutorService myExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
+    Future&lt;?&gt; future = myExecutor.submit(() -&gt; System.out.println("Running thread"));
+    future.get();                 // 等待该任务完成
+    System.out.println("Task completed");
+}   // close()：隐式等待所有任务结束</code></pre>
+
+<p>下面这个程序提交 10 000 个「睡 1 秒」的任务——本机实测约 1.1 秒全部跑完，背后只用了极少数 OS 线程（甚至少到一条）：</p>
+
+<pre><code>public class ManyVT {
+  public static void main(String[] args) {
+    long st = System.currentTimeMillis();
+    try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+      IntStream.range(0, 10_000).forEach(i -&gt; {
+        executor.submit(() -&gt; { Thread.sleep(Duration.ofSeconds(1)); return i; });
+      });
+    }
+    System.out.println("10k tasks in " + (System.currentTimeMillis() - st) + "ms");
+  }
+}
+// 本机实测输出（openjdk-25.0.1）：
+// 10k tasks in 1090ms</code></pre>
+
+<div class="warning">
+<div class="warning-title">换成平台线程会怎样</div>
+<ul>
+<li>用 <code>Executors.newCachedThreadPool()</code>：会试图创建 10 000 条平台线程（= 10 000 条 OS 线程），程序可能直接崩。</li>
+<li>用 <code>Executors.newFixedThreadPool(200)</code>：只有 200 条线程被 10 000 个任务共享，大量任务排队、跑很久（吞吐上限 200 task/s，而虚拟线程约 10 000 task/s）。</li>
+<li>把 <code>10_000</code> 改成 <code>1_000_000</code>：虚拟线程版会创建百万个并发虚拟线程，达到约百万 task/s（充分热身之后）。</li>
+</ul>
+</div>
+
+<p><code>toString()</code> 还能看到载体信息，这是判断「代码正跑在哪个 carrier 上」的直接证据：</p>
+
+<pre><code>Thread t = Thread.ofVirtual().name("vt-hello").start(() -&gt; {});
+t.join();
+System.out.println(t.isVirtual() + " / " + t);
+// 实测（运行中 toString）：VirtualThread[#26,vt-hello]/runnable@ForkJoinPool-1-worker-1
+//                                    斜杠后就是它当时挂载的 carrier 线程</code></pre>
+
+<h3>方式 3：每连接一个虚拟线程的 Echo Server</h3>
+
+<p>服务端每接受一条连接就启动一个虚拟线程处理，于是可以同时服务大量客户端，代码仍是顺序阻塞写法：</p>
+
+<pre><code>public class EchoServer {
+  public static void main(String[] args) throws IOException {
+    int port = Integer.parseInt(args[0]);
+    try (ServerSocket serverSocket = new ServerSocket(port)) {
+      while (true) {
+        Socket clientSocket = serverSocket.accept();        // 接受连接
+        Thread.ofVirtual().start(() -&gt; {                    // 每连接一个虚拟线程
+          try (PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
+               BufferedReader in = new BufferedReader(
+                   new InputStreamReader(clientSocket.getInputStream()))) {
+            String inputLine;
+            while ((inputLine = in.readLine()) != null) {
+              System.out.println(inputLine);
+              out.println(inputLine);                       // 原样回显
+            }
+          } catch (IOException e) { e.printStackTrace(); }
+        });
+      }
+    }
+  }
+}</code></pre>
+
+<h2>L4 · 边界层：钉住、池化与限流</h2>
+
+<h3>Pinning：虚拟线程无法卸载的两种情况</h3>
+
+<p>当虚拟线程被<strong>钉（pinned）</strong>在载体上时，阻塞操作期间它无法卸载。JDK 21 上钉住发生在：</p>
+
+<ol>
+<li>虚拟线程在 <code>synchronized</code> 块或方法内运行代码；</li>
+<li>虚拟线程运行 <code>native</code> 方法或外部函数（Foreign Function，见 FFM API）。</li>
+</ol>
+
+<p>钉住不会让程序出错，但会损害可扩展性。官方建议：改写频繁执行的 <code>synchronized</code> 块/方法，并用 <code>java.util.concurrent.locks.ReentrantLock</code> 守护可能很长的 I/O 操作，以避免频繁且长寿的钉住。</p>
+
+<div class="warning">
+<div class="info-title">版本实测对照：synchronized 钉住（JDK 21） vs 不钉住（JDK 24+）</div>
+<p>100 个虚拟线程，各自在<strong>自己的、零竞争的</strong> monitor 上 <code>synchronized</code> 后睡 300ms：</p>
+<pre><code>try (var exec = Executors.newVirtualThreadPerTaskExecutor()) {
+  for (int i = 0; i &lt; 100; i++) {
+    final Object ownLock = new Object();        // 每个任务自己的锁：无竞争
+    exec.submit(() -&gt; {
+      synchronized (ownLock) { Thread.sleep(Duration.ofMillis(300)); }
+      return null;
+    });
+  }
+}</code></pre>
+<table>
+<tr><th>版本</th><th>预期 / 实测耗时</th><th>原因</th></tr>
+<tr><td><strong>JDK 21</strong></td><td>≈ ⌈100 / carrier 数⌉ × 300ms（约 2.7s@12 carriers）</td><td><code>synchronized</code> 内阻塞 → 钉住 carrier，carrier 被睡占无法复用</td></tr>
+<tr><td><strong>JDK 25 实测</strong></td><td><strong>303ms</strong>（JFR 中 <code>jdk.VirtualThreadPinned</code> 事件 0 条）</td><td><a href="https://openjdk.org/jeps/491">JEP 491</a>（JDK 24）让 <code>synchronized</code> 阻塞也能卸载</td></tr>
+</table>
+<p>注意 <code>native</code> 方法 / 外部函数的钉住<strong>在 25 上仍然存在</strong>（JEP 491 只解决 <code>synchronized</code>）。判断线上是否发生钉住，直接看 JFR 的 <code>jdk.VirtualThreadPinned</code> 事件。</p>
+</div>
+
+<div class="tip">
+<div class="tip-title">JDK 21 上的改写：synchronized → ReentrantLock</div>
+<pre><code>// JDK 21：synchronized 内做阻塞 I/O 会钉住 carrier
+synchronized (guard) {
+    socket.read(buf);
+}
+
+// 改写：j.u.c.l.ReentrantLock 在虚拟线程上阻塞不会钉住
+guardLock.lock();
+try {
+    socket.read(buf);
+} finally {
+    guardLock.unlock();
+}</code></pre>
+<p>前提是这段 <code>synchronized</code> 只是为了互斥、不依赖 monitor 的 <code>wait/notify</code> 语义；改写后临界区行为不变。</p>
+</div>
+
+<h3>不要池化虚拟线程</h3>
+
+<p>虚拟线程便宜又海量，因此<strong>永远不该被池化</strong>：每个应用任务都应创建一个新虚拟线程。大多数虚拟线程短命、栈浅；池化是过去为应对平台线程高成本而生的习惯，用在虚拟线程上适得其反。平台线程才重、才需要池化。</p>
+
+<h3>用 Semaphore 限制并发，而不是靠线程数</h3>
+
+<p>虚拟线程可以无限开，但<strong>下游外部资源</strong>（如数据库连接、对端 API）往往有硬上限。此时用 <code>Semaphore</code> 在业务层显式限流：</p>
+
+<pre><code>static final Semaphore DB_PERMITS = new Semaphore(16);   // DB 连接上限
+
+void handle() throws InterruptedException {
+  DB_PERMITS.acquire();                                  // 拿不到许可就等
+  try {
+    query();                                             // 阻塞 JDBC 调用
+  } finally {
+    DB_PERMITS.release();
+  }
+}</code></pre>
+
+<p>不要用「固定大小的虚拟线程池」来限流——那等于把平台线程时代的做法硬套回来；池化虚拟线程没有意义，限流应表达为对<strong>资源许可</strong>的获取。</p>
+
+<h3>ThreadLocal 的百万级成本</h3>
+
+<p>虚拟线程支持 <code>ThreadLocal</code> 与 <code>InheritableThreadLocal</code>，这保证大量现有库可以原样使用。但单 JVM 可能有百万虚拟线程：每个线程都为线程局部变量维护独立映射，内存与继承开销会被放大百万倍。JDK 21 起虚拟线程<strong>总是支持</strong>线程局部变量（预览期曾可创建不支持的虚拟线程，转正后取消）。更优替代是 <code>ScopedValue</code>，详见 <a href="./0026-java21-thread-local-variables.html">0026 线程局部变量</a>。</p>
+
+<h3>CPU 密集型任务：线程数超过核数没有收益</h1>
+
+<p>若任务做的是 1 秒的计算（如给大数组排序）而非睡 1 秒，那么无论虚拟线程还是平台线程，线程数超过处理器核数都无济于事。大数据集并行仍优先用 <strong>Stream API</strong>（JEP 444 明确不提供新的数据并行构造）。</p>
+
+<h2>观测虚拟线程：JFR 与 jcmd</h2>
+
+<p>虚拟线程仍然是线程，调试器可以像平台线程一样单步调试。JFR 与 <code>jcmd</code> 还提供额外观测能力。</p>
+
+<h3>JFR 事件</h3>
+
+<table>
+<tr><th>事件</th><th>含义</th><th>默认状态</th></tr>
+<tr><td><code>jdk.VirtualThreadStart</code> / <code>jdk.VirtualThreadEnd</code></td><td>虚拟线程启动 / 终止</td><td><strong>默认关闭</strong></td></tr>
+<tr><td><code>jdk.VirtualThreadPinned</code></td><td>虚拟线程被钉住（carrier 未释放）且超过阈值时长</td><td><strong>默认开启，阈值 20ms</strong></td></tr>
+<tr><td><code>jdk.VirtualThreadSubmitFailed</code></td><td>启动或 unpark 虚拟线程失败（通常是资源问题）</td><td><strong>默认开启</strong></td></tr>
+</table>
+
+<pre><code># 打印事件（Start/End 需先在 JMC 或自定义 JFR 配置里启用）
+jfr print --events jdk.VirtualThreadStart,jdk.VirtualThreadEnd,\
+jdk.VirtualThreadPinned,jdk.VirtualThreadSubmitFailed recording.jfr</code></pre>
+
+<h3>jcmd 线程转储：text 与 JSON</h3>
+
+<pre><code>jcmd &lt;PID&gt; Thread.dump_to_file -format=text &lt;file&gt;
+jcmd &lt;PID&gt; Thread.dump_to_file -format=json &lt;file&gt;</code></pre>
+
+<p>新转储列出<strong>所有</strong>线程（平台 + 虚拟），但<strong>不含</strong>对象地址、锁、JNI 统计、堆统计等传统转储里的信息。实测片段（3 个睡眠中的虚拟线程，默认无名）：</p>
+
+<pre><code>#26 "" virtual TIMED_WAITING
+    at java.base/java.lang.VirtualThread.parkNanos(VirtualThread.java:780)
+    at java.base/java.lang.VirtualThread.sleepNanos(VirtualThread.java:971)
+    at java.base/java.lang.Thread.sleep(Thread.java:601)
+    at VTDump.lambda$main$0(VTDump.java:7)
+    at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+    at java.base/java.lang.VirtualThread.run(VirtualThread.java:456)</code></pre>
+
+<p>注意标签里直接写着 <code>virtual</code>，且阻塞点清晰呈现为 <code>VirtualThread.parkNanos</code>——百万线程的转储因此依然可读，这正是 JEP 444 的目标之一。</p>
+
+<h2>L5 · 面试层：追问链</h2>
+
+<div class="qa-block">
+<div class="question">Q1: 虚拟线程是什么？它和平台线程的本质区别？</div>
+<div class="answer"><p>虚拟线程是 JDK 21（JEP 444）引入的轻量级 <code>java.lang.Thread</code> 实现，由 Java 运行时而非 OS 实现。平台线程 1:1 封装 OS 线程、一生独占、数量受限；虚拟线程是 M:N，不绑定特定 OS 线程，阻塞 I/O 时挂起并释放载体线程，同一 JVM 可承载百万级。</p>
+<div class="key-point">本质区别：谁实现线程（OS vs 运行时），以及阻塞时是否释放 OS 线程。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q2: 追问 — 虚拟线程能让接口变快吗？什么情况下才能提升吞吐？</div>
+<div class="answer"><p>不能。虚拟线程不是更快的线程，不降低延迟，只提供规模。它提升吞吐需要两个条件：① 并发任务数很高（几千以上）；② 工作负载不是 CPU 密集型（线程数远超核数对计算任务无收益）。典型服务端大量任务阻塞等待 I/O，正符合。</p>
+<div class="key-point">提供 scale（吞吐）而非 speed（延迟）；CPU 密集用 Stream 并行，别用虚拟线程。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q3: 追问 — 什么是 carrier？什么是 pinning？JDK 21 上哪些情况会钉住？</div>
+<div class="answer"><p>Carrier 是承载虚拟线程运行的平台线程；虚拟线程 mount 上去执行、阻塞 I/O 时 unmount 让出 carrier。Pinning 指虚拟线程被钉在 carrier 上、阻塞时无法卸载。JDK 21 上两种情形：① 在 <code>synchronized</code> 块/方法内；② 运行 native 方法或外部函数。钉住不错误但损害扩展性。</p>
+<div class="key-point">JDK 24 的 JEP 491 已消除 synchronized 钉住；native/FFI 仍会钉住。排查看 JFR jdk.VirtualThreadPinned（默认阈值 20ms）。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q4: 代码审查 — 这段「用固定大小虚拟线程池做限流」的代码有什么问题？</div>
+<div class="answer"><pre><code>var pool = Executors.newFixedThreadPool(200);   // 想「限制」虚拟线程并发
+pool.submit(() -&gt; query());</code></pre>
+<ol>
+<li><code>newFixedThreadPool</code> 建的是<strong>平台线程</strong>，根本不是虚拟线程——既没拿到虚拟线程的规模，又把 200 条重线程变成瓶颈；</li>
+<li>虚拟线程<strong>永远不该池化</strong>：每个任务应 <code>Thread.ofVirtual()</code> 新建或走 <code>newVirtualThreadPerTaskExecutor()</code>；</li>
+<li>限流要表达为对下游资源的许可：用 <code>Semaphore</code>（如 DB 连接数），拿许可再调用。</li>
+</ol>
+<div class="key-point">池化是应对平台线程昂贵的旧习惯，对虚拟线程适得其反；限限流用 Semaphore。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q5: 架构师 — 现有异步 / 响应式服务要不要迁到虚拟线程？怎么迁成本最小？</div>
+<div class="answer"><p>若异步管道已稳定运行、且团队能接受其调试与推理成本，不急于迁。虚拟线程的最大价值在<strong>保留 thread-per-request 风格</strong>：迁回简单的顺序阻塞代码（循环、<code>try/catch</code> 都能正常用），由框架为每个请求启动虚拟线程。最小改动路径：① 请求入口改用 <code>newVirtualThreadPerTaskExecutor()</code>；② 业务代码改写为同步阻塞 I/O；③ 排查 <code>synchronized</code> 内长 I/O（21 上改 <code>ReentrantLock</code>）；④ 对外部资源加 <code>Semaphore</code>。异步风格的 <code>CompletableFuture</code> 链路不会从虚拟线程获益多少。</p>
+<div class="key-point">迁移的核心是「回到同步代码」，而不是给旧回调链套虚拟线程。</div>
+</div>
+</div>
+
+<div class="qa-block">
+<div class="question">Q6: 故障排查 — 上线虚拟线程后吞吐没提升、CPU 也不高，先查什么？</div>
+<div class="answer">
+<ol>
+<li>先取 <code>jcmd &lt;pid&gt; Thread.dump_to_file -format=text</code>：确认请求是否真跑在虚拟线程上（标签 <code>virtual</code>），大量线程是否卡在同一阻塞点；</li>
+<li>开 JFR 看 <code>jdk.VirtualThreadPinned</code>：JDK 21 上常因 <code>synchronized</code> 守护了 I/O（如老版连接池 / 老 JDBC），carrier 被钉占——改用 <code>ReentrantLock</code> 或升级驱动 / JDK；</li>
+<li>查下游是否成瓶颈：DB 连接池打满会让虚拟线程全部 park 在等连接，此时用 <code>Semaphore</code> 限并发而非盲目加线程；</li>
+<li>确认负载不是 CPU 密集型。</li>
+</ol>
+<div class="key-point">排查顺序：thread dump 定性 → JFR pinning 事件 → 下游资源 → CPU 密集度。</div>
+</div>
+</div>
+
+<div class="page-nav">
+<span><a href="./0023-java12-index.html">← 上一版本：Java 12 索引</a></span>
+<span><a href="./0025-java21-structured-concurrency.html">下一课：结构化并发 →</a></span>
+</div>
+
+</div>
+</main>
+</div>
+<script>
+(function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
+</script>
+</body>
+</html>

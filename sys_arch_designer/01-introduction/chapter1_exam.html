@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
 <title>系统架构设计师 · 第1章 绪论 · 在线自测</title>
 <style>
   :root{
@@ -11,7 +12,9 @@
     --border:#e5e7eb; --muted:#6b7280;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{-webkit-text-size-adjust:100%}
   html,body{margin:0;padding:0}
+  button,a{touch-action:manipulation}
   body{
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
     background:#f1f5f9;color:#1f2937;line-height:1.65;font-size:15px;
@@ -21,6 +24,7 @@
   /* ===== 顶部栏 ===== */
   .topbar{
     position:sticky;top:0;z-index:100;
+    padding-top:env(safe-area-inset-top);
     background:rgba(255,255,255,.95);
     -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
     border-bottom:1px solid var(--border);
@@ -29,8 +33,13 @@
     max-width:760px;margin:0 auto;padding:10px 16px;
     display:flex;align-items:center;gap:12px;
   }
-  .brand{min-width:0;flex:1}
+  .brand{
+    display:block;min-width:0;flex:1;
+    color:inherit;text-decoration:none;
+  }
   .brand-title{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .brand-back{color:var(--primary);margin-right:5px;font-weight:700}
+  .brand:active .brand-title{opacity:.6}
   .brand-sub{font-size:12px;color:var(--muted)}
   .topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
   .progress-bar{width:100px;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden}
@@ -38,7 +47,7 @@
   .progress-text{font-size:12px;color:var(--muted);white-space:nowrap}
 
   /* ===== 主容器 ===== */
-  .container{max-width:760px;margin:0 auto;padding:20px 16px 100px}
+  .container{max-width:760px;margin:0 auto;padding:20px 16px calc(100px + env(safe-area-inset-bottom))}
 
   /* ===== 题目卡片 ===== */
   .q-card{
@@ -197,11 +206,11 @@
   .modal-overlay{
     position:fixed;inset:0;background:rgba(15,23,42,.5);
     z-index:300;display:flex;align-items:center;justify-content:center;
-    padding:16px;
+    padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
   }
   .modal{
     background:#fff;border-radius:14px;
-    width:100%;max-width:560px;max-height:82vh;
+    width:100%;max-width:560px;max-height:82vh;max-height:82dvh;
     display:flex;flex-direction:column;
     box-shadow:0 20px 50px rgba(0,0,0,.3);
     animation:modalIn .2s ease;
@@ -218,9 +227,13 @@
   .modal-head h3{margin:0;font-size:16px}
   .modal-close{
     border:0;background:transparent;font-size:24px;line-height:1;
-    color:var(--muted);cursor:pointer;padding:0 4px;
+    color:var(--muted);cursor:pointer;padding:0;
+    width:40px;height:40px;margin:-8px -8px -8px 0;
+    display:flex;align-items:center;justify-content:center;
+    border-radius:50%;
   }
   .modal-close:hover{color:#111}
+  .modal-close:active{background:#f1f5f9}
   .modal-body{
     overflow-y:auto;flex:1;
     padding:12px 14px;
@@ -233,26 +246,41 @@
     .brand-title{font-size:14px}
     .brand-sub{display:none}
     .progress-bar{width:70px}
-    .container{padding:14px 12px 90px}
+    .container{padding:14px 12px calc(90px + env(safe-area-inset-bottom))}
     .q-card{padding:16px;border-radius:12px}
     .q-stem{font-size:15px}
-    .option{font-size:13.5px;padding:10px 11px}
-    .nav-btn{padding:9px 14px;font-size:13px}
+    .option{font-size:14px;padding:13px 12px;border-radius:10px}
+    .opt-letter{flex:0 0 24px;height:24px}
+    .nav-bar{gap:8px}
+    .nav-btn{padding:11px 14px;font-size:13px;min-height:44px}
     .score-num{font-size:46px}
     .result-stats{gap:22px}
+    .modal{max-height:86vh;max-height:86dvh;border-radius:16px}
+    .modal-body{padding-bottom:calc(16px + env(safe-area-inset-bottom))}
 
     .fab{
-      top:auto;bottom:20px;right:16px;transform:none;
-      border-radius:50%;width:54px;height:54px;padding:0;
+      top:auto;bottom:calc(20px + env(safe-area-inset-bottom));right:16px;transform:none;
+      border-radius:50%;width:56px;height:56px;padding:0;
       writing-mode:horizontal-tb;letter-spacing:0;font-size:12px;
       display:flex;align-items:center;justify-content:center;
       box-shadow:0 4px 14px rgba(37,99,235,.4);
     }
 
     .answer-grid{grid-template-columns:repeat(5,1fr);gap:3px}
-    .answer-cell{min-height:34px;padding:3px 1px}
+    .answer-cell{min-height:36px;padding:4px 1px}
     .answer-cell .ans{font-size:13px}
     .answer-cell .idx{font-size:9px}
+  }
+  /* 横屏小高度：同样使用右下角圆形按钮，避免遮挡内容 */
+  @media (max-height:520px) and (orientation:landscape){
+    .fab{
+      top:auto;bottom:calc(16px + env(safe-area-inset-bottom));right:16px;transform:none;
+      border-radius:50%;width:52px;height:52px;padding:0;
+      writing-mode:horizontal-tb;letter-spacing:0;font-size:11px;
+      display:flex;align-items:center;justify-content:center;
+      box-shadow:0 4px 14px rgba(37,99,235,.4);
+    }
+    .container{padding-bottom:calc(90px + env(safe-area-inset-bottom))}
   }
   @media (max-width:380px){
     .answer-grid{grid-template-columns:repeat(4,1fr)}
@@ -263,10 +291,10 @@
 
 <header class="topbar">
   <div class="topbar-inner">
-    <div class="brand">
-      <div class="brand-title">系统架构设计师 · 第1章 绪论</div>
-      <div class="brand-sub">综合知识自测 · 共 50 题 · 单选题</div>
-    </div>
+    <a class="brand" href="./chapter1.html" aria-label="返回第1章 绪论">
+      <div class="brand-title"><span class="brand-back" aria-hidden="true">←</span>第1章 绪论</div>
+      <div class="brand-sub">系统架构设计师 · 综合知识自测 · 共 50 题</div>
+    </a>
     <div class="topbar-right">
       <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
       <span class="progress-text" id="progressText">已答 0/50</span>
@@ -678,18 +706,25 @@ function onOptionClick(e) {
   renderProgress();
 
   if (firstTime) {
-    setTimeout(() => {
-      if (state.finished) return;
-      if (state.currentIndex !== i) return;
-      if (i < total - 1) {
-        state.currentIndex = i + 1;
-        renderQuestion();
-        renderProgress();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        finish();
-      }
-    }, 800);
+    const isPhone = window.matchMedia('(max-width:600px)').matches;
+    if (isPhone) {
+      /* 手机端不自动跳题：先让用户看完解析，再手动点“下一题” */
+      const fb = document.querySelector('#qCard .feedback');
+      if (fb) fb.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else {
+      setTimeout(() => {
+        if (state.finished) return;
+        if (state.currentIndex !== i) return;
+        if (i < total - 1) {
+          state.currentIndex = i + 1;
+          renderQuestion();
+          renderProgress();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          finish();
+        }
+      }, 1000);
+    }
   }
 }
 

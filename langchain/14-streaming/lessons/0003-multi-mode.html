@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>多模式组合与实战</title>
   <script src="../../../assets/vendor/mermaid/mermaid-10.min.js"></script>
+  <script src="../../../style/theme.js"></script>
   <script>
     mermaid.initialize({
       startOnLoad: true, theme: 'base',
@@ -17,6 +18,8 @@
     });
   </script>
   <link rel="stylesheet" href="../../../style/shared.css">
+  <link rel="stylesheet" href="../../../style/theme.css">
+  <link rel="stylesheet" href="../../../style/highlight.css">
 </head>
 <body>
 
@@ -451,5 +454,6 @@ agent.stream(
 (function(){var t=document.getElementById('toc'),h=document.querySelectorAll('.article-body h2, .article-body h3');h.forEach(function(e){var i=e.id||e.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();e.id=i;var a=document.createElement('a');a.href='#'+i;a.textContent=e.textContent;a.className='toc-'+e.tagName.toLowerCase();t.appendChild(a)});var ls=t.querySelectorAll('a'),els=[];ls.forEach(function(l){var i=l.getAttribute('href').replace('#',''),e=document.getElementById(i);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var sy=window.scrollY+120,c=null;els.forEach(function(it){if(it.el.offsetTop<=sy)c=it});ls.forEach(function(l){l.classList.remove('active')});if(c)c.link.classList.add('active')})})();
 </script>
 
+  <script src="../../../style/highlight.js"></script>
 </body>
 </html>

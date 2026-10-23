@@ -5,11 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Compact Strings 源码走读</title>
   <script src="../../assets/vendor/mermaid/mermaid-10.min.js"></script>
+  <script src="../../style/theme.js"></script>
   <script>
     mermaid.initialize({ startOnLoad: true, theme: 'base',
       themeVariables: { primaryColor: '#fef0f0', primaryBorderColor: '#ea6f5a', lineColor: '#999', fontSize: '14px' } });
   </script>
   <link rel="stylesheet" href="../../style/shared.css">
+  <link rel="stylesheet" href="../../style/theme.css">
+  <link rel="stylesheet" href="../../style/highlight.css">
 </head>
 <body>
 <nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 9</span></div></nav>
@@ -434,5 +437,6 @@ flowchart LR
 (function(){var b=document.getElementById('backToTop');window.addEventListener('scroll',function(){b.classList.toggle('visible',window.scrollY>400);});})();
 (function(){var t=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2, .article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();t.appendChild(a);});var ls=t.querySelectorAll('a');var es=[];ls.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)es.push({el:e,link:l});});window.addEventListener('scroll',function(){var y=window.scrollY+120;var c=null;es.forEach(function(i){if(i.el.offsetTop<=y)c=i;});ls.forEach(function(l){l.classList.remove('active');});if(c)c.link.classList.add('active');});})();
 </script>
+  <script src="../../style/highlight.js"></script>
 </body>
 </html>

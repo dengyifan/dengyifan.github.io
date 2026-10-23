@@ -4,6 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Java 10 面试题库 · Deep Mastery</title>
 <script src="../../assets/vendor/mermaid/mermaid-10.min.js"></script>
+  <script src="../../style/theme.js"></script>
 <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
 <style>
 :root{--bg:#f9f9f9;--card-bg:#fff;--text:#2f2f2f;--text-muted:#999;--accent:#ea6f5a;--accent-blue:#3194d0;--accent-light:#fef0f0;--border:#f0f0f0;--code-bg:#f7f7f7;--green:#42c02e;--orange:#f5a623;--font-serif:"Noto Serif SC","Source Han Serif SC","STSong","Songti SC","SimSun",serif;--font-sans:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",sans-serif;--font-mono:"SF Mono","Fira Code","Consolas","Menlo",monospace;--content-width:1020px;--toc-width:220px}
@@ -43,6 +44,8 @@ th,td{border:1px solid var(--border);padding:10px 14px;text-align:left}th{backgr
 .breadcrumb{color:var(--text-muted);font-size:.9rem;margin-bottom:1.5rem;font-family:var(--font-sans)}
 @media(max-width:600px){.article-header{padding:24px 20px}.article-header h1{font-size:22px}.article-body{padding:20px 20px 32px}body{font-size:16px}}
 </style>
+  <link rel="stylesheet" href="../../style/theme.css">
+  <link rel="stylesheet" href="../../style/highlight.css">
 </head>
 <body>
 <nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 10 · 面试题库</span></div></nav>
@@ -262,5 +265,6 @@ function targetThread.poll():
 <script>
 (function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
 </script>
+  <script src="../../style/highlight.js"></script>
 </body>
 </html>

@@ -5,8 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>工具链与平台：JMH 微基准 · 单一 AArch64 端口 · Java 12</title>
 <script src="../../assets/vendor/mermaid/mermaid-10.min.js"></script>
+  <script src="../../style/theme.js"></script>
 <script>mermaid.initialize({startOnLoad:true,theme:'base',themeVariables:{primaryColor:'#fef0f0',primaryBorderColor:'#ea6f5a',lineColor:'#999',fontSize:'14px'}});</script>
 <link rel="stylesheet" href="../../style/shared.css">
+  <link rel="stylesheet" href="../../style/theme.css">
+  <link rel="stylesheet" href="../../style/highlight.css">
 </head>
 <body>
 <nav class="top-nav"><div class="logo">Deep&#8203;Mastery <span>/ Java 12 · 工具链与平台</span></div></nav>
@@ -282,5 +285,6 @@ make test TEST="micro:regexp"                 # 按名称过滤运行</code></pr
 <script>
 (function(){var toc=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2,.article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();toc.appendChild(a)});var links=toc.querySelectorAll('a');var els=[];links.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)els.push({el:e,link:l})});window.addEventListener('scroll',function(){var y=window.scrollY+120;var cur=null;els.forEach(function(i){if(i.el.offsetTop<=y)cur=i});links.forEach(function(l){l.classList.remove('active')});if(cur)cur.link.classList.add('active')})})();
 </script>
+  <script src="../../style/highlight.js"></script>
 </body>
 </html>

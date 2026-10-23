@@ -1,0 +1,54 @@
+/* ============================================================
+ * 站内高亮笔记 — 页面内容样式
+ * 逻辑见 style/highlight.js
+ * ============================================================ */
+
+mark.dm-hl {
+  color: inherit;
+  padding: 0;
+  border-radius: 2px;
+  cursor: pointer;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-color .15s ease, box-shadow .15s ease;
+}
+
+mark.dm-hl-yellow { background-color: rgba(255, 214, 10, .48); }
+mark.dm-hl-green  { background-color: rgba(74, 222, 128, .42); }
+mark.dm-hl-red    { background-color: rgba(248, 113, 113, .42); }
+mark.dm-hl-blue   { background-color: rgba(96, 165, 250, .42); }
+
+mark.dm-hl:hover {
+  box-shadow: 0 0 0 2px rgba(234, 111, 90, .35);
+}
+
+mark.dm-hl.has-note {
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .18);
+}
+mark.dm-hl.has-note:hover {
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .18), 0 0 0 2px rgba(234, 111, 90, .35);
+}
+
+mark.dm-hl.dm-hl-flash {
+  animation: dm-hl-flash 1.3s ease;
+}
+@keyframes dm-hl-flash {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(234, 111, 90, 0); }
+  25%      { box-shadow: 0 0 0 4px rgba(234, 111, 90, .55); }
+  60%      { box-shadow: 0 0 0 4px rgba(234, 111, 90, .25); }
+}
+
+html[data-theme="dark"] mark.dm-hl-yellow { background-color: rgba(250, 204, 21, .30); }
+html[data-theme="dark"] mark.dm-hl-green  { background-color: rgba(74, 222, 128, .26); }
+html[data-theme="dark"] mark.dm-hl-red    { background-color: rgba(248, 113, 113, .28); }
+html[data-theme="dark"] mark.dm-hl-blue   { background-color: rgba(96, 165, 250, .30); }
+html[data-theme="dark"] mark.dm-hl.has-note {
+  box-shadow: inset 0 -2px 0 rgba(255, 255, 255, .28);
+}
+
+@media print {
+  mark.dm-hl {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

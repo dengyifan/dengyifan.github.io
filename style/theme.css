@@ -1,0 +1,537 @@
+/* ============================================================
+ * 全站深色主题 + 主题切换按钮
+ * 用法：在 </head> 前引入本文件；切换逻辑见 style/theme.js
+ * ============================================================ */
+
+/* ============================================================
+ * 1. 主题切换按钮（浅色 / 深色通用）
+ * ============================================================ */
+.dm-theme-toggle {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-left: 16px;
+  padding: 6px 13px;
+  border: 1px solid var(--border-light, #e8e8e8);
+  border-radius: 999px;
+  background: var(--card-bg, #fff);
+  color: var(--text-secondary, #666);
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif);
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.dm-theme-toggle:hover {
+  color: var(--accent, #ea6f5a);
+  border-color: var(--accent, #ea6f5a);
+}
+.dm-theme-toggle:focus-visible {
+  outline: 2px solid var(--accent-blue, #3194d0);
+  outline-offset: 2px;
+}
+.dm-theme-toggle .dm-tt-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+.dm-theme-toggle--floating {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  margin-left: 0;
+  z-index: 2000;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .12);
+}
+.dm-theme-toggle--compact {
+  margin-left: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .dm-theme-toggle { padding: 5px 10px; font-size: 12px; }
+  .dm-theme-toggle .dm-tt-label { display: none; }
+}
+
+/* ============================================================
+ * 2. 深色主题变量
+ * ============================================================ */
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #15171c;
+  --card-bg: #1c2027;
+  --text: #d8dde4;
+  --text-secondary: #aab3bf;
+  --text-muted: #7f8a98;
+  --accent: #ff8b78;
+  --accent-hover: #ffa493;
+  --accent-blue: #63b3e8;
+  --accent-blue-hover: #86c6f2;
+  --accent-light: #3a2724;
+  --border: #2a2f38;
+  --border-light: #39404b;
+  --code-bg: #242a32;
+  --green: #63cf7d;
+  --green-bg: #1c2f23;
+  --orange: #efb35d;
+  --orange-bg: #322a19;
+  --red: #f0796f;
+  --red-bg: #3a2422;
+
+  /* 部分独立页面自定义的变量 */
+  --muted: #98a2b0;
+  --primary: #6aa9f7;
+  --primary-dark: #8abcf9;
+  --ok: #5cd07d;
+  --bad: #f0796f;
+
+  background: var(--bg);
+}
+
+html[data-theme="dark"] body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+html[data-theme="dark"] ::selection {
+  background: rgba(255, 139, 120, .28);
+  color: #fff;
+}
+
+html[data-theme="dark"] * {
+  scrollbar-color: var(--border-light) transparent;
+}
+html[data-theme="dark"] ::-webkit-scrollbar { width: 10px; height: 10px; }
+html[data-theme="dark"] ::-webkit-scrollbar-track { background: transparent; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 5px;
+}
+
+/* ============================================================
+ * 3. 顶部导航 / 基础排版
+ * ============================================================ */
+html[data-theme="dark"] .top-nav,
+html[data-theme="dark"] .topbar {
+  background: rgba(24, 27, 33, .96);
+  border-bottom-color: var(--border);
+  color: var(--text);
+}
+html[data-theme="dark"] .top-nav .logo span,
+html[data-theme="dark"] .top-nav .back,
+html[data-theme="dark"] .brand-title {
+  color: var(--text);
+}
+html[data-theme="dark"] .brand-sub,
+html[data-theme="dark"] .nav-index,
+html[data-theme="dark"] .progress-text,
+html[data-theme="dark"] .legend {
+  color: var(--text-muted);
+}
+html[data-theme="dark"] .progress-bar { background: #333a45; }
+
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] h4,
+html[data-theme="dark"] h5,
+html[data-theme="dark"] h6 {
+  color: var(--text);
+}
+
+html[data-theme="dark"] code {
+  background: var(--code-bg);
+  color: #ff9db0;
+}
+
+html[data-theme="dark"] pre {
+  background: #1a1e25;
+  border: 1px solid var(--border);
+  color: #b9c2cf;
+}
+
+html[data-theme="dark"] blockquote {
+  background: #20252d;
+  border-left-color: var(--accent);
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] th {
+  background: #232830;
+  color: var(--text);
+  border-color: var(--border);
+}
+html[data-theme="dark"] td {
+  border-color: var(--border);
+}
+html[data-theme="dark"] tr:hover { background: #232830; }
+
+html[data-theme="dark"] .article-body strong,
+html[data-theme="dark"] .article-body h3,
+html[data-theme="dark"] .card h3,
+html[data-theme="dark"] .qa-card .qa-question-text,
+html[data-theme="dark"] .item .info .title {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .back-link { color: var(--accent-blue); }
+html[data-theme="dark"] .breadcrumb,
+html[data-theme="dark"] .breadcrumb a { color: var(--text-muted); }
+
+/* ============================================================
+ * 4. 通用容器 / 卡片
+ * ============================================================ */
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .hero,
+html[data-theme="dark"] .stat-card,
+html[data-theme="dark"] .section,
+html[data-theme="dark"] .roadmap,
+html[data-theme="dark"] .article-header,
+html[data-theme="dark"] .article-body,
+html[data-theme="dark"] .toc-sidebar,
+html[data-theme="dark"] .info-card,
+html[data-theme="dark"] .qa-card,
+html[data-theme="dark"] .lesson-nav a,
+html[data-theme="dark"] .back-to-top,
+html[data-theme="dark"] .step-flow .flow-step,
+html[data-theme="dark"] .step,
+html[data-theme="dark"] .interview-section-header,
+html[data-theme="dark"] .qa-block,
+html[data-theme="dark"] .deep-grill-readiness,
+html[data-theme="dark"] .sig,
+html[data-theme="dark"] .quiz-cta,
+html[data-theme="dark"] .dim-index a,
+html[data-theme="dark"] .src-note,
+html[data-theme="dark"] .checklist,
+html[data-theme="dark"] .q-card,
+html[data-theme="dark"] .result-section,
+html[data-theme="dark"] .modal,
+html[data-theme="dark"] .g1-anim {
+  background: var(--card-bg);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .article-header,
+html[data-theme="dark"] .hero {
+  border-bottom-color: var(--border);
+}
+
+html[data-theme="dark"] .item { border-bottom-color: var(--border); }
+html[data-theme="dark"] .item:hover { background: #232830; }
+html[data-theme="dark"] .toc-sidebar a:hover { background: #232830; }
+html[data-theme="dark"] .toc-sidebar a.active { background: var(--accent-light); }
+html[data-theme="dark"] .toc-title { border-bottom-color: var(--border); }
+html[data-theme="dark"] .step::after { color: var(--border-light); }
+html[data-theme="dark"] .footer { border-top-color: var(--border); }
+html[data-theme="dark"] .lesson-nav { border-top-color: var(--border); }
+
+html[data-theme="dark"] .back-to-top { color: var(--text-muted); }
+html[data-theme="dark"] .back-to-top:hover { color: var(--accent); }
+
+/* ============================================================
+ * 5. 提示框 / 特例区块
+ * ============================================================ */
+html[data-theme="dark"] .note    { background: #17262f; }
+html[data-theme="dark"] .warning { background: #302713; }
+html[data-theme="dark"] .tip     { background: #17281d; }
+html[data-theme="dark"] .info    { background: #15292a; }
+
+html[data-theme="dark"] .java-comparison {
+  background: linear-gradient(135deg, #2a2318, #1d2027);
+  border-color: #57452a;
+}
+html[data-theme="dark"] .java-comparison .header { color: #e2a878; }
+
+html[data-theme="dark"] .production-note {
+  background: #2b2119;
+  border-color: #5b3f2a;
+}
+html[data-theme="dark"] .production-note .header { color: #f0a06a; }
+
+html[data-theme="dark"] .arch-diagram {
+  background: linear-gradient(135deg, #1e232b, #1a1e25);
+  border-color: var(--border);
+}
+
+html[data-theme="dark"] .deep-grill-readiness { background: #21262e; }
+html[data-theme="dark"] .deep-grill-readiness h4 { color: var(--text); }
+
+html[data-theme="dark"] .qa-block { background: #20252d; }
+html[data-theme="dark"] .qa-block .key-point {
+  background: #2b2620;
+  border-left-color: var(--accent);
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .qa-card .qa-header {
+  background: linear-gradient(135deg, #232a33, #1e242c);
+  border-bottom-color: var(--border);
+}
+html[data-theme="dark"] .qa-card .qa-key-point {
+  background: linear-gradient(135deg, #312a18, #3a301b);
+  border-left-color: var(--orange);
+  color: #e8c99a;
+}
+html[data-theme="dark"] .qa-card .qa-key-point strong { color: #f6dfb8; }
+
+html[data-theme="dark"] .qa-user-answer {
+  background: #20252d;
+  border-left-color: var(--border-light);
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .interview-section-header {
+  background: linear-gradient(135deg, #20262e, #1c2027);
+}
+
+html[data-theme="dark"] .sig {
+  background: #20252d;
+  border-color: var(--border);
+  color: #c9d2dd;
+}
+html[data-theme="dark"] .sig .kw    { color: #ff7b72; }
+html[data-theme="dark"] .sig .param { color: #d2a8ff; }
+html[data-theme="dark"] .sig .ret   { color: #79c0ff; }
+html[data-theme="dark"] .param-table td:first-child { color: #ff9db0; }
+
+html[data-theme="dark"] .src-note {
+  background: #2c2718;
+  border-left-color: #d3a13a;
+  color: var(--text-secondary);
+}
+html[data-theme="dark"] .checklist {
+  background: #1b2a20;
+  border-color: #2f4a39;
+}
+html[data-theme="dark"] .checklist li::before { color: #6fbf7f; }
+html[data-theme="dark"] .dim-tag {
+  background: var(--accent-light);
+  color: #ff9d8e;
+  border-color: #7a4a40;
+}
+html[data-theme="dark"] .dim-index a { color: var(--text-secondary); }
+html[data-theme="dark"] .dim-index a:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: #ff9d8e;
+}
+html[data-theme="dark"] .mw-badge { background: #333a45; }
+html[data-theme="dark"] .api-table code { color: #ff9db0; }
+
+html[data-theme="dark"] .quiz-cta {
+  background: linear-gradient(135deg, #2a2220, #1c2027 60%);
+  border-color: #4a332d;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .25);
+}
+html[data-theme="dark"] .quiz-cta-desc { color: var(--text-muted); }
+html[data-theme="dark"] .quiz-jump a { color: var(--text-secondary); }
+
+/* ============================================================
+ * 6. 标签 / 徽章 / 图标
+ * ============================================================ */
+html[data-theme="dark"] .tag-l1 { background: #1f3325; color: #7fd694; }
+html[data-theme="dark"] .tag-l2 { background: #172a3a; color: #6cbdf0; }
+html[data-theme="dark"] .tag-l3 { background: #3a2322; color: #ff9d8e; }
+html[data-theme="dark"] .tag-l4 { background: #332a16; color: #f0b96a; }
+html[data-theme="dark"] .tag-l5 { background: #2c2236; color: #c79ae8; }
+
+html[data-theme="dark"] .badge.core     { background: #3a2322; color: #ff9d8e; }
+html[data-theme="dark"] .badge.support  { background: #172a3a; color: var(--accent-blue); }
+html[data-theme="dark"] .badge.optional { background: #262b33; color: var(--text-muted); }
+html[data-theme="dark"] .badge.soon     { background: #332a16; color: #f0b96a; }
+
+html[data-theme="dark"] .icon.l1,
+html[data-theme="dark"] .icon.course { background: #1f3325; color: #6fd189; }
+html[data-theme="dark"] .icon.l2 { background: #172a3a; color: var(--accent-blue); }
+html[data-theme="dark"] .icon.l3 { background: #3a2322; color: var(--accent); }
+html[data-theme="dark"] .icon.l4 { background: #332a16; color: var(--orange); }
+html[data-theme="dark"] .icon.l5 { background: #2c2236; color: #c79ae8; }
+html[data-theme="dark"] .icon.doc,
+html[data-theme="dark"] .item .info .tag { background: #262b33; color: var(--text-muted); }
+
+html[data-theme="dark"] .item.disabled { opacity: .55; }
+html[data-theme="dark"] .callout {
+  background: #20252d;
+  border-color: var(--border);
+}
+html[data-theme="dark"] .callout.warn {
+  background: #302713;
+  border-color: #5b4a24;
+}
+
+/* ============================================================
+ * 7. 步骤 / 流程
+ * ============================================================ */
+html[data-theme="dark"] .step-flow .flow-step,
+html[data-theme="dark"] .step { background: #20252d; }
+html[data-theme="dark"] .step-flow .flow-step .step-title,
+html[data-theme="dark"] .step .step-title { color: var(--text); }
+html[data-theme="dark"] .step-flow .flow-step .step-desc,
+html[data-theme="dark"] .step .step-desc { color: var(--text-muted); }
+
+/* ============================================================
+ * 8. 播客 / 视频播放器
+ * ============================================================ */
+html[data-theme="dark"] .podcast-player,
+html[data-theme="dark"] .video-player {
+  background: linear-gradient(135deg, #2a201d, #1c2027);
+  border-color: #4a342e;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .25);
+}
+html[data-theme="dark"] .pp-badge,
+html[data-theme="dark"] .vp-badge {
+  background: var(--accent-light);
+  border-color: #5a3d34;
+}
+html[data-theme="dark"] .pp-bar { background: #3a2c26; }
+html[data-theme="dark"] .pp-title,
+html[data-theme="dark"] .video-player .vp-title { color: var(--text); }
+
+/* ============================================================
+ * 9. Mermaid 图表容器
+ * ============================================================ */
+html[data-theme="dark"] .mermaid {
+  background: #171b21;
+  border-color: var(--border);
+}
+html[data-theme="dark"] .arch-diagram .mermaid { background: transparent; }
+
+/* 画布类动画保持浅色底，避免深色画布上文字不可读 */
+html[data-theme="dark"] canvas.g1-canvas {
+  background: #fbfcfd;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* ============================================================
+ * 10. 自测页（sys_arch_designer chapter1_exam.html）
+ * ============================================================ */
+html[data-theme="dark"] .q-card {
+  background: var(--card-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+}
+html[data-theme="dark"] .q-badge { background: #1e3350; color: #8bbbf5; }
+html[data-theme="dark"] .q-tag {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+html[data-theme="dark"] .option {
+  background: #242a32;
+  border-color: #39404b;
+  color: var(--text);
+}
+html[data-theme="dark"] .option:hover {
+  background: #2a3442;
+  border-color: #4b6b8f;
+}
+html[data-theme="dark"] .option.correct {
+  background: #1b3a26;
+  border-color: #2f9e50;
+}
+html[data-theme="dark"] .option.wrong {
+  background: #3c2224;
+  border-color: #c0392b;
+}
+html[data-theme="dark"] .opt-letter { background: #333a45; color: #c3cbd6; }
+html[data-theme="dark"] .feedback.ok  { background: #17281d; }
+html[data-theme="dark"] .feedback.bad { background: #2c1c1e; }
+html[data-theme="dark"] .feedback-analysis { color: var(--text-secondary); }
+html[data-theme="dark"] .nav-btn {
+  background: #232830;
+  color: #c9d2dd;
+  border-color: #39404b;
+}
+html[data-theme="dark"] .btn.secondary {
+  background: #232830;
+  color: #c9d2dd;
+  border-color: #39404b;
+}
+html[data-theme="dark"] .toggle-btn {
+  background: #232830;
+  color: var(--text-secondary);
+  border-color: #39404b;
+}
+html[data-theme="dark"] .answer-cell { background: #232830; }
+html[data-theme="dark"] .answer-cell .idx { color: #8b95a3; }
+html[data-theme="dark"] .answer-cell .ans { color: #c9d2dd; }
+html[data-theme="dark"] .answer-cell.ok { background: #17301f; }
+html[data-theme="dark"] .answer-cell.ok .ans { color: #6fd68b; }
+html[data-theme="dark"] .answer-cell.bad { background: #331e20; }
+html[data-theme="dark"] .answer-cell.bad .ans { color: #f28b8b; }
+html[data-theme="dark"] .answer-cell.miss {
+  background: #1a1e24;
+  border-color: #3a424d;
+}
+html[data-theme="dark"] .answer-cell.miss .ans { color: #8b95a3; }
+html[data-theme="dark"] .modal-head { border-bottom-color: var(--border); }
+html[data-theme="dark"] .modal-close { color: var(--text-muted); }
+html[data-theme="dark"] .modal-close:hover { color: var(--text); }
+html[data-theme="dark"] .modal-close:active { background: #242a32; }
+
+/* ============================================================
+ * 11. 时间线 / 动画演示（G1 页）
+ * ============================================================ */
+html[data-theme="dark"] .g1-anim-title { color: var(--text); }
+html[data-theme="dark"] .g1-badge { background: #242a32; color: var(--text-secondary); }
+html[data-theme="dark"] .g1-badge-stw { background: #3a2322; color: #f0796f; }
+html[data-theme="dark"] .g1-ph { background: #232830; color: #7f8a98; }
+html[data-theme="dark"] .g1-ph b { background: #3a424d; }
+html[data-theme="dark"] .g1-ph.active {
+  background: #3a2724;
+  color: #ff9d8e;
+  border-color: #5a3a33;
+}
+html[data-theme="dark"] .g1-ph.done {
+  background: #1c2f23;
+  color: #8fd6a4;
+  border-color: #2f4a39;
+}
+html[data-theme="dark"] .g1-controls button {
+  background: #232830;
+  border-color: #39404b;
+  color: #c3cbd6;
+}
+html[data-theme="dark"] .g1-controls button:hover {
+  background: #2e2523;
+  border-color: #ea6f5a;
+  color: #ff9d8e;
+}
+html[data-theme="dark"] .g1-controls select {
+  background: #232830;
+  border-color: #39404b;
+  color: #c3cbd6;
+}
+html[data-theme="dark"] .g1-legend { color: #8f99a6; }
+
+/* 其余 SVG 动画演示容器：保留浅色画布，保证内部绘制内容可读 */
+html[data-theme="dark"] .anim-demo {
+  border-color: var(--border);
+}
+
+/* ============================================================
+ * 12. 其他零散组件
+ * ============================================================ */
+html[data-theme="dark"] .page-nav { border-top-color: var(--border); }
+html[data-theme="dark"] .meta { border-bottom-color: var(--border); }
+html[data-theme="dark"] .pp-bar-wrap { color: var(--text-muted); }
+html[data-theme="dark"] .g1-detail h2 { color: var(--text); }
+html[data-theme="dark"] .figure-caption { color: var(--text-muted); }
+
+/* 打印时始终使用浅色 */
+@media print {
+  html[data-theme="dark"] {
+    --bg: #fff;
+    --card-bg: #fff;
+    --text: #2f2f2f;
+    --text-secondary: #666;
+    --text-muted: #999;
+    --border: #f0f0f0;
+    --code-bg: #f7f7f7;
+  }
+  html[data-theme="dark"] body { background: #fff; color: #2f2f2f; }
+  .dm-theme-toggle { display: none !important; }
+}

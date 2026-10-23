@@ -361,5 +361,6 @@ public class G1Demo {
 (function(){var t=document.getElementById('toc');var hs=document.querySelectorAll('.article-body h2, .article-body h3');hs.forEach(function(h){var id=h.id||h.textContent.trim().replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();h.id=id;var a=document.createElement('a');a.href='#'+id;a.textContent=h.textContent;a.className='toc-'+h.tagName.toLowerCase();t.appendChild(a);});var ls=t.querySelectorAll('a');var es=[];ls.forEach(function(l){var id=l.getAttribute('href').replace('#','');var e=document.getElementById(id);if(e)es.push({el:e,link:l});});window.addEventListener('scroll',function(){var y=window.scrollY+120;var c=null;es.forEach(function(i){if(i.el.offsetTop<=y)c=i;});ls.forEach(function(l){l.classList.remove('active');});if(c)c.link.classList.add('active');});})();
 </script>
   <script src="../../style/highlight.js"></script>
+  <script src="../../style/sync.js"></script>
 </body>
 </html>

@@ -1,0 +1,20 @@
+name = "dm-sync"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+# 在 Cloudflare 控制台创建 KV namespace 后，把 ID 填到这里
+# 控制台路径：Storage & Databases -> KV
+[[kv_namespaces]]
+binding = "VAULTS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[vars]
+# 允许的站点来源，逗号分隔；生产只保留自己的域名
+# 本地调试可加：http://localhost:*
+ALLOWED_ORIGIN = "https://dengyifan.github.io"
+
+# 可选：请求体上限（字节），默认 5MB
+# MAX_BYTES = "5242880"
+
+# 可选：KV key 前缀
+# VAULT_PREFIX = "vault:"

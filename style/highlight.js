@@ -55,6 +55,8 @@
   var editing = null;          // { mode: 'create' | 'edit', id, color }
   var ui = {};
   var toastTimer = null;
+  var isReady = false;
+  var readyQueue = [];
 
   /* ============================================================
    * 存储
@@ -62,7 +64,10 @@
   function load() {
     try {
       var raw = localStorage.getItem(PAGE_KEY);
-      if (!raw) return;
+      if (!raw) {
+        state = { v: 1, url: PAGE_URL, highlights: [] };
+        return;
+      }
       var data = JSON.parse(raw);
       if (data && Array.isArray(data.highlights)) {
         state = { v: 1, url: PAGE_URL, highlights: data.highlights };
@@ -70,12 +75,24 @@
     } catch (e) { /* 数据损坏时从空开始 */ }
   }
 
-  function save() {
+  function notifyChange() {
     try {
-      localStorage.setItem(PAGE_KEY, JSON.stringify(state));
+      window.dispatchEvent(new CustomEvent('dm-hl-changed', {
+        detail: { pageKey: PAGE_KEY }
+      }));
+    } catch (e) { /* 老浏览器忽略 */ }
+  }
+
+  function save(notify) {
+    try {
+      // 下划线开头的是运行时字段（如 _missing），不写入存储/同步
+      localStorage.setItem(PAGE_KEY, JSON.stringify(state, function (key, value) {
+        return key && key.charAt(0) === '_' ? undefined : value;
+      }));
     } catch (e) {
       toast('保存失败：浏览器本地存储空间不足');
     }
+    if (notify !== false) notifyChange();
   }
 
   function newId() {
@@ -114,6 +131,22 @@
       try {
         if (root.matches(ROOT_SELECTORS[i])) return ROOT_SELECTORS[i];
       } catch (e) { /* 忽略非法选择器 */ }
+    }
+    // 不在预设容器里时，用元素自身的 id/标签作为锚点根，
+    // 避免退回 body 后 rootIndex 变成 -1，导致每次渲染都漂移。
+    if (root.id) {
+      var idSelector = '#' + (window.CSS && window.CSS.escape
+        ? window.CSS.escape(root.id)
+        : root.id);
+      try {
+        if (root.matches(idSelector)) return idSelector;
+      } catch (e) { /* 忽略非法 id */ }
+    }
+    var tag = root.tagName ? root.tagName.toLowerCase() : '';
+    if (tag && tag !== 'html') {
+      try {
+        if (root.matches(tag)) return tag;
+      } catch (e) { /* 忽略 */ }
     }
     return 'body';
   }
@@ -329,6 +362,7 @@
     });
 
     ordered.forEach(function (highlight) {
+      if (highlight.deleted) return;
       if (!highlight.anchor || !highlight.anchor.quote) {
         highlight._missing = true;
         return;
@@ -352,12 +386,13 @@
         highlight.anchor.rootIndex = rootIndex(location.root, selector);
         highlight.anchor.prefix = location.map.text.slice(Math.max(0, location.start - 40), location.start);
         highlight.anchor.suffix = location.map.text.slice(location.end, Math.min(location.map.text.length, location.end + 40));
+        // 锚点微调不算内容修改，不更新 updatedAt，避免覆盖其他设备后来的笔记/颜色修改
         changed = true;
       }
       wrapHighlight(highlight, location);
     });
 
-    if (changed) save();
+    if (changed) save(false); // 仅锚点微调，不触发同步
     updatePanel();
   }
 
@@ -381,7 +416,8 @@
         suffix: anchor.suffix
       },
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      deleted: false
     };
     state.highlights.push(highlight);
     save();
@@ -399,7 +435,13 @@
   }
 
   function deleteHighlight(id) {
-    state.highlights = state.highlights.filter(function (h) { return h.id !== id; });
+    var highlight = findHighlight(id);
+    if (!highlight || highlight.deleted) return;
+    var now = Date.now();
+    // 保留墓碑，供多端同步合并；渲染时会过滤掉
+    highlight.deleted = true;
+    highlight.deletedAt = now;
+    highlight.updatedAt = now;
     save();
     renderAll();
   }
@@ -630,9 +672,15 @@
     if (action === 'close-panel') { closePanel(); return; }
 
     if (action === 'clear') {
-      if (!state.highlights.length) { toast('本页还没有高亮'); return; }
+      var activeHighlights = state.highlights.filter(function (h) { return !h.deleted; });
+      if (!activeHighlights.length) { toast('本页还没有高亮'); return; }
       if (!window.confirm('清空本页全部高亮和笔记？此操作不可撤销。')) return;
-      state.highlights = [];
+      var clearAt = Date.now();
+      activeHighlights.forEach(function (h) {
+        h.deleted = true;
+        h.deletedAt = clearAt;
+        h.updatedAt = clearAt;
+      });
       save();
       renderAll();
       toast('本页高亮已清空');
@@ -727,7 +775,8 @@
     var countEl = ui.shadow.querySelector('[data-role="count"]');
     var fabCount = ui.shadow.querySelector('[data-role="fab-count"]');
     var list = ui.shadow.querySelector('[data-role="list"]');
-    var count = state.highlights.length;
+    var active = state.highlights.filter(function (h) { return !h.deleted; });
+    var count = active.length;
     countEl.textContent = count ? '（' + count + ' 条）' : '';
     if (fabCount) {
       fabCount.textContent = count ? String(count) : '';
@@ -741,8 +790,8 @@
     }
 
     list.innerHTML = '';
-    state.highlights.slice().sort(function (a, b) {
-      return (a.anchor.start || 0) - (b.anchor.start || 0);
+    active.sort(function (a, b) {
+      return ((a.anchor && a.anchor.start) || 0) - ((b.anchor && b.anchor.start) || 0);
     }).forEach(function (highlight) {
       var item = document.createElement('div');
       item.className = 'dm-hl-item';
@@ -903,7 +952,14 @@
     (existing || []).forEach(function (h) { if (h && h.id) map[h.id] = h; });
     (incoming || []).forEach(function (h) {
       if (!h || !h.id) return;
-      map[h.id] = Object.assign(map[h.id] || {}, h);
+      var old = map[h.id];
+      if (!old) { map[h.id] = h; return; }
+      var incomingAt = h.updatedAt || 0;
+      var currentAt = old.updatedAt || 0;
+      if (incomingAt > currentAt ||
+          (incomingAt === currentAt && h.deleted && !old.deleted)) {
+        map[h.id] = Object.assign({}, old, h);
+      }
     });
     return Object.keys(map).map(function (id) { return map[id]; });
   }
@@ -958,6 +1014,7 @@
       }
 
       renderAll();
+      notifyChange();
       toast(imported > 0 ? '已导入 ' + imported + ' 条高亮' : '没有新的高亮可导入');
     };
     reader.onerror = function () { toast('读取文件失败'); };
@@ -1036,8 +1093,27 @@
       if (event.key !== PAGE_KEY) return;
       load();
       renderAll();
+      notifyChange();
     });
   }
+
+  /* ============================================================
+   * 给同步模块的接口
+   * ============================================================ */
+  window.DMHighlights = {
+    ready: function (callback) {
+      if (typeof callback !== 'function') return;
+      if (isReady) callback();
+      else readyQueue.push(callback);
+    },
+    getUI: function () { return ui; },
+    getPageKey: function () { return PAGE_KEY; },
+    getPagePath: function () { return location.pathname; },
+    getStorePrefix: function () { return STORE_PREFIX; },
+    reload: function () { load(); renderAll(); },
+    refresh: function () { renderAll(); },
+    toast: toast
+  };
 
   /* ============================================================
    * 启动
@@ -1047,6 +1123,12 @@
     ensureUI();
     bindEvents();
     renderAll();
+    isReady = true;
+    var queue = readyQueue.slice();
+    readyQueue.length = 0;
+    queue.forEach(function (callback) {
+      try { callback(); } catch (e) { /* 单个回调失败不影响页面 */ }
+    });
   }
 
   if (document.readyState === 'loading') {

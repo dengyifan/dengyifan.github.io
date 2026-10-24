@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>系统架构设计师 · 第2章 计算机系统基础知识 · 在线自测</title>
+<style>
+  :root{
+    --primary:#2563eb; --primary-dark:#1d4ed8;
+    --ok:#16a34a; --bad:#dc2626;
+    --border:#e5e7eb; --muted:#6b7280;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{-webkit-text-size-adjust:100%}
+  html,body{margin:0;padding:0}
+  button,a{touch-action:manipulation}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:#f1f5f9;color:#1f2937;line-height:1.65;font-size:15px;
+  }
+  .hidden{display:none !important}
+
+  /* ===== 顶部栏 ===== */
+  .topbar{
+    position:sticky;top:0;z-index:100;
+    padding-top:env(safe-area-inset-top);
+    background:rgba(255,255,255,.95);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--border);
+  }
+  .topbar-inner{
+    max-width:760px;margin:0 auto;padding:10px 16px;
+    display:flex;align-items:center;gap:12px;
+  }
+  .brand{
+    display:block;min-width:0;flex:1;
+    color:inherit;text-decoration:none;
+  }
+  .brand-title{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .brand-back{color:var(--primary);margin-right:5px;font-weight:700}
+  .brand:active .brand-title{opacity:.6}
+  .brand-sub{font-size:12px;color:var(--muted)}
+  .topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .progress-bar{width:100px;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden}
+  .progress-fill{height:100%;width:0;background:var(--primary);transition:width .25s}
+  .progress-text{font-size:12px;color:var(--muted);white-space:nowrap}
+
+  /* ===== 主容器 ===== */
+  .container{max-width:760px;margin:0 auto;padding:20px 16px calc(100px + env(safe-area-inset-bottom))}
+
+  /* ===== 题目卡片 ===== */
+  .q-card{
+    background:#fff;border-radius:14px;padding:22px;
+    box-shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+  }
+  .q-card.anim{animation:cardIn .28s ease}
+  @keyframes cardIn{
+    from{opacity:0;transform:translateY(8px)}
+    to{opacity:1;transform:translateY(0)}
+  }
+  .q-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .q-badge{
+    background:#dbeafe;color:#1d4ed8;
+    font-size:13px;font-weight:700;
+    padding:3px 10px;border-radius:20px;
+  }
+  .q-tag{font-size:11px;color:var(--muted);border:1px solid var(--border);padding:1px 6px;border-radius:4px}
+  .q-stem{font-size:16px;font-weight:500;margin-bottom:16px;line-height:1.6}
+
+  .options{display:flex;flex-direction:column;gap:9px}
+  .option{
+    display:flex;align-items:flex-start;gap:10px;
+    width:100%;text-align:left;
+    background:#f9fafb;border:1.5px solid var(--border);
+    border-radius:10px;padding:11px 13px;
+    cursor:pointer;font:inherit;font-size:14.5px;color:#1f2937;
+    transition:background .15s,border-color .15s;
+  }
+  .option:hover{background:#eff6ff;border-color:#bfdbfe}
+  .option.correct{background:#dcfce7;border-color:var(--ok)}
+  .option.wrong{background:#fee2e2;border-color:var(--bad)}
+
+  .opt-letter{
+    flex:0 0 22px;height:22px;border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;
+    background:#e5e7eb;color:#4b5563;font-size:12px;font-weight:700;
+  }
+  .option.correct .opt-letter{background:var(--ok);color:#fff}
+  .option.wrong .opt-letter{background:var(--bad);color:#fff}
+
+  .feedback{margin-top:14px;padding:12px 14px;border-radius:10px;font-size:13.5px}
+  .feedback.ok{background:#f0fdf4;border-left:4px solid var(--ok)}
+  .feedback.bad{background:#fef2f2;border-left:4px solid var(--bad)}
+  .feedback-title{font-weight:700;margin-bottom:4px}
+  .feedback-analysis{margin-top:6px;color:#374151;font-size:13px;line-height:1.7;white-space:pre-wrap}
+
+  /* ===== 底部导航 ===== */
+  .nav-bar{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-top:18px;gap:10px;
+  }
+  .nav-btn{
+    border:1.5px solid var(--border);background:#fff;
+    padding:10px 18px;border-radius:10px;
+    font:inherit;font-size:14px;font-weight:500;
+    cursor:pointer;transition:all .15s;color:#374151;
+    white-space:nowrap;
+  }
+  .nav-btn:hover:not(:disabled){border-color:var(--primary);color:var(--primary)}
+  .nav-btn:disabled{opacity:.4;cursor:not-allowed}
+  .nav-btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+  .nav-btn.primary:hover{background:var(--primary-dark)}
+  .nav-index{font-size:13px;color:var(--muted);font-weight:500;white-space:nowrap}
+
+  /* ===== 结果页 ===== */
+  .result-card{
+    background:linear-gradient(135deg,#2563eb,#1e40af);
+    color:#fff;border-radius:16px;padding:28px 20px;
+    text-align:center;
+    box-shadow:0 8px 24px rgba(37,99,235,.25);
+  }
+  .score-ring{display:inline-flex;align-items:baseline;gap:4px;margin-bottom:6px}
+  .score-num{font-size:56px;font-weight:800;line-height:1}
+  .score-unit{font-size:18px;opacity:.85}
+  .result-level{font-size:16px;font-weight:600;opacity:.95}
+  .result-stats{
+    display:flex;justify-content:center;gap:32px;
+    margin-top:20px;padding-top:18px;
+    border-top:1px solid rgba(255,255,255,.2);
+  }
+  .stat{display:flex;flex-direction:column;align-items:center;gap:2px}
+  .stat-num{font-size:24px;font-weight:700}
+  .stat-num.ok{color:#86efac}
+  .stat-num.bad{color:#fca5a5}
+  .stat-num.muted{color:#cbd5e1}
+  .stat-label{font-size:12px;opacity:.8}
+
+  .result-section{
+    background:#fff;border-radius:12px;padding:18px;margin-top:16px;
+    box-shadow:0 1px 3px rgba(0,0,0,.06);
+  }
+  .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .section-head h3{margin:0;font-size:15px}
+
+  .toggle-btn{
+    border:1px solid var(--border);background:#fff;color:#64748b;
+    padding:4px 10px;border-radius:6px;font:inherit;font-size:12px;
+    cursor:pointer;transition:all .15s;
+  }
+  .toggle-btn:hover{border-color:var(--primary);color:var(--primary)}
+
+  .legend{display:flex;gap:14px;font-size:12px;color:#64748b;margin-bottom:10px;flex-wrap:wrap}
+  .legend .dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+  .legend .dot.ok{background:#16a34a}
+  .legend .dot.bad{background:#dc2626}
+  .legend .dot.miss{background:#94a3b8}
+
+  /* ===== 紧凑答案网格 ===== */
+  .answer-grid{
+    display:grid;
+    grid-template-columns:repeat(8,1fr);
+    gap:4px;
+    padding:4px 0;
+  }
+  .answer-cell{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:4px 2px;border-radius:6px;background:#f1f5f9;
+    min-height:38px;
+  }
+  .answer-cell .idx{font-size:10px;color:#64748b;line-height:1.2}
+  .answer-cell .ans{font-size:14px;font-weight:700;line-height:1.2;color:#334155}
+  .answer-cell.ok{background:#dcfce7}
+  .answer-cell.ok .ans{color:#16a34a}
+  .answer-cell.bad{background:#fee2e2}
+  .answer-cell.bad .ans{color:#dc2626}
+  .answer-cell.miss{background:#f8fafc;border:1px dashed #cbd5e1}
+  .answer-cell.miss .ans{color:#94a3b8}
+
+  .result-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+  .result-actions .btn{flex:1 1 120px}
+  .btn{
+    border:0;padding:12px;border-radius:10px;
+    font:inherit;font-size:14px;font-weight:600;
+    cursor:pointer;transition:all .15s;
+  }
+  .btn.primary{background:var(--primary);color:#fff}
+  .btn.primary:hover{background:var(--primary-dark)}
+  .btn.secondary{background:#fff;color:#374151;border:1.5px solid var(--border)}
+  .btn.secondary:hover{border-color:var(--primary);color:var(--primary)}
+
+  /* ===== 右侧悬浮按钮 ===== */
+  .fab{
+    position:fixed;right:0;top:50%;transform:translateY(-50%);
+    background:var(--primary);color:#fff;border:0;
+    border-radius:12px 0 0 12px;
+    padding:14px 10px;cursor:pointer;
+    box-shadow:-2px 2px 12px rgba(37,99,235,.35);
+    z-index:200;font:inherit;font-size:13px;font-weight:600;
+    writing-mode:vertical-rl;letter-spacing:3px;
+    transition:background .15s;
+  }
+  .fab:hover{background:var(--primary-dark)}
+
+  /* ===== 答案弹窗 ===== */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(15,23,42,.5);
+    z-index:300;display:flex;align-items:center;justify-content:center;
+    padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  .modal{
+    background:#fff;border-radius:14px;
+    width:100%;max-width:560px;max-height:82vh;max-height:82dvh;
+    display:flex;flex-direction:column;
+    box-shadow:0 20px 50px rgba(0,0,0,.3);
+    animation:modalIn .2s ease;
+  }
+  @keyframes modalIn{
+    from{opacity:0;transform:scale(.96)}
+    to{opacity:1;transform:scale(1)}
+  }
+  .modal-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 18px;border-bottom:1px solid var(--border);
+    flex-shrink:0;
+  }
+  .modal-head h3{margin:0;font-size:16px}
+  .modal-close{
+    border:0;background:transparent;font-size:24px;line-height:1;
+    color:var(--muted);cursor:pointer;padding:0;
+    width:40px;height:40px;margin:-8px -8px -8px 0;
+    display:flex;align-items:center;justify-content:center;
+    border-radius:50%;
+  }
+  .modal-close:hover{color:#111}
+  .modal-close:active{background:#f1f5f9}
+  .modal-body{
+    overflow-y:auto;flex:1;
+    padding:12px 14px;
+  }
+
+  /* ===== 手机端 ===== */
+  @media (max-width:600px){
+    body{font-size:14px}
+    .topbar-inner{padding:8px 12px;gap:8px}
+    .brand-title{font-size:14px}
+    .brand-sub{display:none}
+    .progress-bar{width:70px}
+    .container{padding:14px 12px calc(90px + env(safe-area-inset-bottom))}
+    .q-card{padding:16px;border-radius:12px}
+    .q-stem{font-size:15px}
+    .option{font-size:14px;padding:13px 12px;border-radius:10px}
+    .opt-letter{flex:0 0 24px;height:24px}
+    .nav-bar{gap:8px}
+    .nav-btn{padding:11px 14px;font-size:13px;min-height:44px}
+    .score-num{font-size:46px}
+    .result-stats{gap:22px}
+    .modal{max-height:86vh;max-height:86dvh;border-radius:16px}
+    .modal-body{padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+
+    .fab{
+      top:auto;bottom:calc(20px + env(safe-area-inset-bottom));right:16px;transform:none;
+      border-radius:50%;width:56px;height:56px;padding:0;
+      writing-mode:horizontal-tb;letter-spacing:0;font-size:12px;
+      display:flex;align-items:center;justify-content:center;
+      box-shadow:0 4px 14px rgba(37,99,235,.4);
+    }
+
+    .answer-grid{grid-template-columns:repeat(5,1fr);gap:3px}
+    .answer-cell{min-height:36px;padding:4px 1px}
+    .answer-cell .ans{font-size:13px}
+    .answer-cell .idx{font-size:9px}
+  }
+  /* 横屏小高度：同样使用右下角圆形按钮，避免遮挡内容 */
+  @media (max-height:520px) and (orientation:landscape){
+    .fab{
+      top:auto;bottom:calc(16px + env(safe-area-inset-bottom));right:16px;transform:none;
+      border-radius:50%;width:52px;height:52px;padding:0;
+      writing-mode:horizontal-tb;letter-spacing:0;font-size:11px;
+      display:flex;align-items:center;justify-content:center;
+      box-shadow:0 4px 14px rgba(37,99,235,.4);
+    }
+    .container{padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+  }
+  @media (max-width:380px){
+    .answer-grid{grid-template-columns:repeat(4,1fr)}
+  }
+</style>
+  <link rel="stylesheet" href="../../style/theme.css">
+  <script src="../../style/theme.js"></script>
+  <link rel="stylesheet" href="../../style/highlight.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="./chapter2.html" aria-label="返回第2章 计算机系统基础知识">
+      <div class="brand-title"><span class="brand-back" aria-hidden="true">←</span>第2章 计算机系统基础知识</div>
+      <div class="brand-sub">系统架构设计师 · 综合知识自测 · 共 50 题</div>
+    </a>
+    <div class="topbar-right">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <span class="progress-text" id="progressText">已答 0/50</span>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <!-- 答题视图 -->
+  <section id="quizView">
+    <div class="q-card" id="qCard"></div>
+    <div class="nav-bar">
+      <button class="nav-btn" id="prevBtn" type="button">← 上一题</button>
+      <div class="nav-index" id="navIndex">1 / 50</div>
+      <button class="nav-btn primary" id="nextBtn" type="button">下一题 →</button>
+    </div>
+  </section>
+
+  <!-- 结果视图 -->
+  <section id="resultView" class="hidden"></section>
+</main>
+
+<!-- 右侧悬浮按钮 -->
+<button class="fab" id="fabBtn" type="button">查看答案</button>
+
+<!-- 答案弹窗 -->
+<div class="modal-overlay hidden" id="answerModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>全部正确答案</h3>
+      <button class="modal-close" id="modalClose" type="button">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="answer-grid" id="answerGrid"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   题库：系统架构设计师 第2章 计算机系统基础知识（综合知识 · 单选题）
+   ========================================================= */
+const QUESTIONS = [
+  { stem:'计算机系统通常由（　）两部分组成。',
+    options:['主机和外部设备','系统软件和应用软件','处理器和存储器','硬件子系统和软件子系统'], answer:3,
+    analysis:'计算机系统通常指由硬件子系统和软件子系统组成的系统。硬件由机械、电子元器件、磁介质和光介质等物理实体构成；软件是一系列按照特定顺序组织的数据和指令，用于控制硬件完成指定功能。' },
+  { stem:'关于计算机硬件与软件的关系，下列说法正确的是（　）。',
+    options:['硬件有形、软件无形，二者的界限始终清晰不变','随着技术发展，硬件与软件的界限逐渐模糊，同一功能既可由硬件实现，也可由软件实现','可编程逻辑在设计阶段是硬件，在运行中是软件','软件功能只能由软件实现，不能由硬件实现'], answer:1,
+    analysis:'从存在形式看，硬件有形、软件无形；从功能看，硬件与软件的界限正逐渐模糊。例如可编程逻辑在设计阶段可作为软件对待，运行中则以逻辑门的物理形态存在。' },
+  { stem:'冯·诺依曼计算机结构将硬件划分为五部分，下列不属于这五部分的是（　）。',
+    options:['运算器','控制器','总线','输入设备和输出设备'], answer:2,
+    analysis:'冯·诺依曼结构将硬件划分为运算器、控制器、存储器、输入设备和输出设备五部分。现实中控制单元和运算单元被集成为处理器，输入输出设备常集成为一体，并按传输过程划分为总线、接口和外部设备。' },
+  { stem:'下列关于处理器指令集的表述，错误的是（　）。',
+    options:['CISC以Intel、AMD的x86 CPU为代表','RISC以ARM和Power为代表','RISC已成为计算机指令集发展的趋势','后期出现的指令集大多采用CISC架构'], answer:3,
+    analysis:'除因历史原因仍然存在的CISC结构外，RISC已经成为计算机指令集发展的趋势，几乎所有后期出现的指令集均为RISC架构。' },
+  { stem:'具有数百或数千个内核、经过优化可并行运行大量计算，因而在深度学习和机器学习领域得到广泛应用的处理器是（　）。',
+    options:['DSP','FPGA','MCU','GPU'], answer:3,
+    analysis:'GPU是一种特殊类型的处理器，具有数百或数千个内核，可并行运行大量计算。DSP专用于实时数字信号处理；FPGA是现场可编程逻辑门阵列。' },
+  { stem:'计算机存储器分层体系中，通常采用DRAM结构、以独立部件或芯片存在、通过总线与处理器连接的是（　）。',
+    options:['片上缓存','片外缓存','主存','外存'], answer:2,
+    analysis:'片上缓存一般为SRAM结构，容量16kB~512kB；片外缓存一般也是SRAM，容量256kB~4MB；主存通常采用DRAM结构，容量数百MB至数十GB；外存包括磁带、磁盘、光盘和各类Flash等。' },
+  { stem:'按照总线在计算机中所处的位置，总线可分为（　）。',
+    options:['数据总线、地址总线和控制总线','并行总线和串行总线','内总线、系统总线和外部总线','同步总线和异步总线'], answer:2,
+    analysis:'按位置划分，总线分为内总线（片上总线）、系统总线和外部总线（通信总线）。按传输方式可分为并行总线和串行总线。' },
+  { stem:'总线之间通过（　）实现连接，它是一种特殊的外设，主要实现总线协议间的转换。',
+    options:['接口','桥','控制器','适配器'], answer:1,
+    analysis:'总线之间通过桥（Bridge）实现连接。桥是一种特殊外设，主要实现总线协议间的转换。' },
+  { stem:'下列软件中，属于系统软件的是（　）。',
+    options:['财务软件','游戏软件','数据库管理系统','图形图像处理软件'], answer:2,
+    analysis:'系统软件是为整个计算机系统配置的、不依赖特定应用领域的通用软件，包括操作系统、程序设计语言翻译系统、数据库管理系统和网络软件等。财务、游戏、图形图像处理软件属于应用软件。' },
+  { stem:'操作系统的特征不包括（　）。',
+    options:['并发性','共享性','虚拟性','一致性'], answer:3,
+    analysis:'操作系统具有并发性、共享性、虚拟性和不确定性四个特征。并发性指一段时间内宏观上有多个程序同时运行，单CPU环境下微观上交替执行。' },
+  { stem:'将CPU工作时间划分为许多很短的时间片，轮流为各个终端用户服务，具有多路性、独立性、交互性和及时性特点的操作系统是（　）。',
+    options:['批处理操作系统','分时操作系统','实时操作系统','嵌入式操作系统'], answer:1,
+    analysis:'分时操作系统将CPU时间划分为许多很短的时间片，轮流为各终端用户服务。其主要特点为多路性、独立性、交互性和及时性。' },
+  { stem:'飞机订票系统、情报检索系统属于（　）。',
+    options:['实时控制系统','分时系统','实时信息处理系统','批处理系统'], answer:2,
+    analysis:'实时系统分为实时控制系统和实时信息处理系统。实时控制系统主要用于生产过程自动控制，如数据自动采集、武器控制、飞机自动驾驶、导弹制导等；实时信息处理系统如飞机订票系统、情报检索系统等。' },
+  { stem:'系统中的计算机无主次之分，任意两台计算机可通过通信交换信息，能对各类资源动态分配和调度，并具有透明性、可靠性和高性能等特性，这种操作系统是（　）。',
+    options:['网络操作系统','分布式操作系统','批处理操作系统','嵌入式操作系统'], answer:1,
+    analysis:'分布式操作系统是网络操作系统的更高级形式，它保持网络系统所拥有的全部功能，同时具有透明性、可靠性和高性能等特性。' },
+  { stem:'关系数据库设计的正确步骤是（　）。',
+    options:['需求分析→概念结构设计→逻辑结构设计→物理结构设计→应用程序设计→运行维护','需求分析→逻辑结构设计→概念结构设计→物理结构设计→应用程序设计→运行维护','概念结构设计→需求分析→逻辑结构设计→物理结构设计→应用程序设计→运行维护','需求分析→概念结构设计→物理结构设计→逻辑结构设计→应用程序设计→运行维护'], answer:0,
+    analysis:'数据库设计分为需求分析、概念结构设计、逻辑结构设计、物理结构设计、应用程序设计和运行维护6个阶段，顺序不可颠倒。' },
+  { stem:'采用E-R方法进行数据库概念结构设计，其步骤不包括（　）。',
+    options:['设计局部E-R模型','设计全局E-R模型','全局E-R模型的优化','确定用户视图'], answer:3,
+    analysis:'采用E-R方法的概念结构设计分为三步：设计局部E-R模型、设计全局E-R模型、全局E-R模型的优化。确定用户视图属于逻辑结构设计阶段的任务。' },
+  { stem:'将逻辑上连续的文件信息存放在不连续的物理块上，每个物理块设有一个指针指向下一个物理块，这种文件物理结构是（　）。',
+    options:['连续结构','链接结构','索引结构','多重索引结构'], answer:1,
+    analysis:'链接结构也称串联结构，将逻辑上连续的文件信息存放在不连续的物理块上，每个物理块设指针指向下一个物理块。只要知道第1个物理块号，就可以按链接指针查找整个文件。' },
+  { stem:'两个文件目录表目指向同一个索引结点，即不同文件名与同一个文件实体建立链接，这种链接称为（　）。',
+    options:['符号链接','软链接','动态链接','硬链接'], answer:3,
+    analysis:'硬链接是指两个文件目录表目指向同一个索引结点的链接，也称基于索引结点的链接。符号链接建立新的文件或目录，并与原文件或目录的路径名映射，可跨越文件系统。' },
+  { stem:'BEA Tuxedo属于（　）。',
+    options:['消息中间件','交易（事务处理）中间件','Web服务器中间件','安全中间件'], answer:1,
+    analysis:'BEA Tuxedo是交易中间件，允许客户机和服务器参与涉及多个数据库协调更新的交易，并确保数据完整性。IBM MQSeries是消息中间件。' },
+  { stem:'构件最重要的两个特性是（　）。',
+    options:['自包容与可重用','高性能与高可靠','跨平台与可移植','可扩展与可维护'], answer:0,
+    analysis:'构件是一个自包容、可复用的程序集，其最重要的两个特性是自包容与可重用。构件整体向外提供统一访问接口，外部只能通过接口访问构件。' },
+  { stem:'CORBA中规定分布对象的定义（接口）和语言映射、实现对象间通信和互操作，被称为分布对象系统“软总线”的是（　）。',
+    options:['公共对象服务','公共设施','对象请求代理ORB','构件容器'], answer:2,
+    analysis:'CORBA主要分为3个层次：对象请求代理、公共对象服务和公共设施。最底层的ORB规定分布对象的定义和语言映射，实现对象间通信和互操作，是分布对象系统中的“软总线”。' },
+  { stem:'嵌入式系统一般由嵌入式处理器、相关支撑硬件、嵌入式操作系统、支撑软件以及（　）组成。',
+    options:['应用软件','数据库管理系统','通用编译器','网络协议栈'], answer:0,
+    analysis:'一般嵌入式系统由嵌入式处理器、相关支撑硬件、嵌入式操作系统、支撑软件以及应用软件组成。' },
+  { stem:'下列关于嵌入式系统特点的说法，错误的是（　）。',
+    options:['专用性强，面向特定应用需求','软硬一体，软件为主','程序代码通常固化在非易失存储器中','资源丰富，通常采用通用CPU以降低设计成本'], answer:3,
+    analysis:'嵌入式系统通常只完成少数几个任务，设计时考虑经济性，不能使用通用CPU，这意味着管理的资源少、成本低、结构更简单。其软件一般固化在存储器芯片或单片机中。' },
+  { stem:'其不正确的功能或失效会导致人员伤亡、财产损失等严重后果的计算机系统称为（　）。',
+    options:['实时系统','安全攸关系统','分布式系统','嵌入式非实时系统'], answer:1,
+    analysis:'安全攸关系统也称为安全关键系统或安全生命关键系统（Life-Critical System），是指其不正确的功能或者失效会导致人员伤亡、财产损失等严重后果的计算机系统。' },
+  { stem:'嵌入式系统软件采用层次化结构，HAL（硬件抽象层）和BSP（板级支持包）位于（　）。',
+    options:['硬件层','抽象层','操作系统层','中间件层'], answer:1,
+    analysis:'嵌入式系统软件分为硬件层、抽象层、操作系统层、中间件层和应用层。抽象层通过HAL对硬件进行抽象，为上层提供虚拟硬件资源；BSP面向硬件芯片或电路进行驱动。' },
+  { stem:'DO-178B将软件安全等级分为A~E五级，其中失效状态为“灾难性的”、需要达到全部66个目标的是（　）。',
+    options:['A级','B级','C级','D级'], answer:0,
+    analysis:'DO-178B中A级对应灾难性后果，需达到66个目标；B级65个，C级56个，D级28个，E级0个。' },
+  { stem:'网络中的时延由发送时延、传播时延、处理时延、排队时延等组成，下列不属于时延组成部分的是（　）。',
+    options:['发送时延','传播时延','处理时延','压缩时延'], answer:3,
+    analysis:'网络时延由发送时延、传播时延、处理时延、排队时延等组成。压缩时延不属于时延的组成部分。' },
+  { stem:'根据香农公式，信道容量C与信号带宽B、信噪比S/N的关系是（　）。',
+    options:['C = B×log2(1+S/N)','C = B×(1+S/N)','C = log2(1+B×S/N)','C = B×log2(1+S×N)'], answer:0,
+    analysis:'香农公式为C = B×log2(1+S/N)。其中C为信道容量（b/s），B为信号带宽（Hz），S为信号平均功率，N为噪声平均功率，S/N为信噪比。' },
+  { stem:'发信机进行信号处理的正确顺序是（　）。',
+    options:['信源编码→信道编码→交织→脉冲成形→调制','信道编码→信源编码→交织→脉冲成形→调制','信源编码→交织→信道编码→调制→脉冲成形','调制→信源编码→信道编码→交织→脉冲成形'], answer:0,
+    analysis:'发信机依次进行信源编码、信道编码、交织、脉冲成形和调制。收信机进行相反处理：解调、采样判决、去交织、信道译码和信源译码。' },
+  { stem:'环形结构局域网的特点是（　）。',
+    options:['中心结点故障会导致全网瘫痪','各结点地位相同，信息按固定方向单向流动，不便于扩充','任何结点故障都不影响其他结点之间的通信','布线烦琐、建设成本高，但控制方法简单'], answer:1,
+    analysis:'环形结构中各结点设备地位相同，信息按固定方向单向流动，两个节点之间仅有一条通路，系统中无信道选择问题；任一结点故障将导致物理瘫痪，且环路封闭不便于扩充。选项A是星状结构，选项C是网状结构。' },
+  { stem:'以太网帧的最小长度为（　）字节。',
+    options:['46','64','512','1500'], answer:1,
+    analysis:'由于CSMA/CD算法限制，以太网帧的最小长度为64字节；数据域长度上限通常设置为1500字节。规定最小帧长是为了避免发送方已发完最后一个比特、而报文第一个比特尚未到达远端结点，导致远端误判线路空闲而发送数据产生冲突。' },
+  { stem:'ATM（异步传输模式）中信元长度固定为（　）字节。',
+    options:['48','53','64','1500'], answer:1,
+    analysis:'ATM是以信元为基础的面向连接的分组交换和复用技术，信元长度固定为53字节，既是传输的基本单位，也是交换的信息单位，典型速率为150Mb/s。' },
+  { stem:'5G网络切片中，无人驾驶、车联网、自动工厂、远程医疗等要求超低时延和超高可靠性的场景属于（　）。',
+    options:['eMBB','mMTC','uRLLC','VoIP'], answer:2,
+    analysis:'eMBB（移动宽带）面向4K/8K超高清视频、全息技术、AR/VR；mMTC（海量大规模物联网）面向海量传感器、智慧城市、农业物流；uRLLC（关键任务物联网）面向无人驾驶、车联网、远程医疗、自动工厂。' },
+  { stem:'路由器工作在OSI体系结构中的（　）。',
+    options:['物理层','数据链路层','网络层','传输层'], answer:2,
+    analysis:'中继器工作于物理层；网桥和交换机工作于数据链路层；路由器工作于网络层；防火墙作为网络门户，对进出网络的数据进行监视和过滤。' },
+  { stem:'下列内部网关协议中，采用链路状态算法的是（　）。',
+    options:['RIP','OSPF','BGP','EGP'], answer:1,
+    analysis:'距离矢量路由协议采用距离向量算法；IS-IS和OSPF采用链路状态算法。BGP是外部网关协议，用于自治系统之间。' },
+  { stem:'网络建设工程通常分为三个环节，下列顺序正确的是（　）。',
+    options:['网络设计→网络规划→网络实施','网络规划→网络实施→网络设计','网络规划→网络设计→网络实施','网络实施→网络设计→网络规划'], answer:2,
+    analysis:'网络建设工程分为网络规划、网络设计和网络实施三个环节。网络规划包括需求分析、可行性分析和现有网络分析；网络设计包括总体目标、设计原则、通信子网设计、设备选型和网络安全设计；网络实施包括设备采购、安装、调试和系统切换等。' },
+  { stem:'计算机语言主要由一套指令组成，这些指令一般包括（　）三大部分。',
+    options:['表达式、流程控制和集合','变量、常量和运算符','分支、循环和函数','数据、指令和地址'], answer:0,
+    analysis:'计算机语言的指令一般包括表达式、流程控制和集合三大部分。表达式包含变量、常量、字面量和运算符；流程控制有分支、循环、函数和异常；集合包括字符串、数组、散列表等数据结构。' },
+  { stem:'在堆栈型计算机中，操作数一般存放在堆栈顶的两个单元，结果又放回栈顶，地址均被隐含，这类指令是（　）。',
+    options:['三地址指令','二地址指令','单地址指令','零地址指令'], answer:3,
+    analysis:'零地址指令在堆栈型计算机中使用，操作数存放在堆栈顶的两个单元，结果放回栈顶，地址均被隐含，因而大多数指令只有操作码而没有地址域。' },
+  { stem:'UML的5种视图中，描述系统的并发性并处理线程间通信和同步的是（　）。',
+    options:['用例视图','逻辑视图','进程视图','部署视图'], answer:2,
+    analysis:'用例视图描述系统功能需求，居于中心地位；逻辑视图描述系统内部功能的实现、静态结构和动态协作关系；进程视图描述系统并发性，并处理线程间通信和同步；实现视图描述代码构件组织；部署视图定义软硬件物理体系结构。' },
+  { stem:'按照ITU-T建议，图像、声音、视频等信息的表示形式属于（　）。',
+    options:['感觉媒体','表现媒体','表示媒体','存储媒体'], answer:2,
+    analysis:'感觉媒体指用户接触信息的感觉形式（视觉、听觉、触觉等）；表示媒体指信息的表示形式（图像、声音、视频等）；表现媒体也称显示媒体，指表现和获取信息的物理设备；存储媒体指存储表示媒体的物理介质；传输媒体指传输表示媒体的物理介质。' },
+  { stem:'多媒体技术中，使人们获取和使用信息变被动为主动的最重要标志是（　）。',
+    options:['多维化','集成性','交互性','实时性'], answer:2,
+    analysis:'多媒体具有多维化、集成性、交互性和实时性4个重要特征。交互性是人们获取和使用信息时变被动为主动的最重要标志。' },
+  { stem:'下列文件格式中，属于无损压缩格式的是（　）。',
+    options:['MP3','WMA','FLAC','OGG Vorbis'], answer:2,
+    analysis:'无损压缩常见格式有WAV、PCM、TTA、FLAC、AU、APE、TAK和WavPack等；有损压缩常见格式有MP3、WMA、Ogg Vorbis等。多数无损压缩采用RLE行程编码算法。' },
+  { stem:'霍尔三维结构由（　）组成。',
+    options:['时间维、逻辑维和知识维','时间维、空间维和知识维','环境维、逻辑维和知识维','时间维、逻辑维和环境维'], answer:0,
+    analysis:'霍尔三维结构由时间维、逻辑维和知识维组成。时间维分为规划、拟订方案、研制、生产、安装、运行、更新7个阶段；逻辑维包括明确问题、确定目标、系统综合、系统分析、优化、决策、实施7个步骤。' },
+  { stem:'认为方法论核心不是“最优化”而是“比较”与“探寻”，并将霍尔方法论称为“硬科学”方法论的是（　）。',
+    options:['切克兰德方法','并行工程方法','综合集成法','WSR系统方法'], answer:0,
+    analysis:'英国P.切克兰德提出软科学方法论，其核心不是“最优化”而是“比较”与“探寻”，通过模型和现状的比较来学习改善现状的途径。其工作过程分为认识问题、根底定义、建立概念模型、比较及探寻、选择、设计与实施、评估与反馈7个步骤。' },
+  { stem:'1990年初，钱学森等首次把处理开放的复杂巨系统的方法命名为（　）。',
+    options:['霍尔三维结构','并行工程','层次分析法','从定性到定量的综合集成法'], answer:3,
+    analysis:'1990年初，钱学森等首次把处理开放的复杂巨系统的方法命名为从定性到定量的综合集成法。开放的复杂巨系统具有开放性、复杂性、进化与涌现性、层次性和巨量性等性质。' },
+  { stem:'WSR系统方法论中的“WSR”分别指（　）。',
+    options:['物理、事理、人理','物理、数理、管理','物联、事联、人联','系统、要素、关系'], answer:0,
+    analysis:'WSR是物理（Wuli）-事理（Shili）-人理（Renli）方法论的简称，由顾基发教授和朱志昌博士于1994年在英国HULL大学提出。“懂物理、明事理、通人理”是WSR方法论的实践准则。' },
+  { stem:'系统工程的一般生命周期包括7个阶段，其中目的为“存储、归档或退出系统”的是（　）。',
+    options:['概念阶段','生产阶段','保障阶段','退役阶段'], answer:3,
+    analysis:'系统工程流程的7个一般生命周期阶段为探索性研究、概念、开发、生产、使用、保障和退役。退役阶段的目的是存储、归档或退出系统；保障阶段的目的是提供持续的系统能力。' },
+  { stem:'MBSE（基于模型的系统工程）的三大支柱是（　）。',
+    options:['建模语言、建模工具和建模思路','建模语言、建模方法和建模标准','需求模型、功能模型和设计模型','需求图、活动图和模块定义图'], answer:0,
+    analysis:'MBSE的三大支柱分别是建模语言、建模工具和建模思路。SysML是在UML2.0子集基础上扩展形成的系统工程标准建模语言。' },
+  { stem:'系统性能包含四个方面，下列不属于的是（　）。',
+    options:['性能指标','性能计算','性能设计','性能测试'], answer:3,
+    analysis:'系统性能包含性能指标、性能计算、性能设计和性能评估4个方面的内容。' },
+  { stem:'某程序中60%的执行时间可被增强部件加速，该部分的增强加速比为5。根据阿姆达尔定律，总加速比约为（　）。',
+    options:['1.32','1.92','2.50','5.00'], answer:1,
+    analysis:'根据阿姆达尔定律，总加速比 = 1 / [(1-增强比例) + 增强比例/增强加速比] = 1 / [(1-0.6) + 0.6/5] = 1 / (0.4 + 0.12) = 1/0.52 ≈ 1.92。' },
+  { stem:'按照评测准确程度由高到低排列，下列评价程序的顺序正确的是（　）。',
+    options:['真实程序→核心程序→小型基准程序→合成基准程序','核心程序→真实程序→小型基准程序→合成基准程序','合成基准程序→小型基准程序→核心程序→真实程序','真实程序→小型基准程序→核心程序→合成基准程序'], answer:0,
+    analysis:'4种评价程序的评测准确程度依次递减：真实的程序、核心程序、小型基准程序和合成基准程序。常见基准测试程序有整数测试程序Dhrystone、浮点测试程序Linpack、Whetstone、SPEC和TPC。' }
+];
+
+/* =========================================================
+   状态
+   ========================================================= */
+const LETTERS = 'ABCD';
+const TOTAL = QUESTIONS.length;
+
+let quizQuestions = [];
+const state = {
+  currentIndex: 0,
+  answers: new Array(TOTAL).fill(null),
+  finished: false
+};
+
+let lastRenderedIndex = -1;
+
+/* 错题重做相关状态 */
+let isReviewingWrong = false;
+let savedQuizState = null;
+let showOnlyWrong = false;
+
+/* =========================================================
+   工具
+   ========================================================= */
+const $ = (s) => document.querySelector(s);
+
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/* =========================================================
+   渲染：当前题目
+   ========================================================= */
+function renderQuestion() {
+  const i = state.currentIndex;
+  const q = quizQuestions[i];
+  const ans = state.answers[i];
+  const answered = ans !== null;
+  const total = quizQuestions.length;
+
+  const optionsHTML = q.options.map((text, j) => {
+    let cls = 'option';
+    if (answered) {
+      if (j === q.answer) cls += ' correct';
+      else if (j === ans) cls += ' wrong';
+    }
+    return `<button class="${cls}" data-o="${j}" type="button">
+              <span class="opt-letter">${LETTERS[j]}</span>
+              <span class="opt-text">${text}</span>
+            </button>`;
+  }).join('');
+
+  let feedback = '';
+  if (answered) {
+    const isCorrect = ans === q.answer;
+    feedback = `
+      <div class="feedback ${isCorrect ? 'ok' : 'bad'}">
+        <div class="feedback-title">${isCorrect ? '✅ 回答正确' : '❌ 回答错误　正确答案：' + LETTERS[q.answer]}</div>
+        <div class="feedback-analysis">${q.analysis}</div>
+      </div>`;
+  }
+
+  const card = $('#qCard');
+  card.innerHTML = `
+    <div class="q-head">
+      <span class="q-badge">第 ${i + 1} 题</span>
+      <span class="q-tag">单选题</span>
+    </div>
+    <div class="q-stem">${q.stem}</div>
+    <div class="options">${optionsHTML}</div>
+    ${feedback}
+  `;
+
+  if (i !== lastRenderedIndex) {
+    card.classList.remove('anim');
+    void card.offsetWidth;
+    card.classList.add('anim');
+    lastRenderedIndex = i;
+  }
+
+  $('#navIndex').textContent = `${i + 1} / ${total}`;
+  $('#prevBtn').disabled = (i === 0);
+  const nextBtn = $('#nextBtn');
+  nextBtn.textContent = (i === total - 1) ? '完成 ✓' : '下一题 →';
+}
+
+/* =========================================================
+   渲染：进度
+   ========================================================= */
+function renderProgress() {
+  const total = quizQuestions.length;
+  const answered = state.answers.filter(a => a !== null).length;
+  $('#progressFill').style.width = (answered / total * 100) + '%';
+  $('#progressText').textContent = `已答 ${answered}/${total}`;
+}
+
+/* =========================================================
+   渲染：结果页
+   ========================================================= */
+function renderResult() {
+  const total = quizQuestions.length;
+  let correct = 0, wrong = 0, unanswered = 0;
+  const wrongList = [];
+
+  quizQuestions.forEach((q, i) => {
+    const a = state.answers[i];
+    if (a === null) { unanswered++; wrongList.push(i); }
+    else if (a === q.answer) { correct++; }
+    else { wrong++; wrongList.push(i); }
+  });
+
+  const score = Math.round(correct / total * 100);
+  let level = '需加强';
+  if (score >= 85) level = '优秀';
+  else if (score >= 70) level = '良好';
+  else if (score >= 60) level = '及格';
+
+  const indicesToShow = showOnlyWrong ? wrongList : quizQuestions.map((_, i) => i);
+  const cellsHTML = indicesToShow.map(i => {
+    const q = quizQuestions[i];
+    const a = state.answers[i];
+    let cls = 'answer-cell';
+    let ansText;
+    if (a === null) { cls += ' miss'; ansText = '—'; }
+    else if (a === q.answer) { cls += ' ok'; ansText = LETTERS[a]; }
+    else { cls += ' bad'; ansText = LETTERS[a]; }
+    return `<div class="${cls}">
+      <span class="idx">${i + 1}</span>
+      <span class="ans">${ansText}</span>
+    </div>`;
+  }).join('');
+
+  let toggleBtnHTML = '';
+  if (!isReviewingWrong && wrongList.length > 0) {
+    toggleBtnHTML = `<button class="toggle-btn" id="toggleWrongBtn" type="button">${showOnlyWrong ? '显示全部' : '只看错题'}</button>`;
+  }
+
+  let actionButtons = '';
+  if (isReviewingWrong) {
+    actionButtons = `
+      <button class="btn secondary" id="backToFullBtn" type="button">返回完整成绩</button>
+      <button class="btn primary" id="restartBtn" type="button">重新开始全部</button>
+    `;
+  } else {
+    actionButtons = `
+      <button class="btn secondary" id="viewAnswersBtn" type="button">查看全部正确答案</button>
+      ${wrongList.length > 0 ? '<button class="btn secondary" id="startWrongBtn" type="button">重做错题</button>' : ''}
+      <button class="btn primary" id="restartBtn" type="button">重新开始</button>
+    `;
+  }
+
+  $('#resultView').innerHTML = `
+    <div class="result-card">
+      <div class="score-ring">
+        <span class="score-num">${score}</span>
+        <span class="score-unit">分</span>
+      </div>
+      <div class="result-level">${level}${isReviewingWrong ? '（错题重做）' : ''}</div>
+      <div class="result-stats">
+        <div class="stat"><span class="stat-num ok">${correct}</span><span class="stat-label">正确</span></div>
+        <div class="stat"><span class="stat-num bad">${wrong}</span><span class="stat-label">错误</span></div>
+        <div class="stat"><span class="stat-num muted">${unanswered}</span><span class="stat-label">未答</span></div>
+      </div>
+    </div>
+
+    <div class="result-section">
+      <div class="section-head">
+        <h3>${isReviewingWrong ? '本次错题明细' : '答题明细'}</h3>
+        ${toggleBtnHTML}
+      </div>
+      <div class="legend">
+        <span><i class="dot ok"></i>正确</span>
+        <span><i class="dot bad"></i>错误</span>
+        <span><i class="dot miss"></i>未答</span>
+      </div>
+      <div class="answer-grid">${cellsHTML || '<p style="color:#94a3b8;font-size:13px;margin:0;">暂无数据</p>'}</div>
+    </div>
+
+    <div class="result-actions">${actionButtons}</div>
+  `;
+}
+
+/* =========================================================
+   渲染：全部正确答案弹窗
+   ========================================================= */
+function renderAnswerGrid() {
+  const cells = quizQuestions.map((q, i) => `
+    <div class="answer-cell">
+      <span class="idx">${i + 1}</span>
+      <span class="ans">${LETTERS[q.answer]}</span>
+    </div>
+  `).join('');
+  $('#answerGrid').innerHTML = cells;
+}
+
+/* =========================================================
+   答题交互
+   ========================================================= */
+function onOptionClick(e) {
+  const btn = e.target.closest('.option');
+  if (!btn) return;
+
+  const i = state.currentIndex;
+  const oi = Number(btn.dataset.o);
+  const firstTime = state.answers[i] === null;
+  const total = quizQuestions.length;
+
+  state.answers[i] = oi;
+  renderQuestion();
+  renderProgress();
+
+  if (firstTime) {
+    const isPhone = window.matchMedia('(max-width:600px)').matches;
+    if (isPhone) {
+      /* 手机端不自动跳题：先让用户看完解析，再手动点“下一题” */
+      const fb = document.querySelector('#qCard .feedback');
+      if (fb) fb.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } else {
+      setTimeout(() => {
+        if (state.finished) return;
+        if (state.currentIndex !== i) return;
+        if (i < total - 1) {
+          state.currentIndex = i + 1;
+          renderQuestion();
+          renderProgress();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          finish();
+        }
+      }, 1000);
+    }
+  }
+}
+
+function goPrev() {
+  if (state.currentIndex > 0) {
+    state.currentIndex--;
+    renderQuestion();
+    renderProgress();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
+function goNext() {
+  if (state.currentIndex < quizQuestions.length - 1) {
+    state.currentIndex++;
+    renderQuestion();
+    renderProgress();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } else {
+    finish();
+  }
+}
+
+function finish() {
+  state.finished = true;
+  renderResult();
+  $('#quizView').classList.add('hidden');
+  $('#resultView').classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function restart() {
+  isReviewingWrong = false;
+  showOnlyWrong = false;
+  savedQuizState = null;
+  quizQuestions = shuffleArray(QUESTIONS);
+  state.answers = new Array(quizQuestions.length).fill(null);
+  state.currentIndex = 0;
+  state.finished = false;
+  lastRenderedIndex = -1;
+
+  $('#resultView').classList.add('hidden');
+  $('#resultView').innerHTML = '';
+  $('#quizView').classList.remove('hidden');
+
+  renderQuestion();
+  renderProgress();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* =========================================================
+   错题重做
+   ========================================================= */
+function startWrongReview() {
+  const wrongQuestions = quizQuestions.filter((q, i) => state.answers[i] !== q.answer);
+  if (wrongQuestions.length === 0) {
+    alert('没有错题需要重做！');
+    return;
+  }
+
+  savedQuizState = {
+    quizQuestions: [...quizQuestions],
+    answers: [...state.answers],
+    currentIndex: state.currentIndex,
+    finished: state.finished
+  };
+
+  isReviewingWrong = true;
+  showOnlyWrong = false;
+  quizQuestions = wrongQuestions;
+  state.answers = new Array(wrongQuestions.length).fill(null);
+  state.currentIndex = 0;
+  state.finished = false;
+  lastRenderedIndex = -1;
+
+  $('#resultView').classList.add('hidden');
+  $('#resultView').innerHTML = '';
+  $('#quizView').classList.remove('hidden');
+  renderQuestion();
+  renderProgress();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function backToFullResult() {
+  if (!savedQuizState) return;
+
+  isReviewingWrong = false;
+  showOnlyWrong = false;
+  quizQuestions = savedQuizState.quizQuestions;
+  state.answers = savedQuizState.answers;
+  state.currentIndex = savedQuizState.currentIndex;
+  state.finished = savedQuizState.finished;
+  savedQuizState = null;
+
+  $('#quizView').classList.add('hidden');
+  $('#resultView').classList.remove('hidden');
+  renderResult();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* =========================================================
+   结果页点击
+   ========================================================= */
+function onResultClick(e) {
+  if (e.target.id === 'restartBtn') { restart(); return; }
+  if (e.target.id === 'viewAnswersBtn') { openAnswerModal(); return; }
+  if (e.target.id === 'toggleWrongBtn') {
+    showOnlyWrong = !showOnlyWrong;
+    renderResult();
+    return;
+  }
+  if (e.target.id === 'startWrongBtn') {
+    startWrongReview();
+    return;
+  }
+  if (e.target.id === 'backToFullBtn') {
+    backToFullResult();
+    return;
+  }
+}
+
+/* =========================================================
+   答案弹窗
+   ========================================================= */
+function openAnswerModal() {
+  renderAnswerGrid();
+  $('#answerModal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeAnswerModal() {
+  $('#answerModal').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+/* =========================================================
+   初始化
+   ========================================================= */
+document.addEventListener('DOMContentLoaded', () => {
+  quizQuestions = shuffleArray(QUESTIONS);
+  state.answers = new Array(quizQuestions.length).fill(null);
+  renderQuestion();
+  renderProgress();
+
+  $('#qCard').addEventListener('click', onOptionClick);
+  $('#prevBtn').addEventListener('click', goPrev);
+  $('#nextBtn').addEventListener('click', goNext);
+  $('#resultView').addEventListener('click', onResultClick);
+
+  $('#fabBtn').addEventListener('click', openAnswerModal);
+  $('#modalClose').addEventListener('click', closeAnswerModal);
+  $('#answerModal').addEventListener('click', (e) => {
+    if (e.target === $('#answerModal')) closeAnswerModal();
+  });
+});
+</script>
+  <script src="../../style/highlight.js"></script>
+  <script src="../../style/sync.js"></script>
+</body>
+</html>

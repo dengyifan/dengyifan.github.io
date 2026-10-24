@@ -294,7 +294,7 @@ tr:hover { background: #fafafa; }
 
 .toc-sidebar {
   position: fixed;
-  left: calc(50% - var(--content-width) / 2 - var(--toc-width) - 40px);
+  left: max(16px, calc(50% - var(--content-width) / 2 - var(--toc-width) - 40px));
   top: 96px;
   width: var(--toc-width);
   max-height: calc(100vh - 140px);
@@ -400,6 +400,15 @@ tr:hover { background: #fafafa; }
 .article-body strong { font-weight: 700; color: #222; }
 .article-body ul, .article-body ol { margin: 12px 0; padding-left: 24px; }
 .article-body li { margin: 6px 0; }
+
+/* 本章自测入口嵌在 article-body 内时，避免被正文链接/标题样式覆盖 */
+.article-body .quiz-cta-title {
+  margin: 0; padding: 0; border: 0; font-size: 16px;
+}
+.article-body .quiz-cta-btn,
+.article-body .quiz-cta-btn:hover {
+  color: #fff;
+}
 
 /* ---------- Alert Boxes ---------- */
 .note, .warning, .tip, .info {

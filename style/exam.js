@@ -40,7 +40,11 @@
   /* 各章自测页在站点中的位置；用于跨章节历史记录跳转 */
   var EXAM_FILES = {
     ch1: 'sys_arch_designer/01-introduction/chapter1_exam.html',
-    ch2: 'sys_arch_designer/02-chapter2/chapter2_exam.html'
+    ch2: 'sys_arch_designer/02-chapter2/chapter2_exam.html',
+    ch3: 'sys_arch_designer/03-chapter3/chapter3_exam.html',
+    ch4: 'sys_arch_designer/04-chapter4/chapter4_exam.html',
+    ch5: 'sys_arch_designer/05-chapter5/chapter5_exam.html',
+    ch6: 'sys_arch_designer/06-chapter6/chapter6_exam.html'
   };
 
   function examHref(record) {
